@@ -1,0 +1,642 @@
+# Nightingale 72 Hour Build — Project README
+
+## 1. 项目目标
+
+本项目要构建的不是一个普通 EHR 页面，也不是一个单独的 AI 问诊机器人，而是一套围绕患者长期诊疗过程运行的 **shared longitudinal care record system**。
+
+核心目标：
+
+- 将患者、医生、护士、staff、AI scribe 在不同时间产生的信息统一组织起来；
+- 保留每条信息的来源、作者、时间、类型和版本；
+- 让医生在进入患者页面后 **10 秒内理解当前最重要的问题、风险和未完成事项**；
+- 让患者看到自己真正需要知道和执行的内容，而不是医生内部工作记录；
+- 所有 AI 生成内容都必须可追溯、可核查，不能冒充 clinician-authored information。
+
+一句话概括：
+
+> 我们维护的是一份不断演化的患者状态；Timeline 记录“发生了什么”，Glance View 负责“医生现在最该关注什么”，Patient View 负责“患者现在需要知道和做什么”。
+
+---
+
+## 2. 核心使用流程
+
+### 2.1 预约后：患者预问诊
+
+患者预约后进入系统，首先完成一次 AI pre-consult session。
+
+患者可以回答：
+
+- 当前主要症状；
+- 症状什么时候开始；
+- 最近有没有变化；
+- 严重程度；
+- 当前用药；
+- 希望医生知道的其他背景。
+
+系统同时保存：
+
+1. **Raw Patient-AI Session**
+   - 完整对话；
+   - 时间戳；
+   - session_id；
+   - 原始 source。
+
+2. **AI Patient Session Summary**
+   - 对本次患者输入的结构化总结；
+   - 与 raw session 关联；
+   - 进入患者 Timeline。
+
+医生默认首先看 summary；需要核实时可跳转到原始对话中的具体片段。
+
+---
+
+### 2.2 正式问诊：Doctor / Nurse Consult
+
+正式问诊产生一个新的 **Encounter Event**。
+
+一个 Encounter 可以同时产生多个彼此关联的 Artifact：
+
+- Raw audio / recording；
+- Transcript；
+- AI Doctor Consult Summary；
+- AI Nurse Consult Summary；
+- Clinician Note；
+- Staff Note；
+- Tasks / instructions。
+
+这些内容不是互相覆盖，而是同一个事件的不同 representation。
+
+示例：
+
+```text
+Encounter #001 — 2026-08-26 10:00
+│
+├── Raw Recording
+├── Transcript
+├── AI Doctor Consult Summary
+└── Clinician Note
+```
+
+AI summary 只负责描述和整理；**Clinician Note 才代表医生正式的 clinical assessment / plan**。
+
+---
+
+### 2.3 离院后：Patient Follow-up
+
+患者离院后，在 Patient View 中看到：
+
+- 当前 care plan；
+- 自己需要完成的事项；
+- follow-up 时间；
+- patient-facing instructions；
+- 必要风险提醒。
+
+患者仍然可以继续与 AI 交流并报告恢复情况。
+
+新的 Patient-AI follow-up 会再次产生：
+
+- Raw session；
+- AI follow-up summary；
+- 新 Timeline Event。
+
+医生之后再次打开页面时，应能从 Glance View 快速看到状态变化，例如：
+
+- Headache 7/10 → 3/10；
+- Nausea persists；
+- BP still elevated；
+- Blood test pending；
+- Follow-up due tomorrow。
+
+这一过程循环，直到该 care episode 结束。
+
+---
+
+## 3. 信息架构
+
+### 3.1 Timeline 是主轴，但不是唯一物理存储
+
+系统在产品语义上使用一条统一的 **Longitudinal Timeline** 组织患者历史。
+
+Timeline 展示现实世界中发生的 Event：
+
+```text
+2025-04-15  Primary Care Review（初次头痛主诉，历史事件）
+2026-02-06  Medication Review（历史事件）
+2026-08-20  Patient AI Pre-consult（症状加重，新的 care episode）
+2026-08-21  Nurse Consultation
+2026-08-21  Doctor Consultation
+2026-08-24  Patient Follow-up
+2026-08-29  Doctor Review
+```
+
+但并不意味着所有数据都必须塞在同一张数据库表里。
+
+底层可以分别存在：
+
+- events
+- artifacts
+- sessions
+- transcripts
+- clinician_notes
+- comments
+- versions
+- highlights
+- tasks
+- audit_logs
+
+Timeline 是信息组织主轴，而不是物理数据库结构的限制。
+
+---
+
+### 3.2 三层核心模型
+
+#### Event
+
+代表现实中发生的一件事情，例如：
+
+- patient_ai_preconsult
+- nurse_consult
+- doctor_consult
+- patient_followup
+- doctor_review
+
+#### Artifact
+
+代表该 Event 产生的内容，例如：
+
+- raw_conversation
+- recording
+- transcript
+- ai_summary
+- clinician_note
+- staff_note
+- patient_instruction
+
+#### Span
+
+代表 Artifact 内部的具体片段，例如：
+
+- transcript 第 14 段；
+- AI summary 第 2 条；
+- clinician note 的 Assessment section；
+- 录音 08:31–08:47。
+
+推荐的关系：
+
+```text
+Patient
+  ↓
+Optional Care Episode（可选的纵向分组，例如一次持续数周的 headache workup）
+  ↓
+Event
+  ↓
+Artifact
+  ↓
+Span
+```
+
+#### 多尺度 longitudinal 时间模型（设计原则）
+
+> The patient record is a multi-scale longitudinal structure. The main Timeline organizes real-world clinical Events, while each Event preserves the chronological lifecycle of its artifacts, collaboration, tasks, revisions, and provenance.
+
+- `Event` 仍然是主 Timeline 的核心展示单位；`Care Episode` 只是可选的上层 grouping，不得因此强制扩大当前 MVP；
+- 一个 Event 内部按时间保留完整生命周期：raw consult / transcript、AI summary、clinician note、staff/nurse supplement、comments / thread、tasks、revisions / revert、later review actions；
+- 明确区分两类时间：
+  - `event_time / started_at / ended_at`：现实医疗事件何时发生；
+  - `created_at / updated_at`：围绕该事件的信息何时产生或修改；
+- 后续修改仍属于原 Event，不应因为修改发生在另一天就被错误展示为新的医疗事件；
+- UI 使用 progressive disclosure，而不是无限嵌套 Timeline：
+  - longitudinal history / episode → Event detail → Artifact / thread / revision detail → provenance source span；
+- 数据模型可以支持更细粒度时间结构，但 UI 不得把所有 audit / activity 全部 flatten 到患者主 Timeline。
+
+---
+
+### 3.3 Metadata / ID / Provenance
+
+每条核心内容至少需要明确：
+
+- patient_id
+- event_id
+- artifact_id
+- author_role
+- author_id
+- timestamp
+- type
+- tags
+- risk_level
+- version
+- provenance_pointer
+
+我们使用三个概念区分不同需求：
+
+- **Metadata / Type**：它是什么；
+- **Reference / ID**：它在哪里；
+- **Provenance Pointer**：这条信息究竟来源于哪里。
+
+例如 Glance View 上的一条信息：
+
+```text
+"Headache frequency increased significantly over 2 weeks"
+```
+
+理想 provenance chain：
+
+```text
+Glance Highlight
+    ↓
+AI Summary
+    ↓
+Patient AI Session
+    ↓
+Exact source span
+    ↓
+Patient original message
+```
+
+医生应能从摘要直接跳到原始证据，而不是只能看到 AI 的二次描述。
+
+### 3.4 与 Candidate Brief 的术语映射（Brief `Entry` → 内部模型）
+
+内部模型使用比 Brief 更细的粒度，**不改回粗粒度 `Entry`**。最终 Technical Brief 必须显式展示以下映射，让评委能直接对应 Brief 要求的 schema（Entries ↔ Comments ↔ Versions ↔ Highlights ↔ Provenance ↔ AI_Scribed_Notes）：
+
+```text
+Brief "Entry"                    → 内部 Event（现实医疗事件）+ 其 Artifacts（并行 representation）
+Brief AI-scribed note / Entry     → AI-summary Artifact（author_role = system）
+Brief "exact source" / source 消息 → 内部 Span（Artifact 内的具体来源位置）
+Brief Comments / Thread           → 内部 Comment（挂载在 Artifact / Event 上）
+Brief Versions / Revision         → 内部 Version（可编辑 Artifact 的 snapshot / diff）
+Brief Highlights                  → 内部 Highlight（指向 Artifact + Span）
+Brief Provenance pointer          → provenance_pointer = Event → Artifact → Span
+```
+
+---
+
+## 4. 三个核心视图
+
+### 4.1 Timeline View
+
+回答：
+
+> 这个患者从过去到现在发生过什么？
+
+可以按照 Event 展示，并允许展开查看 Artifact。
+
+---
+
+### 4.2 Glance View
+
+回答：
+
+> 医生现在只有 10 秒，最应该注意什么？
+
+Glance View 不是新的事实库，而是对 Timeline 和当前任务状态的动态投影。
+
+优先显示：
+
+- 当前高风险问题；
+- 最近明显变化；
+- unresolved tasks；
+- clinician-confirmed items；
+- medications / allergies / chief complaint；
+- follow-up / action required。
+
+每条 highlight 都必须：
+
+- 有 risk_reason；
+- 有 provenance；
+- 可以 accept / reject / pin；
+- 可以回到 source。
+
+---
+
+### 4.3 Patient View
+
+回答：
+
+> 作为患者，我现在应该知道什么、做什么、反馈什么？
+
+Patient View 不是完整医生视图的复制。
+
+患者可以看：
+
+- patient-facing summaries；
+- care instructions；
+- upcoming tasks；
+- follow-up steps；
+- recovery guidance。
+
+患者不能看：
+
+- internal clinician comments；
+- internal staff comments；
+- raw AI-scribed notes；
+- 其他不应暴露的内部 clinical reasoning。
+
+---
+
+## 5. AI 的职责边界
+
+AI 不应该拥有唯一的 clinical authority。
+
+### 5.1 LLM 适合负责
+
+- 非结构化文本理解；
+- symptom / medication / task / risk candidate extraction；
+- patient-facing summary；
+- AI scribe summary；
+- transcript summarization；
+- candidate highlight generation；
+- provenance linking suggestions。
+
+### 5.2 不应该完全交给 LLM 的部分
+
+Glance View 排序不能只依赖：
+
+> “让大模型判断最重要的五件事。”
+
+第一版应使用透明、可解释的 importance logic。
+
+概念示例：
+
+```text
+importance_score =
+    recency
+  + clinical_risk
+  + unresolved_task
+  + clinician_confirmed
+  + symptom_change
+  + repeated_mentions
+  - stale_information
+  - resolved_task
+```
+
+初期可以完全 rule-based。
+
+---
+
+## 6. Self-Learning Importance
+
+当前没有真实 clinician interaction dataset，因此 MVP **不需要先训练模型**。
+
+更合理的路线：
+
+### Phase 1 — 可运行原型
+
+- LLM extraction；
+- rule-based ranking；
+- synthetic data；
+- clinician accept / reject / pin / edit。
+
+### Phase 2 — Adaptive weights
+
+记录医生行为：
+
+- accept；
+- reject；
+- pin；
+- edit；
+- comment。
+
+然后简单更新 importance feature 权重。
+
+例如：
+
+```text
+pin unresolved_task
+→ unresolved_task_weight + 0.1
+```
+
+这已经可以展示“系统会学习”。
+
+### Phase 3 — Learned Ranking
+
+真实交互数据足够后，再考虑：
+
+- Logistic Regression；
+- GBDT；
+- small MLP；
+- Learning-to-Rank model。
+
+不要为了“有模型”而对 synthetic labels 做无意义 fine-tuning。
+
+---
+
+## 7. RBAC
+
+最低角色：
+
+- Patient
+- Staff
+- Clinician
+- Admin
+
+核心原则：
+
+- Patient 只能查看 patient-facing information；
+- Staff 不得覆盖 clinician notes；
+- Clinician 不得覆盖 staff notes；
+- Clinician 可以查看 staff notes 和 AI-scribed notes；
+- 访问必须 clinic-scoped；
+- 权限必须 server-side enforced；
+- UI 隐藏按钮不能作为安全控制。
+
+---
+
+## 8. Revision / Collaboration
+
+系统至少应支持：
+
+- note edits；
+- version increment；
+- full revision history（full snapshots 或 diffs，架构选择）；
+- revert 到任意历史版本；
+- diff / "view changes since X"（查看自指定版本以来的变更）；
+- audit metadata；
+- comments；
+- resolve / unresolve；
+- optional @mention；
+- concurrent editing 不互相覆盖。
+
+同一区域冲突必须有 deterministic resolution strategy。
+
+---
+
+## 9. Privacy / Security
+
+当前 challenge 使用 synthetic data。
+
+即使是 synthetic prototype，也必须体现真实系统的安全架构：
+
+- PHI redaction before LLM；
+- redaction names；
+- redaction IC / ID numbers；
+- redaction phone numbers；
+- TLS in transit；
+- encryption at rest；
+- clean logs；
+- no raw sensitive content in logs。
+
+---
+
+## 10. 性能
+
+Consult Glance View：
+
+- warm path P95 ≤ 300 ms；
+- 需要说明测量方法或近似方法。
+
+因此 Glance View 不应在每次页面加载时重新把全部病历扔给 LLM。
+
+更合理的设计：
+
+- Event 创建后异步生成 candidate highlights；
+- importance score 预计算或增量更新；
+- 页面读取预计算结果。
+
+---
+
+## 11. MVP 构建优先级
+
+当前目标不是训练出最强模型，而是先构建一个 **安全、完整、可以演示真实工作流的运行系统**。
+
+优先级：
+
+1. Event / Artifact / Provenance 数据模型；
+2. Longitudinal Timeline；
+3. Glance View；
+4. Patient View；
+5. RBAC；
+6. AI Scribe / AI Patient Summary；
+7. Revision + audit；
+8. Required tests；
+9. Adaptive importance bonus；
+10. Ambient voice capture bonus。
+
+不要在核心链路完成前投入大量时间：
+
+- fine-tuning；
+- complex agent framework；
+- advanced voice pipeline；
+- sophisticated learning model；
+- generic UI polish。
+
+---
+
+## 12. Required Tests
+
+至少实现：
+
+- `test_rbac_scope.py`
+- `test_revision_history.py`
+- `test_highlight_provenance.py`
+- `test_concurrent_edits.py`
+
+Bonus：
+
+- `test_self_learning_importance.py`
+
+这些测试不是附属内容，而是 MVP 的组成部分。
+
+---
+
+## 13. 最终 Demo 应展示的故事
+
+### Scenario A — Glance + Provenance
+
+- 打开患者页面；
+- 10 秒内理解当前问题；
+- 点击某条 highlight；
+- 跳回 AI summary；
+- 再查看原始 source/span。
+
+### Scenario B — Collaboration + Audit + Importance Learning
+
+- Staff 添加 note，并添加一条带 `@clinician` mention 的 comment；
+- Clinician 在一条 AI-scribed note 中手动 highlight 某个短语，并编辑 patient plan 的某个 section；
+- 该人工 highlight / pin / edit 行为被记录为 self-learning importance 的 feedback signal；
+- 展示 revision history + diff（view changes since X）；
+- revert 到之前版本；
+- 展示 audit trail。
+
+### Scenario C — Longitudinal Care
+
+- 展示跨日期、跨月份的 Event（至少包含 1–2 条较早历史事件，例如 2025-04-15 的初次头痛就诊与 2026-02-06 的用药复查，再连接到 2026-08 的当前 care episode）；
+- patient follow-up；
+- status change；
+- importance ranking；
+- unresolved task；
+- clinician-confirmed information。
+
+---
+
+## 14. 当前项目判断
+
+现阶段没有真实临床训练数据，因此第一目标不是“训练模型”，而是：
+
+> **创造一套完整可运行的信息闭环，并使用 synthetic data 验证产品、权限、provenance、AI extraction 和 importance logic。**
+
+如果这个闭环能够成立，那么后续真实 clinician interaction data 才有意义；届时再讨论 learned ranking、个性化 prioritization 或 post-training。
+
+
+---
+
+## 15. Setup / Run / Tests
+
+> ⚠️ 当前仓库处于文档与合同阶段，应用 scaffold 尚未创建，本节命令为 **待实现项（TBD）**。scaffold 落地后必须用真实命令补全本节；在此之前不得伪造安装、启动或测试命令。
+
+**技术栈（已冻结，2026-08-25）**：
+
+- 后端：Python 3.13 + FastAPI + Uvicorn + SQLAlchemy 2.x + SQLite + Pydantic v2
+- 前端：React 18 + Vite + TypeScript（SPA，调用 FastAPI JSON API）
+- LLM：DeepSeek（经 anthropic SDK，base_url / key 用环境变量注入）；deterministic stub 兜底，demo / 测试不依赖外部 API 实时可用
+- 测试：pytest（required tests 均为 `.py`）
+- 安全：TLS in transit（文档化）+ at-rest 用 `cryptography` 对 PHI 字段做 AES-GCM 加密
+- 角色：MVP 不做完整认证，用 server-side role context 注入（可测试），RBAC 服务端强制
+
+待补全内容：
+
+- 环境要求与依赖安装命令（TBD — 待技术栈确定后填写）；
+- 应用启动命令（TBD）；
+- 运行自动化测试的命令（TBD — 必须覆盖第 12 节列出的 required micro-tests）；
+- seed synthetic demo data 的方法（TBD）。
+
+架构约定（实现后必须在此记录确切位置）：
+
+- **PHI redaction 发生位置**：所有文本在进入 LLM 调用之前，必须先经过一个独立的 redaction 模块（姓名 / IC / ID 号码 / 手机号）。实现后在此写明具体文件与函数入口。
+- **RBAC 强制点**：所有权限判断在 server-side 完成（middleware / 数据访问层 / RLS 任选），UI 只做展示裁剪，不作为安全边界。实现后在此写明具体机制与代码位置。
+
+---
+
+## 16. Bonus: Hybrid Storage / Data Decay
+
+> 明确标记为 Bonus，不改变第 11 节的 MVP 优先级。
+
+设计方向：
+
+- recent / clinically important information 保持高可访问性（热路径，直接参与 Glance 计算）；
+- older low-value data 可以 summary / compress / archive（冷路径）；
+- raw source 与 provenance chain **不得因 compression 丢失**——压缩的是展示与索引成本，不是可追溯性；
+- clinician-confirmed / unresolved / high-risk information 不参与简单 decay；
+- data decay 只降低旧数据的呈现优先级，不得删除仍被 provenance 引用的 source span。
+
+---
+
+## 17. Bonus: Ambient Voice Capture
+
+> 明确标记为 Bonus，不要求当前优先实现。
+
+边界约束：
+
+- **Patient voice capture**：仅 patient view 可用。PWA on mobile；录音 → redact PHI before LLM → transcribe → 提取结构化事实 → 生成 patient consult session summary。
+- **Clinical / staff voice capture**：仅 clinical view 可用。PWA on mobile 或 laptop。
+
+架构描述至少覆盖：
+
+- speaker-labelled transcript；
+- timestamps；
+- confidence markers；
+- code-switching support；
+- clinical summary；
+- provenance back to source segments。
+
+Extra bonus（加分项，非当前优先级）：noisy environment、diarization、overlap handling、multilingual medical terminology、multi-device capture。
