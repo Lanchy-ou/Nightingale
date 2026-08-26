@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import type { Artifact, Event } from '../types';
+import ArtifactContent from './ArtifactContent';
 
 const TYPE_LABELS: Record<string, string> = {
   patient_ai_preconsult: 'Patient AI Pre-consult',
@@ -22,27 +23,46 @@ const ARTIFACT_STYLE: Record<string, { badge: string; cls: string }> = {
   ai_patient_session_summary: { badge: 'AI', cls: 'ai' },
 };
 
-export default function EventCard({ event }: { event: Event }) {
+export default function EventCard({
+  event,
+  focusEventId,
+}: {
+  event: Event;
+  focusEventId: string | null;
+}) {
   const [open, setOpen] = useState(false);
   const [artifacts, setArtifacts] = useState<Artifact[] | null>(null);
   const [loading, setLoading] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const isFocused = focusEventId === event.event_id;
+
+  async function load() {
+    if (artifacts !== null) return;
+    setLoading(true);
+    try {
+      setArtifacts(await api.getArtifacts(event.event_id));
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function toggle() {
-    if (!open && artifacts === null) {
-      setLoading(true);
-      try {
-        setArtifacts(await api.getArtifacts(event.event_id));
-      } finally {
-        setLoading(false);
-      }
-    }
+    if (!open) await load();
     setOpen((o) => !o);
   }
+
+  useEffect(() => {
+    if (isFocused) {
+      setOpen(true);
+      load();
+      cardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [isFocused]);
 
   const label = TYPE_LABELS[event.event_type] ?? event.event_type;
 
   return (
-    <div className="event-card">
+    <div className="event-card" ref={cardRef}>
       <button type="button" className="event-row" onClick={toggle}>
         <span className="event-date">{new Date(event.started_at).toLocaleDateString()}</span>
         <span className="event-type">{label}</span>
@@ -56,16 +76,17 @@ export default function EventCard({ event }: { event: Event }) {
             const style = ARTIFACT_STYLE[a.artifact_type] ?? { badge: a.artifact_type, cls: '' };
             return (
               <div className="artifact" key={a.artifact_id}>
-                <span className={`badge ${style.cls}`}>{style.badge}</span>
-                <span className="artifact-type">{a.artifact_type}</span>
-                {a.author_role === 'system' && (
-                  <span className="system-tag">System-generated</span>
-                )}
-                {a.provenance_pointer && (
-                  <span className="provenance-tag" title={JSON.stringify(a.provenance_pointer)}>
-                    ⟵ source
-                  </span>
-                )}
+                <div className="artifact-head">
+                  <span className={`badge ${style.cls}`}>{style.badge}</span>
+                  <span className="artifact-type">{a.artifact_type}</span>
+                  {a.author_role === 'system' && <span className="system-tag">System-generated</span>}
+                  {a.provenance_pointer && (
+                    <span className="provenance-tag" title={JSON.stringify(a.provenance_pointer)}>
+                      ⟵ source
+                    </span>
+                  )}
+                </div>
+                <ArtifactContent artifact={a} />
               </div>
             );
           })}

@@ -23,13 +23,51 @@ body { margin: 0; }
 .patient-header h1 { margin: 0; font-size: 20px; }
 .meta { color: #6b7280; font-size: 13px; }
 
-.glance-placeholder {
-  border: 1px dashed #cbd5e1; border-radius: 8px;
-  padding: 12px 16px; margin: 16px 0; background: #fff;
+/* ---- Glance ---- */
+.glance-panel { border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px 16px; margin: 16px 0; background: #fff; }
+.glance-panel h2 { font-size: 15px; margin: 0 0 8px; }
+.highlight-card {
+  display: flex; gap: 10px; padding: 10px 0;
+  border-top: 1px solid #f3f4f6;
 }
-.glance-placeholder h2, .timeline h2 { font-size: 15px; margin: 0 0 8px; }
-.muted { color: #9ca3af; font-size: 13px; }
+.highlight-card:first-of-type { border-top: none; }
+.highlight-card.pinned { background: #fefce8; }
+.risk-dot { width: 10px; height: 10px; border-radius: 50%; margin-top: 5px; flex-shrink: 0; }
+.highlight-body { flex: 1; }
+.highlight-text { font-weight: 600; }
+.highlight-reason { color: #6b7280; font-size: 12px; margin: 2px 0 6px; }
+.highlight-actions { display: flex; gap: 8px; align-items: center; }
+.highlight-actions button {
+  border: 1px solid #cbd5e1; background: #fff; border-radius: 6px;
+  padding: 2px 8px; font-size: 13px; cursor: pointer;
+}
+.highlight-actions button:hover { background: #f3f4f6; }
+.confirmed-tag { font-size: 11px; color: #1d4ed8; background: #dbeafe; padding: 1px 6px; border-radius: 4px; }
 
+/* ---- Provenance chain ---- */
+.provenance-panel {
+  border: 1px solid #c7d2fe; background: #f8fafc; border-radius: 8px;
+  padding: 12px 16px; margin: 16px 0;
+}
+.provenance-head { display: flex; justify-content: space-between; align-items: center; }
+.provenance-head h3 { margin: 0; font-size: 14px; }
+.provenance-head button { border: none; background: none; cursor: pointer; font-size: 16px; color: #6b7280; }
+.chain { margin: 8px 0; padding-left: 18px; font-size: 13px; color: #374151; }
+.chain li { margin: 2px 0; }
+.chain-type { font-weight: 700; color: #4338ca; margin-right: 6px; }
+.source-box {
+  border: 1px solid #e5e7eb; border-radius: 6px; background: #fff;
+  padding: 8px 10px; max-height: 260px; overflow: auto; font-size: 13px;
+}
+mark { background: #fde047; padding: 0 2px; border-radius: 2px; }
+
+/* ---- Artifact content ---- */
+.artifact-content .line { padding: 3px 0; line-height: 1.5; }
+.speaker { font-weight: 600; color: #6b7280; margin-right: 4px; }
+.key-points { margin: 4px 0 0; padding-left: 18px; color: #374151; }
+
+/* ---- Timeline ---- */
+.timeline h2 { font-size: 15px; margin: 0 0 8px; }
 .event-card { border: 1px solid #e5e7eb; border-radius: 8px; margin: 8px 0; background: #fff; }
 .event-row {
   width: 100%; display: flex; gap: 12px; align-items: center;
@@ -42,7 +80,9 @@ body { margin: 0; }
 .chevron { color: #6b7280; }
 
 .artifact-list { border-top: 1px solid #f3f4f6; padding: 8px 12px; }
-.artifact { display: flex; gap: 8px; align-items: center; padding: 6px 0; font-size: 13px; }
+.artifact { padding: 8px 0; border-top: 1px solid #f9fafb; font-size: 13px; }
+.artifact:first-child { border-top: none; }
+.artifact-head { display: flex; gap: 8px; align-items: center; margin-bottom: 4px; }
 .badge { font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; white-space: nowrap; }
 .badge.raw { background: #e5e7eb; color: #374151; }
 .badge.clinician { background: #dbeafe; color: #1d4ed8; }
@@ -52,4 +92,5 @@ body { margin: 0; }
 .system-tag { font-size: 11px; color: #15803d; background: #f0fdf4; padding: 1px 6px; border-radius: 4px; }
 .provenance-tag { font-size: 11px; color: #1d4ed8; }
 
+.muted { color: #9ca3af; font-size: 13px; }
 .error { color: #b91c1c; padding: 16px; }

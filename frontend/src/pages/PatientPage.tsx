@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
-import type { Event, Patient } from '../types';
-import GlancePlaceholder from '../components/GlancePlaceholder';
+import type { Event, Patient, ProvenanceResult } from '../types';
+import GlancePanel from '../components/GlancePanel';
 import PatientHeader from '../components/PatientHeader';
+import ProvenancePanel from '../components/ProvenancePanel';
 import Timeline from '../components/Timeline';
 
 export default function PatientPage({
@@ -15,6 +16,8 @@ export default function PatientPage({
   const [patient, setPatient] = useState<Patient | null>(null);
   const [events, setEvents] = useState<Event[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [provenance, setProvenance] = useState<ProvenanceResult | null>(null);
+  const [focusEventId, setFocusEventId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -38,14 +41,22 @@ export default function PatientPage({
     };
   }, [patientId, roleKey]);
 
+  function handleViewSource(p: ProvenanceResult) {
+    setProvenance(p);
+    setFocusEventId(p.event.event_id);
+  }
+
   if (error) return <div className="error">Failed to load patient: {error}</div>;
   if (!patient) return <div className="muted">Loading…</div>;
 
   return (
     <div className="patient-page">
       <PatientHeader patient={patient} />
-      <GlancePlaceholder />
-      <Timeline events={events} />
+      <GlancePanel patientId={patientId} onViewSource={handleViewSource} />
+      {provenance && (
+        <ProvenancePanel provenance={provenance} onClose={() => setProvenance(null)} />
+      )}
+      <Timeline events={events} focusEventId={focusEventId} />
     </div>
   );
 }

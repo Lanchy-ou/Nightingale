@@ -18,7 +18,8 @@ export interface Event {
 
 export interface Span {
   kind: string;
-  index?: number;
+  index?: number | string;
+  offset?: [number, number];
 }
 
 export interface ProvenancePointer {
@@ -33,8 +34,48 @@ export interface Artifact {
   artifact_type: string;
   author_role: string;
   author_id: string | null;
-  content: Record<string, unknown>;
+  content: Record<string, any>;
   created_at: string;
   version: number;
   provenance_pointer: ProvenancePointer | null;
+}
+
+export interface FeatureFlags {
+  recency: boolean;
+  explicit_risk: boolean;
+  unresolved_task: boolean;
+  clinician_confirmed: boolean;
+  symptom_change: boolean;
+  repeated_mentions: boolean;
+}
+
+export interface Highlight {
+  highlight_id: string;
+  patient_id: string;
+  event_id: string;
+  artifact_id: string;
+  source_artifact_id: string;
+  source_span: Span;
+  text: string;
+  risk_reason: string;
+  feature_flags: FeatureFlags;
+  importance_score: number;
+  status: string;
+  status_history: { from: string; to: string; at: string }[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProvenanceResult {
+  highlight_id: string;
+  event: {
+    event_id: string;
+    event_type: string;
+    started_at: string;
+    ended_at: string | null;
+  };
+  summary_artifact: Artifact | null;
+  source_artifact: Artifact;
+  span: Span;
+  quote: string | null;
 }
