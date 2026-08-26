@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { api } from '../api';
+import { api, getCurrentRole } from '../api';
 import type { Artifact, Event } from '../types';
 import ArtifactContent from './ArtifactContent';
+import ArtifactEdit from './ArtifactEdit';
+import AuditList from './AuditList';
+import CommentThread from './CommentThread';
+import NoteComposer from './NoteComposer';
+import RevisionPanel from './RevisionPanel';
 
 const TYPE_LABELS: Record<string, string> = {
   patient_ai_preconsult: 'Patient AI Pre-consult',
@@ -23,6 +28,8 @@ const ARTIFACT_STYLE: Record<string, { badge: string; cls: string }> = {
   ai_patient_session_summary: { badge: 'AI', cls: 'ai' },
 };
 
+const EDITABLE = new Set(['staff_note', 'clinician_note']);
+
 export default function EventCard({
   event,
   focusEventId,
@@ -30,6 +37,7 @@ export default function EventCard({
   event: Event;
   focusEventId: string | null;
 }) {
+  const role = getCurrentRole();
   const [open, setOpen] = useState(false);
   const [artifacts, setArtifacts] = useState<Artifact[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -37,7 +45,6 @@ export default function EventCard({
   const isFocused = focusEventId === event.event_id;
 
   async function load() {
-    if (artifacts !== null) return;
     setLoading(true);
     try {
       setArtifacts(await api.getArtifacts(event.event_id));
@@ -60,6 +67,16 @@ export default function EventCard({
   }, [isFocused]);
 
   const label = TYPE_LABELS[event.event_type] ?? event.event_type;
+  const isNonPatient = role !== 'patient';
+  const canWriteNote = role === 'staff' || role === 'clinician';
+  const noteType = role === 'staff' ? 'staff_note' : 'clinician_note';
+
+  function ownsNote(a: Artifact): boolean {
+    return (
+      (role === 'staff' && a.artifact_type === 'staff_note') ||
+      (role === 'clinician' && a.artifact_type === 'clinician_note')
+    );
+  }
 
   return (
     <div className="event-card" ref={cardRef}>
@@ -74,6 +91,7 @@ export default function EventCard({
           {loading && <div className="muted">Loading…</div>}
           {artifacts?.map((a) => {
             const style = ARTIFACT_STYLE[a.artifact_type] ?? { badge: a.artifact_type, cls: '' };
+            const editable = EDITABLE.has(a.artifact_type);
             return (
               <div className="artifact" key={a.artifact_id}>
                 <div className="artifact-head">
@@ -87,9 +105,29 @@ export default function EventCard({
                   )}
                 </div>
                 <ArtifactContent artifact={a} />
+                {editable && ownsNote(a) && (
+                  <div className="artifact-actions">
+                    <ArtifactEdit artifact={a} onSaved={load} />
+                    <RevisionPanel artifact={a} onReverted={load} />
+                  </div>
+                )}
+                {editable && !ownsNote(a) && role === 'admin' && (
+                  <div className="artifact-actions">
+                    <RevisionPanel artifact={a} onReverted={load} canRevert={false} />
+                  </div>
+                )}
               </div>
             );
           })}
+          {canWriteNote && (
+            <NoteComposer eventId={event.event_id} artifactType={noteType} onSaved={load} />
+          )}
+          {isNonPatient && (
+            <>
+              <CommentThread eventId={event.event_id} canWrite={canWriteNote} />
+              <AuditList eventId={event.event_id} />
+            </>
+          )}
         </div>
       )}
     </div>

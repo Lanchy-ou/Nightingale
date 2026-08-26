@@ -79,3 +79,50 @@ export interface ProvenanceResult {
   span: Span;
   quote: string | null;
 }
+
+export interface Comment {
+  comment_id: string;
+  anchor_type: string;
+  anchor_id: string;
+  parent_comment_id: string | null;
+  author_id: string;
+  author_role: string;
+  body: string;
+  mentions: string[];
+  resolved: boolean;
+  created_at: string;
+  resolved_at: string | null;
+  resolved_by: string | null;
+}
+
+export interface ArtifactVersion {
+  version_id: string;
+  artifact_id: string;
+  version: number;
+  content: Record<string, any>;
+  actor_id: string;
+  actor_role: string;
+  created_at: string;
+}
+
+export interface AuditLog {
+  audit_id: string;
+  actor_id: string;
+  actor_role: string;
+  action: string;
+  target_type: string;
+  target_id: string;
+  from_version: number | null;
+  to_version: number | null;
+  clinic_id: string;
+  patient_id: string;
+  event_id: string | null;
+  created_at: string;
+}
+
+export interface DiffResult {
+  artifact_id: string;
+  since_version: number;
+  to_version: number;
+  diff: string;
+}

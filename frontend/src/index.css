@@ -94,3 +94,45 @@ mark { background: #fde047; padding: 0 2px; border-radius: 2px; }
 
 .muted { color: #9ca3af; font-size: 13px; }
 .error { color: #b91c1c; padding: 16px; }
+
+/* ---- M3: notes / comments / revisions / audit ---- */
+.link-btn { border: none; background: none; color: #2563eb; cursor: pointer; font-size: 12px; padding: 2px 4px; }
+.link-btn:hover { text-decoration: underline; }
+.error-inline { color: #b91c1c; font-size: 12px; margin-left: 8px; }
+.inline-actions { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
+
+.artifact-actions { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
+
+.note-composer textarea, .editor textarea, .comment-composer textarea {
+  width: 100%; box-sizing: border-box; border: 1px solid #cbd5e1; border-radius: 6px;
+  padding: 6px 8px; font: inherit; font-size: 13px;
+}
+.note-composer { margin-top: 10px; border-top: 1px solid #f3f4f6; padding-top: 8px; }
+.note-composer button, .editor button, .comment-composer button, .diff-controls button {
+  border: 1px solid #cbd5e1; background: #fff; border-radius: 6px; padding: 3px 8px; font-size: 12px; cursor: pointer;
+}
+.note-composer button:disabled, .comment-composer button:disabled { opacity: 0.5; cursor: default; }
+
+.editor { margin-top: 6px; }
+
+.revision-panel { margin-top: 6px; border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px; background: #fafafa; }
+.version-list { list-style: none; padding: 0; margin: 6px 0; font-size: 13px; }
+.version-list li { display: flex; justify-content: space-between; padding: 3px 0; }
+.diff-controls { display: flex; gap: 8px; align-items: center; font-size: 13px; }
+.diff-view { background: #1f2937; color: #e5e7eb; padding: 8px; border-radius: 6px; overflow: auto; max-height: 200px; font-size: 12px; }
+
+.comment-thread { margin-top: 10px; border-top: 1px solid #f3f4f6; padding-top: 8px; }
+.comment-thread h4 { margin: 0 0 6px; font-size: 13px; }
+.comment { border: 1px solid #eef1f5; border-radius: 6px; padding: 6px 8px; margin: 4px 0; font-size: 13px; }
+.comment.resolved { opacity: 0.6; }
+.comment-meta { color: #6b7280; font-size: 11px; }
+.comment-body { margin: 2px 0; }
+.resolved-tag { color: #15803d; background: #f0fdf4; padding: 0 4px; border-radius: 4px; margin-left: 6px; }
+.comment-composer { margin-top: 6px; }
+.mention-list { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0; }
+.mention-list button { border: 1px solid #cbd5e1; background: #f3f4f6; border-radius: 6px; padding: 2px 6px; font-size: 12px; cursor: pointer; }
+
+.audit-list { margin-top: 10px; border-top: 1px solid #f3f4f6; padding-top: 8px; }
+.audit-row { display: flex; justify-content: space-between; font-size: 12px; padding: 3px 0; border-bottom: 1px dashed #f3f4f6; }
+.audit-action { font-weight: 600; color: #374151; }
+.audit-meta { color: #6b7280; }

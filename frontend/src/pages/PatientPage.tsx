@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api } from '../api';
+import { api, getCurrentRole } from '../api';
 import type { Event, Patient, ProvenanceResult } from '../types';
 import GlancePanel from '../components/GlancePanel';
 import PatientHeader from '../components/PatientHeader';
@@ -18,6 +18,7 @@ export default function PatientPage({
   const [error, setError] = useState<string | null>(null);
   const [provenance, setProvenance] = useState<ProvenanceResult | null>(null);
   const [focusEventId, setFocusEventId] = useState<string | null>(null);
+  const role = getCurrentRole();
 
   useEffect(() => {
     let cancelled = false;
@@ -52,11 +53,15 @@ export default function PatientPage({
   return (
     <div className="patient-page">
       <PatientHeader patient={patient} />
-      <GlancePanel patientId={patientId} onViewSource={handleViewSource} />
+      {role !== 'patient' && (
+        <GlancePanel patientId={patientId} onViewSource={handleViewSource} />
+      )}
       {provenance && (
         <ProvenancePanel provenance={provenance} onClose={() => setProvenance(null)} />
       )}
-      <Timeline events={events} focusEventId={focusEventId} />
+      {/* key=roleKey remounts the timeline on role switch so artifacts refetch
+          under the new role (patient sees API-filtered content, not a UI hack). */}
+      <Timeline key={roleKey} events={events} focusEventId={focusEventId} />
     </div>
   );
 }
