@@ -67,7 +67,8 @@ def test_medication_dose_conflict_needs_review(db_session, clinician_client):
     assert len(highlight_ids) == 1
     hl = db_session.get(Highlight, highlight_ids[0])
     assert hl.review_status == "needs_review"
-    assert hl.conflict_with_artifact_id == fixture.ART_DOC_NOTE
+    # Most recent clinician note with the conflicting dose wins.
+    assert hl.conflict_with_artifact_id == fixture.ART_REVIEW_NOTE
     assert "conflicts with clinician-authored record" in hl.risk_reason
 
     # clinician note is NOT modified / versioned
@@ -78,7 +79,7 @@ def test_medication_dose_conflict_needs_review(db_session, clinician_client):
     # provenance returns the conflict artifact for UI jump
     prov = clinician_client.get(f"/api/highlights/{highlight_ids[0]}/provenance")
     assert prov.status_code == 200
-    assert prov.json()["conflict_artifact"]["artifact_id"] == fixture.ART_DOC_NOTE
+    assert prov.json()["conflict_artifact"]["artifact_id"] == fixture.ART_REVIEW_NOTE
 
 
 def test_matching_value_is_not_a_conflict(db_session):
@@ -109,7 +110,7 @@ def test_clinician_accept_sets_confirmed_and_rescores(clinician_client):
     assert r.status_code == 200
     body = r.json()
     assert body["feature_flags"]["clinician_confirmed"] is True
-    assert body["importance_score"] == 5  # explicit_risk 3 + clinician_confirmed 2
+    assert body["importance_score"] == 7  # recency 2 + explicit_risk 3 + clinician_confirmed 2
 
 
 def test_staff_accept_does_not_set_confirmed(staff_client):
@@ -117,4 +118,4 @@ def test_staff_accept_does_not_set_confirmed(staff_client):
     assert r.status_code == 200
     body = r.json()
     assert body["feature_flags"]["clinician_confirmed"] is False
-    assert body["importance_score"] == 3  # unchanged
+    assert body["importance_score"] == 5  # recency 2 + explicit_risk 3, unchanged

@@ -5,7 +5,8 @@ import json
 
 from sqlalchemy import select
 
-from app.models import Artifact, Clinic, Event, Patient, User
+from app.highlights import extract_text, locate_span
+from app.models import Artifact, ArtifactVersion, Clinic, Event, Highlight, Patient, User
 from seed import fixture
 
 
@@ -29,6 +30,7 @@ def test_event_timeline_dates_and_types(db_session):
         "nurse_consult",
         "doctor_consult",
         "patient_followup",
+        "clinician_review",
     ]
     assert events[0].started_at.year == 2025 and events[0].started_at.month == 4
     assert events[1].started_at.year == 2026 and events[1].started_at.month == 2
@@ -85,3 +87,48 @@ def test_doctor_transcript_has_20_plus_segments(db_session):
     assert len(segs) >= 20
     # Segment 17 is reserved for the Phase 2 provenance example.
     assert segs[16]["index"] == 17
+
+
+def test_event5_review_exists_and_ordered(db_session):
+    review = db_session.get(Event, fixture.EVT_REVIEW_0826)
+    assert review is not None
+    assert review.event_type == "clinician_review"
+    fu = db_session.get(Event, fixture.EVT_FU_0824)
+    assert review.started_at > fu.started_at
+
+
+def test_review_note_has_single_v1_snapshot(db_session):
+    versions = db_session.scalars(
+        select(ArtifactVersion).where(ArtifactVersion.artifact_id == fixture.ART_REVIEW_NOTE)
+    ).all()
+    assert [v.version for v in versions] == [1]
+
+
+def test_patient_instruction_is_patient_visible(db_session):
+    inst = db_session.get(Artifact, fixture.ART_REVIEW_INSTRUCTION)
+    assert inst.artifact_type == "patient_instruction"
+    assert inst.author_role == "clinician"
+    assert "instruction" in inst.content
+    assert "assessment" not in inst.content  # no internal clinical reasoning
+
+
+def test_historical_notes_enriched(db_session):
+    hist2025 = _content(db_session, fixture.ART_HIST_2025_NOTE)
+    assert "once weekly" in hist2025
+    hist2026 = _content(db_session, fixture.ART_HIST_2026_NOTE)
+    assert "a few times per week" in hist2026
+    assert "Start propranolol 20 mg daily" in hist2026
+
+
+def test_all_candidate_quotes_anchor(db_session):
+    for cand in fixture.HIGHLIGHT_CANDIDATES:
+        src = db_session.get(Artifact, cand["source_artifact_id"])
+        assert src is not None, cand["highlight_id"]
+        span = locate_span(src.content, cand["quote"])
+        assert span is not None, f"{cand['highlight_id']} quote not anchored"
+        assert extract_text(src.content, span) == cand["quote"]
+
+
+def test_nine_highlights_seeded(db_session):
+    highlights = db_session.scalars(select(Highlight)).all()
+    assert len(highlights) == len(fixture.HIGHLIGHT_CANDIDATES) == 9

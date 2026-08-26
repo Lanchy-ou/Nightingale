@@ -30,7 +30,7 @@ def test_list_events_sorted_by_started_at(clinician_client):
     r = clinician_client.get(f"/api/patients/{fixture.PATIENT_ID}/events")
     assert r.status_code == 200
     events = r.json()
-    assert len(events) == 6
+    assert len(events) == 7
     started = [e["started_at"] for e in events]
     assert started == sorted(started)
     doc = next(e for e in events if e["event_type"] == "doctor_consult")
