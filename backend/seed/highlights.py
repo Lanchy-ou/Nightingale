@@ -1,34 +1,72 @@
-"""Deterministic highlight generator (M2 stub).
+"""Deterministic highlight generator (seed path).
 
-For each candidate in fixture.HIGHLIGHT_CANDIDATES:
-  1. load the source artifact;
-  2. locate the verbatim quote via deterministic string matching;
-  3. if matched, compute importance_score from feature_flags and store the
-     Highlight (status="suggested"). A failed match drops the candidate.
+M5 contract (does NOT adjust frozen weights):
+- explicit `as_of` computes `recency` (never hand-filled);
+- `unresolved_task` is always False (no Task/status model);
+- `repeated_mentions` is computed from the SAME exact `entity_key` appearing in
+  >=2 distinct Events (both sides recomputed);
+- quotes anchor via deterministic string matching; a failed match drops the
+  candidate (never fabricate a span, never count it toward repeated_mentions).
 """
 from __future__ import annotations
 
+from collections import defaultdict
 from datetime import datetime
 
 from sqlalchemy.orm import Session
 
 from app.highlights import compute_score, locate_span
-from app.models import Artifact, Highlight
+from app.models import Artifact, Event, Highlight
 
 from . import fixture
 
-_GENERATED_AT = datetime(2026, 8, 24, 12, 0)
+SEED_AS_OF = datetime(2026, 8, 26, 12, 0)
+_GENERATED_AT = datetime(2026, 8, 26, 12, 0)
 
 
-def generate_highlights(db: Session) -> list[Highlight]:
-    created: list[Highlight] = []
+def group_repeated_entity_keys(anchored: list[tuple[str, str]]) -> set[str]:
+    """Return entity_keys present in >=2 distinct events (anchored candidates only)."""
+    events_per_key: dict[str, set[str]] = defaultdict(set)
+    for entity_key, event_id in anchored:
+        if entity_key:
+            events_per_key[entity_key].add(event_id)
+    return {key for key, events in events_per_key.items() if len(events) >= 2}
+
+
+def generate_highlights(db: Session) -> list[str]:
+    # 1. anchor every candidate (drop failures).
+    anchored: list[tuple[dict, dict, Event]] = []
     for cand in fixture.HIGHLIGHT_CANDIDATES:
         source = db.get(Artifact, cand["source_artifact_id"])
         if source is None:
-            continue  # dangling source => drop candidate
+            continue
         span = locate_span(source.content, cand["quote"])
         if span is None:
-            continue  # quote not found => never fabricate a span
+            continue
+        event = db.get(Event, cand["event_id"])
+        if event is None:
+            continue
+        anchored.append((cand, span, event))
+
+    # 2. repeated_mentions across distinct events (anchored only).
+    repeated_keys = group_repeated_entity_keys(
+        [(c["entity_key"], e.event_id) for c, _s, e in anchored]
+    )
+
+    # 3. build highlights with computed structural flags + score.
+    created: list[str] = []
+    for cand, span, event in anchored:
+        entity_key = cand.get("entity_key")
+        repeated = bool(entity_key and entity_key in repeated_keys)
+        recency = (SEED_AS_OF - event.started_at).days <= 7
+        flags = {
+            "recency": recency,
+            "explicit_risk": bool(cand["feature_flags"].get("explicit_risk")),
+            "unresolved_task": False,
+            "clinician_confirmed": False,
+            "symptom_change": bool(cand["feature_flags"].get("symptom_change")),
+            "repeated_mentions": repeated,
+        }
         db.add(
             Highlight(
                 highlight_id=cand["highlight_id"],
@@ -39,14 +77,14 @@ def generate_highlights(db: Session) -> list[Highlight]:
                 source_span=span,
                 text=cand["text"],
                 risk_reason=cand["risk_reason"],
-                feature_flags=cand["feature_flags"],
-                importance_score=compute_score(cand["feature_flags"]),
+                feature_flags=flags,
+                importance_score=compute_score(flags),
                 status="suggested",
                 status_history=[],
                 created_at=_GENERATED_AT,
                 updated_at=_GENERATED_AT,
                 entity_type=cand.get("entity_type"),
-                entity_key=cand.get("entity_key"),
+                entity_key=entity_key,
                 assertion_value=cand.get("assertion_value"),
                 conflict_with_artifact_id=None,
                 review_status=None,
@@ -54,4 +92,4 @@ def generate_highlights(db: Session) -> list[Highlight]:
         )
         created.append(cand["highlight_id"])
     db.commit()
-    return db.query(Highlight).filter(Highlight.highlight_id.in_(created)).all() if created else []
+    return created

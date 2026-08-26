@@ -45,6 +45,7 @@ EVT_PRE_0820 = "evt_pre_0820"
 EVT_NURSE_0821 = "evt_nurse_0821"
 EVT_DOC_0821 = "evt_doc_0821"
 EVT_FU_0824 = "evt_fu_0824"
+EVT_REVIEW_0826 = "evt_review_0826"
 
 ART_HIST_2025_NOTE = "art_hist_2025_note"
 ART_HIST_2026_NOTE = "art_hist_2026_note"
@@ -58,17 +59,20 @@ ART_DOC_NOTE = "art_doc_note"
 ART_DOC_INSTRUCTION = "art_doc_instruction"
 ART_FU_RAW = "art_fu_raw"
 ART_FU_SUMMARY = "art_fu_summary"
+ART_REVIEW_NOTE = "art_review_note"
+ART_REVIEW_INSTRUCTION = "art_review_instruction"
 
 # ---------------------------------------------------------------------------
 # Canonical facts (single source of truth)
 # ---------------------------------------------------------------------------
 FACTS = {
-    "headache": "once weekly -> near-daily (2026-08-20); severity 7/10 -> 3/10 by 2026-08-24",
+    "headache": "once weekly (2025-04) -> a few times per week (2026-02) -> near-daily (2026-08-20); severity 7/10 -> 3/10 by 2026-08-24",
     "nausea": "morning nausea present from 2026-08-20, still persisting 2026-08-24",
     "bp": "elevated BP 158/96 measured by nurse on 2026-08-21",
     "medication": "existing prophylactic medication (propranolol 20 mg daily) started 2026-02-06",
-    "blood_test": "ordered 2026-08-21, still pending as of 2026-08-24",
+    "blood_test": "ordered 2026-08-21, still pending as of 2026-08-26",
     "follow_up": "scheduled during 2026-08-21 doctor consult",
+    "review_0826": "clinician review 2026-08-26: severity improved to ~3/10, frequency not re-assessed, nausea persists, continue propranolol 20 mg daily, chase blood test result",
 }
 
 # ---------------------------------------------------------------------------
@@ -145,6 +149,39 @@ HIGHLIGHT_CANDIDATES = [
         "feature_flags": {"recency": False, "explicit_risk": False, "unresolved_task": False, "clinician_confirmed": False, "symptom_change": False, "repeated_mentions": False},
         "entity_type": "medication", "entity_key": "medication:propranolol", "assertion_value": "20 mg daily",
     },
+    {
+        "highlight_id": "hl_headache_once_weekly",
+        "event_id": EVT_HIST_2025,
+        "artifact_id": ART_HIST_2025_NOTE,
+        "source_artifact_id": ART_HIST_2025_NOTE,
+        "quote": "Intermittent tension-type headaches, once weekly.",
+        "text": "Headache frequency: once weekly (Apr 2025)",
+        "risk_reason": "Historical baseline: once-weekly headaches at initial assessment",
+        "feature_flags": {"recency": False, "explicit_risk": False, "unresolved_task": False, "clinician_confirmed": False, "symptom_change": False, "repeated_mentions": False},
+        "entity_type": "symptom", "entity_key": "symptom:headache frequency", "assertion_value": "once weekly",
+    },
+    {
+        "highlight_id": "hl_headache_frequency_feb",
+        "event_id": EVT_HIST_2026,
+        "artifact_id": ART_HIST_2026_NOTE,
+        "source_artifact_id": ART_HIST_2026_NOTE,
+        "quote": "Headache frequency increased to a few times per week",
+        "text": "Headache frequency increased (Feb 2026)",
+        "risk_reason": "Historical context: frequency increased before propranolol was started",
+        "feature_flags": {"recency": False, "explicit_risk": False, "unresolved_task": False, "clinician_confirmed": False, "symptom_change": False, "repeated_mentions": False},
+        "entity_type": "symptom", "entity_key": "symptom:headache frequency", "assertion_value": "a few times per week",
+    },
+    {
+        "highlight_id": "hl_blood_test_review",
+        "event_id": EVT_REVIEW_0826,
+        "artifact_id": ART_REVIEW_NOTE,
+        "source_artifact_id": ART_REVIEW_NOTE,
+        "quote": "Blood test result is still pending",
+        "text": "Blood test still pending",
+        "risk_reason": "Blood test result has not returned; chase result and follow up",
+        "feature_flags": {"recency": False, "explicit_risk": False, "unresolved_task": False, "clinician_confirmed": False, "symptom_change": False, "repeated_mentions": False},
+        "entity_type": "task", "entity_key": "task:blood test", "assertion_value": "pending",
+    },
 ]
 
 
@@ -215,6 +252,12 @@ def build_events() -> list[Event]:
             started_at=datetime(2026, 8, 24, 11, 0), ended_at=datetime(2026, 8, 24, 11, 15),
             created_at=datetime(2026, 8, 24, 11, 16),
         ),
+        Event(
+            event_id=EVT_REVIEW_0826, patient_id=PATIENT_ID, clinic_id=CLINIC_ID,
+            event_type="clinician_review",
+            started_at=datetime(2026, 8, 26, 9, 0), ended_at=datetime(2026, 8, 26, 9, 25),
+            created_at=datetime(2026, 8, 26, 9, 30),
+        ),
     ]
 
 
@@ -225,7 +268,7 @@ def build_artifacts() -> list[Artifact]:
             artifact_id=ART_HIST_2025_NOTE, event_id=EVT_HIST_2025,
             artifact_type="clinician_note", author_role="clinician", author_id=USER_CLINICIAN_ID,
             content={
-                "assessment": "Intermittent tension-type headaches, once weekly. No red-flag features on initial evaluation.",
+                "assessment": "Intermittent tension-type headaches, once weekly. No red-flag features on initial evaluation. Neurological examination unremarkable.",
                 "plan": "Headache diary; watchful waiting. Return if frequency or severity increases.",
             },
             created_at=datetime(2025, 4, 15, 9, 35), version=1, provenance_pointer=None,
@@ -235,7 +278,7 @@ def build_artifacts() -> list[Artifact]:
             artifact_id=ART_HIST_2026_NOTE, event_id=EVT_HIST_2026,
             artifact_type="clinician_note", author_role="clinician", author_id=USER_CLINICIAN_ID,
             content={
-                "assessment": "Headache frequency unchanged since last review. Started prophylactic medication.",
+                "assessment": "Headache frequency increased to a few times per week since last review. Started prophylactic medication.",
                 "plan": "Start propranolol 20 mg daily. Review response at next follow-up.",
             },
             created_at=datetime(2026, 2, 6, 10, 25), version=1, provenance_pointer=None,
@@ -397,5 +440,24 @@ def build_artifacts() -> list[Artifact]:
             },
             created_at=datetime(2026, 8, 24, 11, 25), version=1,
             provenance_pointer={"event_id": EVT_FU_0824, "artifact_id": ART_FU_RAW, "span": _span("message", 1)},
+        ),
+        # --- 2026-08-26 clinician review (Event 5) ---
+        Artifact(
+            artifact_id=ART_REVIEW_NOTE, event_id=EVT_REVIEW_0826,
+            artifact_type="clinician_note", author_role="clinician", author_id=USER_CLINICIAN_ID,
+            content={
+                "assessment": "Headache severity improved from 7/10 to approximately 3/10 since the doctor consult. Current headache frequency is not established in the available notes. Morning nausea persists.",
+                "plan": "Continue propranolol 20 mg daily. Blood test result is still pending; chase the result and schedule follow-up once it returns.",
+            },
+            created_at=datetime(2026, 8, 26, 9, 30), version=1, provenance_pointer=None,
+        ),
+        Artifact(
+            artifact_id=ART_REVIEW_INSTRUCTION, event_id=EVT_REVIEW_0826,
+            artifact_type="patient_instruction", author_role="clinician", author_id=USER_CLINICIAN_ID,
+            content={
+                "instruction": "Continue taking propranolol 20 mg daily. Complete your blood test and keep the follow-up appointment.",
+                "follow_up": "Follow-up scheduled after the blood test result returns.",
+            },
+            created_at=datetime(2026, 8, 26, 9, 35), version=1, provenance_pointer=None,
         ),
     ]
