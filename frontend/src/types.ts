@@ -64,6 +64,11 @@ export interface Highlight {
   status_history: { from: string; to: string; at: string }[];
   created_at: string;
   updated_at: string;
+  entity_type: string | null;
+  entity_key: string | null;
+  assertion_value: string | null;
+  conflict_with_artifact_id: string | null;
+  review_status: string | null;
 }
 
 export interface ProvenanceResult {
@@ -78,6 +83,7 @@ export interface ProvenanceResult {
   source_artifact: Artifact;
   span: Span;
   quote: string | null;
+  conflict_artifact: Artifact | null;
 }
 
 export interface Comment {

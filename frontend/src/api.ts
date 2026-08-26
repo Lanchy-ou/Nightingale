@@ -109,4 +109,24 @@ export const api = {
   unresolveComment: (id: string) => post<Comment>(`/api/comments/${id}/unresolve`, {}),
   getComments: (eventId: string) => get<Comment[]>(`/api/events/${eventId}/comments`),
   getAudit: (eventId: string) => get<AuditLog[]>(`/api/events/${eventId}/audit`),
+
+  ingestSource: (eventId: string, ingestionKey: string, content: Record<string, any>) =>
+    post<any>(`/api/events/${eventId}/sources`, {
+      ingestion_key: ingestionKey,
+      artifact_type: 'transcript',
+      content,
+    }),
+  createSession: (
+    patientId: string,
+    sessionId: string,
+    eventType: string,
+    startedAt: string,
+    content: Record<string, any>,
+  ) =>
+    post<any>(`/api/patients/${patientId}/sessions`, {
+      session_id: sessionId,
+      event_type: eventType,
+      started_at: startedAt,
+      content,
+    }),
 };

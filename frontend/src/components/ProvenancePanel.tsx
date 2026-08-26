@@ -14,9 +14,11 @@ const TYPE_LABELS: Record<string, string> = {
 export default function ProvenancePanel({
   provenance,
   onClose,
+  onFocusEvent,
 }: {
   provenance: ProvenanceResult;
   onClose: () => void;
+  onFocusEvent: (eventId: string) => void;
 }) {
   const markRef = useRef<HTMLElement | null>(null);
 
@@ -25,7 +27,7 @@ export default function ProvenancePanel({
     markRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }, [provenance]);
 
-  const { event, summary_artifact, source_artifact, span, quote } = provenance;
+  const { event, summary_artifact, source_artifact, span, quote, conflict_artifact } = provenance;
 
   return (
     <div className="provenance-panel">
@@ -52,6 +54,18 @@ export default function ProvenancePanel({
       <div className="source-box">
         <ArtifactContent artifact={source_artifact} span={span} markRef={markRef} />
       </div>
+      {conflict_artifact && (
+        <div className="conflict-box">
+          <span className="needs-review-tag">Needs review</span>
+          <span>conflicts with clinician-authored note</span>
+          <button
+            className="link-btn"
+            onClick={() => onFocusEvent(conflict_artifact.event_id)}
+          >
+            Jump to clinician note
+          </button>
+        </div>
+      )}
     </div>
   );
 }

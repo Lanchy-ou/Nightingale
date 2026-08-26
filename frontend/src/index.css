@@ -136,3 +136,11 @@ mark { background: #fde047; padding: 0 2px; border-radius: 2px; }
 .audit-row { display: flex; justify-content: space-between; font-size: 12px; padding: 3px 0; border-bottom: 1px dashed #f3f4f6; }
 .audit-action { font-weight: 600; color: #374151; }
 .audit-meta { color: #6b7280; }
+
+/* ---- M4 ---- */
+.needs-review-tag { font-size: 11px; color: #b45309; background: #fef3c7; padding: 1px 6px; border-radius: 4px; }
+.conflict-box { display: flex; gap: 8px; align-items: center; margin-top: 8px; padding: 8px 10px; border: 1px solid #fde68a; background: #fffbeb; border-radius: 6px; font-size: 13px; }
+.ingest-panel { border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px 14px; margin: 12px 0; background: #fff; }
+.ingest-panel h4 { margin: 0 0 6px; font-size: 13px; }
+.ingest-panel textarea { width: 100%; box-sizing: border-box; border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px 8px; font: inherit; font-size: 13px; }
+.ingest-panel button { border: 1px solid #cbd5e1; background: #fff; border-radius: 6px; padding: 3px 8px; font-size: 12px; cursor: pointer; }

@@ -68,6 +68,9 @@ export default function GlancePanel({
               {h.feature_flags.clinician_confirmed && (
                 <span className="confirmed-tag">Clinician-confirmed</span>
               )}
+              {h.review_status === 'needs_review' && (
+                <span className="needs-review-tag">Needs review</span>
+              )}
             </div>
           </div>
         </div>

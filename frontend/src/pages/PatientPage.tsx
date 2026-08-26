@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api, getCurrentRole } from '../api';
 import type { Event, Patient, ProvenanceResult } from '../types';
 import GlancePanel from '../components/GlancePanel';
+import IngestPanel from '../components/IngestPanel';
 import PatientHeader from '../components/PatientHeader';
 import ProvenancePanel from '../components/ProvenancePanel';
 import Timeline from '../components/Timeline';
@@ -18,6 +19,7 @@ export default function PatientPage({
   const [error, setError] = useState<string | null>(null);
   const [provenance, setProvenance] = useState<ProvenanceResult | null>(null);
   const [focusEventId, setFocusEventId] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
   const role = getCurrentRole();
 
   useEffect(() => {
@@ -40,11 +42,19 @@ export default function PatientPage({
     return () => {
       cancelled = true;
     };
-  }, [patientId, roleKey]);
+  }, [patientId, roleKey, refreshKey]);
 
   function handleViewSource(p: ProvenanceResult) {
     setProvenance(p);
     setFocusEventId(p.event.event_id);
+  }
+
+  function handleFocusEvent(eventId: string) {
+    setFocusEventId(eventId);
+  }
+
+  function handleIngested() {
+    setRefreshKey((k) => k + 1);
   }
 
   if (error) return <div className="error">Failed to load patient: {error}</div>;
@@ -54,11 +64,16 @@ export default function PatientPage({
     <div className="patient-page">
       <PatientHeader patient={patient} />
       {role !== 'patient' && (
-        <GlancePanel patientId={patientId} onViewSource={handleViewSource} />
+        <GlancePanel key={`glance-${refreshKey}`} patientId={patientId} onViewSource={handleViewSource} />
       )}
       {provenance && (
-        <ProvenancePanel provenance={provenance} onClose={() => setProvenance(null)} />
+        <ProvenancePanel
+          provenance={provenance}
+          onClose={() => setProvenance(null)}
+          onFocusEvent={handleFocusEvent}
+        />
       )}
+      <IngestPanel patientId={patientId} onIngested={handleIngested} />
       {/* key=roleKey remounts the timeline on role switch so artifacts refetch
           under the new role (patient sees API-filtered content, not a UI hack). */}
       <Timeline key={roleKey} events={events} focusEventId={focusEventId} />
