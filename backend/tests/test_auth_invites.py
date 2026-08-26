@@ -6,10 +6,13 @@ Everything goes through the real session/cookie auth path (no demo headers).
 from __future__ import annotations
 
 import hashlib
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
+import app.api.auth as auth_api
 from app.auth_security import verify_password
 from app.main import app
 from app.models import AuditLog, Invite, Patient, User, UserCredential
@@ -298,6 +301,34 @@ def test_invite_token_is_single_use():
     p = client.get(f"/api/auth/invites/{token}/preview")
     assert p.status_code == 200
     assert p.json()["status"] == "used"
+
+
+def test_invite_token_is_atomically_single_use_under_concurrency(monkeypatch):
+    admin = _admin_client()
+    invite = _invite(admin, "race@demo.clinic", "staff")
+    token = _token_from_link(invite.json()["invite_link"])
+    barrier = Barrier(2)
+    real_hash_password = auth_api.hash_password
+
+    def synchronized_hash(password: str) -> str:
+        barrier.wait(timeout=5)
+        return real_hash_password(password)
+
+    monkeypatch.setattr(auth_api, "hash_password", synchronized_hash)
+    payload = {
+        "token": token,
+        "password": "strong-pass-1",
+        "name": "Concurrent Registration",
+    }
+
+    def register_once() -> int:
+        with TestClient(app, raise_server_exceptions=False) as client:
+            return client.post("/api/auth/register", json=payload).status_code
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        statuses = sorted(executor.map(lambda _: register_once(), range(2)))
+
+    assert statuses == [201, 409]
 
 
 def test_expired_invite_rejected(db_session):

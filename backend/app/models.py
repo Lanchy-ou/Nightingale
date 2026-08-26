@@ -60,6 +60,7 @@ AUDIT_ACTIONS = (
     "login_success",
     "login_failure",
     "logout",
+    "session_revoked",
 )
 
 

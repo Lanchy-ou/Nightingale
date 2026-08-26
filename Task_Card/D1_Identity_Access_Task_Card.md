@@ -1,12 +1,12 @@
 # D1 任务卡 - Identity, Invite, Login and Session
 
-> 状态：**COMPLETE（2026-08-26）**
+> 状态：**COMPLETE（2026-08-27 审查修复后重验）**
 >
 > 对应总计划：`docs/phase_d_product_completion_plan.md`
 >
 > 前置：M3 server-side RBAC 已完成；现有 DB `User` 仍是 role/clinic/patient identity authority。
 >
-> 完成验证：218 pytest 绿（161 legacy 零回归 + 56 个新增 auth 测试 + 1 seed 完整性断言）；frontend production build 绿；uvicorn + curl 真实验证 invite → register → login → session → logout、patient 绑定、cross-clinic 404、四角色登录。实现记录见 `AGENTS.md` §24。
+> 完成验证：222 pytest 绿（161 legacy 零回归 + 60 个 auth 测试 + 1 seed 完整性断言）；frontend production build 绿；uvicorn + curl 真实验证 invite → register → login → session → logout、patient 绑定、cross-clinic 404、四角色登录。审查修复额外锁定了安全 422、登录等成本验证、并发 invite 单次消费及 revoke/audit 原子性。实现记录见 `AGENTS.md` §24。
 
 ---
 

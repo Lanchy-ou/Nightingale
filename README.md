@@ -737,7 +737,7 @@ cd backend
 .venv/Scripts/python.exe -m pytest        # 覆盖第 12 节 required micro-tests
 ```
 
-> 当前进度：M1–M7、Phase C（C1+C2）与 **D1（Identity, Invite, Login and Session）** 已落地。后端全量为 **218 passed**，TypeScript/Vite production build 通过；warm-path Glance Layer A P95 ≈ 3.8 ms（`backend/docs/perf_baseline.md`）。剩余 Phase D 工作：D2 Task + Patient Experience、D3 Transcript Reliability、D4 evidence-bound Clinician Copilot、D5 TLS/at-rest 与跨角色集成。总方案见 `docs/phase_d_product_completion_plan.md`。
+> 当前进度：M1–M7、Phase C（C1+C2）与 **D1（Identity, Invite, Login and Session）** 已落地。后端全量为 **222 passed**，TypeScript/Vite production build 通过；warm-path Glance Layer A P95 ≈ 3.8 ms（`backend/docs/perf_baseline.md`）。剩余 Phase D 工作：D2 Task + Patient Experience、D3 Transcript Reliability、D4 evidence-bound Clinician Copilot、D5 TLS/at-rest 与跨角色集成。总方案见 `docs/phase_d_product_completion_plan.md`。
 
 架构约定（记录确切位置，随阶段更新）：
 

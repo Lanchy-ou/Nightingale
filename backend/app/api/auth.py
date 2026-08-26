@@ -10,8 +10,8 @@ Contract highlights (Task_Card/D1_Identity_Access_Task_Card.md):
 - login/register return generic errors (no account-existence leakage);
 - invite consumption + User + UserCredential commit in ONE transaction;
 - logout atomically revokes the current session;
-- AuditLog records invite_created/register/login_success/login_failure/logout
-  metadata only — never passwords, tokens or emails for failed logins.
+- AuditLog records invite_created/register/login_success/login_failure/logout/
+  session_revoked metadata only — never passwords, tokens or failed-login emails.
 """
 from __future__ import annotations
 
@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 
 from ..audit import add_audit
 from ..auth_security import (
+    DUMMY_PASSWORD_HASH,
     SESSION_COOKIE_NAME,
     cleared_session_cookie,
     hash_password,
@@ -287,18 +288,33 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
         role=invite.role,
         patient_id=invite.patient_id,
     )
+    password_hash = hash_password(body.password)
+    registered_at = datetime.now()
+    consumed = db.execute(
+        update(Invite)
+        .where(
+            Invite.invite_id == invite.invite_id,
+            Invite.used_at.is_(None),
+            Invite.expires_at > registered_at,
+        )
+        .values(used_at=registered_at)
+    )
+    if consumed.rowcount != 1:
+        db.rollback()
+        raise HTTPException(
+            status_code=409, detail="This invite can no longer be used"
+        )
+
     credential = UserCredential(
         user_id=user_id,
         email_normalized=normalized,
-        password_hash=hash_password(body.password),
-        created_at=now,
-        password_changed_at=now,
+        password_hash=password_hash,
+        created_at=registered_at,
+        password_changed_at=registered_at,
         disabled_at=None,
     )
-    invite.used_at = now
     db.add(user)
     db.add(credential)
-    db.add(invite)
     add_audit(
         db,
         actor_id=user_id,
@@ -333,11 +349,13 @@ def login(body: LoginRequest, db: Session = Depends(get_db), response: Response 
     )
     user = db.get(User, credential.user_id) if credential is not None else None
 
-    ok = (
-        credential is not None
-        and credential.disabled_at is None
-        and verify_password(body.password, credential.password_hash)
+    password_hash = (
+        credential.password_hash
+        if credential is not None and credential.disabled_at is None
+        else DUMMY_PASSWORD_HASH
     )
+    password_ok = verify_password(body.password, password_hash)
+    ok = credential is not None and credential.disabled_at is None and password_ok
     if not ok or user is None:
         # Metadata-only failure audit; the email itself is never logged.
         add_audit(
@@ -409,7 +427,6 @@ def logout(
                 )
                 .values(revoked_at=now)
             )
-            db.commit()
             if result.rowcount == 1:
                 add_audit(
                     db,
@@ -421,7 +438,19 @@ def logout(
                     clinic_id=ctx.clinic_id,
                     patient_id=ctx.patient_id,
                 )
+                add_audit(
+                    db,
+                    actor_id=ctx.user_id,
+                    actor_role=ctx.role,
+                    action="session_revoked",
+                    target_type="session",
+                    target_id=row.session_id,
+                    clinic_id=ctx.clinic_id,
+                    patient_id=ctx.patient_id,
+                )
                 db.commit()
+            else:
+                db.rollback()
     response.headers.append("set-cookie", cleared_session_cookie())
     return LogoutOut(status="logged_out")
 

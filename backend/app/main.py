@@ -57,7 +57,10 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    return error_response(422, "validation_error", str(exc))
+    # `str(exc)` contains rejected input values and internal source locations.
+    # Auth payloads can contain passwords/tokens, so validation responses must
+    # never serialize the exception verbatim.
+    return error_response(422, "validation_error", "Request validation failed")
 
 
 @app.get("/api/me", response_model=CurrentIdentityOut)

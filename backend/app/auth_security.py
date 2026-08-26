@@ -35,6 +35,12 @@ def verify_password(password: str, password_hash: str) -> bool:
         return False
 
 
+# Login must perform one Argon2 verification even when the email is unknown or
+# the credential is disabled. This process-local dummy hash prevents account
+# enumeration through the otherwise large Argon2 timing difference.
+DUMMY_PASSWORD_HASH = hash_password(secrets.token_urlsafe(32))
+
+
 def new_invite_token() -> str:
     """256-bit one-time invite token (>= the required 128 bits)."""
     return secrets.token_urlsafe(32)

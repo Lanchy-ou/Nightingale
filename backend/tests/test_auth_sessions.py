@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
+import app.api.auth as auth_api
 from app.auth_security import SESSION_COOKIE_NAME
 from app.main import app
 from app.models import AuditLog, AuthSession, User, UserCredential
@@ -71,6 +72,67 @@ def test_login_errors_are_uniform_and_leak_nothing():
     )
     assert unknown.status_code == wrong_pw.status_code == 401
     assert unknown.json() == wrong_pw.json()
+
+
+def test_login_always_runs_one_password_verification(monkeypatch, db_session):
+    calls: list[str] = []
+
+    def record_verification(password: str, password_hash: str) -> bool:
+        calls.append(password_hash)
+        return False
+
+    monkeypatch.setattr(auth_api, "verify_password", record_verification)
+    client = TestClient(app)
+
+    unknown = client.post(
+        "/api/auth/login",
+        json={"email": "ghost@demo.clinic", "password": "wrong-password-1"},
+    )
+    assert unknown.status_code == 401
+    assert len(calls) == 1
+    assert calls[0] == auth_api.DUMMY_PASSWORD_HASH
+
+    calls.clear()
+    credential = db_session.get(UserCredential, fixture.USER_CLINICIAN_ID)
+    credential.disabled_at = datetime.now()
+    db_session.commit()
+    disabled = client.post(
+        "/api/auth/login",
+        json={
+            "email": fixture.DEMO_EMAILS[fixture.USER_CLINICIAN_ID],
+            "password": "wrong-password-1",
+        },
+    )
+    assert disabled.status_code == 401
+    assert len(calls) == 1
+    assert calls[0] == auth_api.DUMMY_PASSWORD_HASH
+
+
+def test_auth_validation_errors_never_reflect_passwords_or_internal_paths():
+    client = TestClient(app)
+    short_secret = "s3cr3t"
+    register = client.post(
+        "/api/auth/register",
+        json={
+            "token": "held-invite-token",
+            "password": short_secret,
+            "name": "Test User",
+        },
+    )
+    assert register.status_code == 422
+    assert short_secret not in register.text
+    assert "app\\api\\auth.py" not in register.text
+    assert "app/api/auth.py" not in register.text
+
+    long_secret = "unique-password-prefix-" + "X" * 260
+    login = client.post(
+        "/api/auth/login",
+        json={"email": "person@example.com", "password": long_secret},
+    )
+    assert login.status_code == 422
+    assert "unique-password-prefix" not in login.text
+    assert "app\\api\\auth.py" not in login.text
+    assert "app/api/auth.py" not in login.text
 
 
 def test_login_failure_is_audited_without_email_or_secrets(db_session):
@@ -149,6 +211,41 @@ def test_logout_revokes_session_and_clears_cookie(db_session):
     ).all()
     assert len(logout_audit) == 1
     assert logout_audit[0].actor_id == fixture.USER_CLINICIAN_ID
+    revoke_audit = db_session.scalars(
+        select(AuditLog).where(AuditLog.action == "session_revoked")
+    ).all()
+    assert len(revoke_audit) == 1
+    assert revoke_audit[0].target_id == row.session_id
+    assert revoke_audit[0].actor_id == fixture.USER_CLINICIAN_ID
+
+
+def test_logout_revoke_and_audits_commit_atomically(monkeypatch, db_session):
+    client = TestClient(app, raise_server_exceptions=False)
+    _login(client, fixture.DEMO_EMAILS[fixture.USER_CLINICIAN_ID])
+    token = _cookie_value(client)
+    real_add_audit = auth_api.add_audit
+
+    def fail_on_revoke(db, **kwargs):
+        if kwargs["action"] == "session_revoked":
+            raise RuntimeError("simulated audit failure")
+        return real_add_audit(db, **kwargs)
+
+    monkeypatch.setattr(auth_api, "add_audit", fail_on_revoke)
+    assert client.post("/api/auth/logout").status_code == 500
+
+    db_session.expire_all()
+    row = db_session.scalars(select(AuthSession)).one()
+    assert row.revoked_at is None
+    actions = db_session.scalars(
+        select(AuditLog.action).where(
+            AuditLog.action.in_(("logout", "session_revoked"))
+        )
+    ).all()
+    assert actions == []
+
+    replay = TestClient(app)
+    replay.cookies.set(SESSION_COOKIE_NAME, token)
+    assert replay.get("/api/auth/session").status_code == 200
 
 
 def test_second_logout_is_a_safe_noop():
