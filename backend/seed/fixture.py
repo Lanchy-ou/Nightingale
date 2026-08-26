@@ -91,7 +91,7 @@ HIGHLIGHT_CANDIDATES = [
         "quote": "My headaches used to happen once a week, but now they're almost every day.",
         "text": "Worsening headache frequency",
         "risk_reason": "Headache frequency increased from once weekly to near-daily",
-        "feature_flags": {"recency": True, "explicit_risk": False, "unresolved_task": False, "clinician_confirmed": False, "symptom_change": True, "repeated_mentions": False},
+        "feature_flags": {"explicit_risk": False, "symptom_change": True},
         "entity_type": "symptom", "entity_key": "symptom:headache frequency", "assertion_value": "worsening",
     },
     {
@@ -102,7 +102,7 @@ HIGHLIGHT_CANDIDATES = [
         "quote": "The nausea is still there in the mornings.",
         "text": "Morning nausea persists",
         "risk_reason": "Nausea still present despite headache improvement",
-        "feature_flags": {"recency": True, "explicit_risk": False, "unresolved_task": False, "clinician_confirmed": False, "symptom_change": True, "repeated_mentions": False},
+        "feature_flags": {"explicit_risk": False, "symptom_change": True},
         "entity_type": "symptom", "entity_key": "symptom:nausea", "assertion_value": "persistent",
     },
     {
@@ -113,7 +113,7 @@ HIGHLIGHT_CANDIDATES = [
         "quote": "Your blood pressure is 158 over 96.",
         "text": "Blood pressure elevated (158/96)",
         "risk_reason": "Elevated blood pressure measured at nurse consult",
-        "feature_flags": {"recency": False, "explicit_risk": True, "unresolved_task": False, "clinician_confirmed": False, "symptom_change": False, "repeated_mentions": False},
+        "feature_flags": {"explicit_risk": True, "symptom_change": False},
         "entity_type": "risk", "entity_key": "risk:blood pressure", "assertion_value": "158/96",
     },
     {
@@ -124,7 +124,7 @@ HIGHLIGHT_CANDIDATES = [
         "quote": "I'm ordering a blood test to check for any underlying causes.",
         "text": "Blood test ordered - pending",
         "risk_reason": "Blood test ordered to rule out underlying causes; result still pending",
-        "feature_flags": {"recency": False, "explicit_risk": False, "unresolved_task": True, "clinician_confirmed": False, "symptom_change": False, "repeated_mentions": False},
+        "feature_flags": {"explicit_risk": False, "symptom_change": False},
         "entity_type": "task", "entity_key": "task:blood test", "assertion_value": "pending",
     },
     {
@@ -135,7 +135,7 @@ HIGHLIGHT_CANDIDATES = [
         "quote": "We'll schedule a follow-up in a few days.",
         "text": "Follow-up scheduled",
         "risk_reason": "Follow-up appointment scheduled to review blood test results",
-        "feature_flags": {"recency": False, "explicit_risk": False, "unresolved_task": True, "clinician_confirmed": False, "symptom_change": False, "repeated_mentions": False},
+        "feature_flags": {"explicit_risk": False, "symptom_change": False},
         "entity_type": "task", "entity_key": "task:follow-up", "assertion_value": "scheduled",
     },
     {
@@ -146,7 +146,7 @@ HIGHLIGHT_CANDIDATES = [
         "quote": "Start propranolol 20 mg daily",
         "text": "Existing medication: propranolol 20 mg daily",
         "risk_reason": "Prophylactic medication active since Feb 2026",
-        "feature_flags": {"recency": False, "explicit_risk": False, "unresolved_task": False, "clinician_confirmed": False, "symptom_change": False, "repeated_mentions": False},
+        "feature_flags": {"explicit_risk": False, "symptom_change": False},
         "entity_type": "medication", "entity_key": "medication:propranolol", "assertion_value": "20 mg daily",
     },
     {
@@ -157,7 +157,7 @@ HIGHLIGHT_CANDIDATES = [
         "quote": "Intermittent tension-type headaches, once weekly.",
         "text": "Headache frequency: once weekly (Apr 2025)",
         "risk_reason": "Historical baseline: once-weekly headaches at initial assessment",
-        "feature_flags": {"recency": False, "explicit_risk": False, "unresolved_task": False, "clinician_confirmed": False, "symptom_change": False, "repeated_mentions": False},
+        "feature_flags": {"explicit_risk": False, "symptom_change": False},
         "entity_type": "symptom", "entity_key": "symptom:headache frequency", "assertion_value": "once weekly",
     },
     {
@@ -168,7 +168,7 @@ HIGHLIGHT_CANDIDATES = [
         "quote": "Headache frequency increased to a few times per week",
         "text": "Headache frequency increased (Feb 2026)",
         "risk_reason": "Historical context: frequency increased before propranolol was started",
-        "feature_flags": {"recency": False, "explicit_risk": False, "unresolved_task": False, "clinician_confirmed": False, "symptom_change": False, "repeated_mentions": False},
+        "feature_flags": {"explicit_risk": False, "symptom_change": False},
         "entity_type": "symptom", "entity_key": "symptom:headache frequency", "assertion_value": "a few times per week",
     },
     {
@@ -179,7 +179,7 @@ HIGHLIGHT_CANDIDATES = [
         "quote": "Blood test result is still pending",
         "text": "Blood test still pending",
         "risk_reason": "Blood test result has not returned; chase result and follow up",
-        "feature_flags": {"recency": False, "explicit_risk": False, "unresolved_task": False, "clinician_confirmed": False, "symptom_change": False, "repeated_mentions": False},
+        "feature_flags": {"explicit_risk": False, "symptom_change": False},
         "entity_type": "task", "entity_key": "task:blood test", "assertion_value": "pending",
     },
 ]

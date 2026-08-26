@@ -1,12 +1,14 @@
 """M5: longitudinal scoring — repeated_mentions, recency, unresolved_task."""
 from __future__ import annotations
 
+from datetime import timedelta
+
 from sqlalchemy import select
 
 from app.highlights import extract_text, locate_span
 from app.models import Artifact, Highlight
 from seed import fixture
-from seed.highlights import group_repeated_entity_keys
+from seed.highlights import SEED_AS_OF, group_repeated_entity_keys, is_recent
 
 
 def _hl(db, hid: str) -> Highlight:
@@ -55,6 +57,19 @@ def test_recency_computed_from_as_of(db_session):
         assert _hl(db_session, hid).feature_flags["recency"] is True, hid
     for hid in old:
         assert _hl(db_session, hid).feature_flags["recency"] is False, hid
+
+
+def test_recency_rejects_future_and_older_than_seven_days():
+    assert is_recent(SEED_AS_OF, SEED_AS_OF) is True
+    assert is_recent(SEED_AS_OF - timedelta(days=7), SEED_AS_OF) is True
+    assert is_recent(SEED_AS_OF - timedelta(days=7, microseconds=1), SEED_AS_OF) is False
+    assert is_recent(SEED_AS_OF + timedelta(microseconds=1), SEED_AS_OF) is False
+
+
+def test_fixture_candidates_do_not_hand_fill_structural_flags():
+    structural = {"recency", "unresolved_task", "clinician_confirmed", "repeated_mentions"}
+    for candidate in fixture.HIGHLIGHT_CANDIDATES:
+        assert structural.isdisjoint(candidate["feature_flags"]), candidate["highlight_id"]
 
 
 def test_all_seed_highlights_unresolved_task_false(db_session):

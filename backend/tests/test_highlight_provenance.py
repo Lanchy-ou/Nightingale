@@ -18,7 +18,7 @@ AI_SUMMARY_IDS = {
 
 def test_all_candidates_become_highlights(db_session):
     highlights = db_session.scalars(select(Highlight)).all()
-    # 6 candidates, all quotes must match their source => 6 highlights.
+    # All canonical candidates have exact source quotes and become highlights.
     assert len(highlights) == len(fixture.HIGHLIGHT_CANDIDATES)
 
 
@@ -60,7 +60,7 @@ def test_ai_scribed_highlights_satisfy_same_rules(db_session):
         for h in db_session.scalars(select(Highlight)).all()
         if h.artifact_id in AI_SUMMARY_IDS
     ]
-    assert len(ai_highlights) == 5  # 5 of 6 highlights derive from an AI summary
+    assert len(ai_highlights) == 5  # 5 of 9 highlights derive from an AI summary
     for h in ai_highlights:
         derived = db_session.get(Artifact, h.artifact_id)
         assert derived.author_role == "system"

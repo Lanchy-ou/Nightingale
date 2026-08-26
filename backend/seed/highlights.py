@@ -11,7 +11,7 @@ M5 contract (does NOT adjust frozen weights):
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy.orm import Session
 
@@ -31,6 +31,12 @@ def group_repeated_entity_keys(anchored: list[tuple[str, str]]) -> set[str]:
         if entity_key:
             events_per_key[entity_key].add(event_id)
     return {key for key, events in events_per_key.items() if len(events) >= 2}
+
+
+def is_recent(started_at: datetime, as_of: datetime) -> bool:
+    """True only when the Event occurred from 0 through 7 days before as_of."""
+    age = as_of - started_at
+    return timedelta(0) <= age <= timedelta(days=7)
 
 
 def generate_highlights(db: Session) -> list[str]:
@@ -58,7 +64,7 @@ def generate_highlights(db: Session) -> list[str]:
     for cand, span, event in anchored:
         entity_key = cand.get("entity_key")
         repeated = bool(entity_key and entity_key in repeated_keys)
-        recency = (SEED_AS_OF - event.started_at).days <= 7
+        recency = is_recent(event.started_at, SEED_AS_OF)
         flags = {
             "recency": recency,
             "explicit_risk": bool(cand["feature_flags"].get("explicit_risk")),
