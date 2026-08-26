@@ -1,0 +1,55 @@
+:root {
+  font-family: system-ui, -apple-system, Segoe UI, sans-serif;
+  color: #1a1d23;
+  background: #f5f6f8;
+}
+body { margin: 0; }
+.app { max-width: 860px; margin: 0 auto; padding: 16px; }
+
+.role-bar {
+  display: flex; gap: 8px; align-items: center;
+  padding: 8px 12px; background: #eef1f5; border-radius: 8px;
+  margin-bottom: 16px; font-size: 14px;
+}
+.role-bar select { padding: 4px 8px; border-radius: 6px; border: 1px solid #cbd5e1; }
+.role-note { color: #6b7280; font-size: 12px; }
+
+.patient-header { display: flex; gap: 12px; align-items: center; }
+.avatar {
+  width: 44px; height: 44px; border-radius: 50%;
+  background: #2563eb; color: #fff;
+  display: flex; align-items: center; justify-content: center; font-weight: 600;
+}
+.patient-header h1 { margin: 0; font-size: 20px; }
+.meta { color: #6b7280; font-size: 13px; }
+
+.glance-placeholder {
+  border: 1px dashed #cbd5e1; border-radius: 8px;
+  padding: 12px 16px; margin: 16px 0; background: #fff;
+}
+.glance-placeholder h2, .timeline h2 { font-size: 15px; margin: 0 0 8px; }
+.muted { color: #9ca3af; font-size: 13px; }
+
+.event-card { border: 1px solid #e5e7eb; border-radius: 8px; margin: 8px 0; background: #fff; }
+.event-row {
+  width: 100%; display: flex; gap: 12px; align-items: center;
+  padding: 10px 12px; background: none; border: none; cursor: pointer;
+  font-size: 14px; text-align: left;
+}
+.event-date { font-weight: 600; min-width: 90px; }
+.event-type { font-weight: 500; }
+.event-count { color: #6b7280; font-size: 12px; margin-left: auto; }
+.chevron { color: #6b7280; }
+
+.artifact-list { border-top: 1px solid #f3f4f6; padding: 8px 12px; }
+.artifact { display: flex; gap: 8px; align-items: center; padding: 6px 0; font-size: 13px; }
+.badge { font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; white-space: nowrap; }
+.badge.raw { background: #e5e7eb; color: #374151; }
+.badge.clinician { background: #dbeafe; color: #1d4ed8; }
+.badge.staff { background: #fef3c7; color: #b45309; }
+.badge.ai { background: #dcfce7; color: #15803d; }
+.artifact-type { color: #374151; }
+.system-tag { font-size: 11px; color: #15803d; background: #f0fdf4; padding: 1px 6px; border-radius: 4px; }
+.provenance-tag { font-size: 11px; color: #1d4ed8; }
+
+.error { color: #b91c1c; padding: 16px; }
