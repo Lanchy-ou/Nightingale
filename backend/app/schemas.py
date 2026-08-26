@@ -187,3 +187,54 @@ class SessionIngestRequest(BaseModel):
     started_at: datetime
     ended_at: datetime | None = None
     content: dict
+
+
+# --- M6 Patient View (explicit field projection; extra keys are forbidden) ---
+class PatientViewSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_artifact_id: str
+    event_id: str
+    event_time: datetime
+    instruction: str
+    follow_up: str | None = None
+
+
+class PatientViewInstruction(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_id: str
+    event_id: str
+    event_time: datetime
+    instruction: str
+    follow_up: str | None = None
+
+
+class PatientViewUpcoming(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_artifact_id: str
+    event_id: str
+    event_time: datetime
+    kind: Literal["follow_up"]
+    text: str
+
+
+class PatientViewSession(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    event_id: str
+    event_type: str
+    started_at: datetime
+    ended_at: datetime | None = None
+
+
+class PatientViewOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    patient_id: str
+    display_name: str
+    current_summary: PatientViewSummary | None
+    instructions: list[PatientViewInstruction]
+    upcoming: list[PatientViewUpcoming]
+    sessions: list[PatientViewSession]

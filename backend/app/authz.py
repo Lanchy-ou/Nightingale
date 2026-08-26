@@ -21,6 +21,7 @@ PERMISSIONS: dict[str, dict[str, bool]] = {
         "read_patient": True,
         "read_events": True,
         "read_artifacts": True,
+        "read_patient_view": True,
         "create_patient_session": True,
     },
     "staff": {
