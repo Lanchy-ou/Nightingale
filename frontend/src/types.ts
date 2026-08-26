@@ -132,3 +132,44 @@ export interface DiffResult {
   to_version: number;
   diff: string;
 }
+
+// --- Patient View (M6) ---
+export interface PatientViewSummary {
+  source_artifact_id: string;
+  event_id: string;
+  event_time: string;
+  instruction: string;
+  follow_up: string | null;
+}
+
+export interface PatientViewInstruction {
+  artifact_id: string;
+  event_id: string;
+  event_time: string;
+  instruction: string;
+  follow_up: string | null;
+}
+
+export interface PatientViewUpcoming {
+  source_artifact_id: string;
+  event_id: string;
+  event_time: string;
+  kind: 'follow_up';
+  text: string;
+}
+
+export interface PatientViewSession {
+  event_id: string;
+  event_type: string;
+  started_at: string;
+  ended_at: string | null;
+}
+
+export interface PatientView {
+  patient_id: string;
+  display_name: string;
+  current_summary: PatientViewSummary | null;
+  instructions: PatientViewInstruction[];
+  upcoming: PatientViewUpcoming[];
+  sessions: PatientViewSession[];
+}

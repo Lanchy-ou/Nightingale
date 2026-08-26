@@ -7,6 +7,7 @@ import type {
   Event,
   Highlight,
   Patient,
+  PatientView,
   ProvenanceResult,
 } from './types';
 
@@ -84,6 +85,7 @@ function patch<T>(path: string, body: unknown): Promise<T> {
 
 export const api = {
   getPatient: (id: string) => get<Patient>(`/api/patients/${id}`),
+  getPatientView: (id: string) => get<PatientView>(`/api/patients/${id}/patient-view`),
   getEvents: (id: string) => get<Event[]>(`/api/patients/${id}/events`),
   getArtifacts: (eventId: string) => get<Artifact[]>(`/api/events/${eventId}/artifacts`),
   getGlance: (patientId: string) => get<{ highlights: Highlight[] }>(`/api/patients/${patientId}/glance`),

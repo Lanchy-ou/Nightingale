@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import PatientPage from './pages/PatientPage';
+import PatientViewPage from './pages/PatientViewPage';
 import { ROLE_USERS, setRole } from './api';
 
 const PATIENT_ID = 'pat_001';
@@ -33,9 +34,14 @@ export default function App() {
         </select>
         <span className="role-note">demo-only · server enforces real RBAC</span>
       </div>
-      {/* Remount the whole patient workspace so role-sensitive state such as
-          provenance panels cannot survive a role change. */}
-      <PatientPage key={roleKey} patientId={PATIENT_ID} roleKey={roleKey} />
+      {/* Role-level binary render: the patient gets the dedicated Patient View
+          page, never a trimmed clinical workspace. Remount on every role
+          change so no role-sensitive state can survive. */}
+      {selected.role === 'patient' ? (
+        <PatientViewPage key={roleKey} patientId={PATIENT_ID} roleKey={roleKey} />
+      ) : (
+        <PatientPage key={roleKey} patientId={PATIENT_ID} roleKey={roleKey} />
+      )}
     </div>
   );
 }

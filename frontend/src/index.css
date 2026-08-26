@@ -144,3 +144,25 @@ mark { background: #fde047; padding: 0 2px; border-radius: 2px; }
 .ingest-panel h4 { margin: 0 0 6px; font-size: 13px; }
 .ingest-panel textarea { width: 100%; box-sizing: border-box; border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px 8px; font: inherit; font-size: 13px; }
 .ingest-panel button { border: 1px solid #cbd5e1; background: #fff; border-radius: 6px; padding: 3px 8px; font-size: 12px; cursor: pointer; }
+
+/* ---- M6 Patient View ---- */
+.patient-view { max-width: 640px; margin: 0 auto; }
+.pv-header { display: flex; gap: 12px; align-items: center; margin-bottom: 16px; }
+.pv-header h1 { margin: 0; font-size: 20px; }
+.pv-card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px 16px; margin: 12px 0; background: #fff; }
+.pv-card h2 { font-size: 15px; margin: 0 0 8px; }
+.pv-primary { border-color: #bfdbfe; background: #f0f7ff; }
+.pv-lead { font-size: 15px; margin: 4px 0; line-height: 1.5; }
+.pv-followup { margin: 6px 0; font-size: 14px; color: #1d4ed8; }
+.pv-date { font-size: 12px; }
+.pv-list { list-style: none; margin: 0; padding: 0; }
+.pv-list li { display: flex; gap: 8px; align-items: baseline; padding: 6px 0; font-size: 14px; line-height: 1.5; border-bottom: 1px solid #f3f4f6; }
+.pv-list li:last-child { border-bottom: none; }
+.pv-check { color: #15803d; flex-shrink: 0; }
+.pv-instruction { display: block; }
+.pv-instruction p { margin: 4px 0; }
+.pv-session { display: flex; gap: 12px; align-items: baseline; }
+.pv-subhead { font-size: 13px; color: #6b7280; margin: 12px 0 4px; }
+.pv-card textarea { width: 100%; box-sizing: border-box; border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px 8px; font: inherit; font-size: 13px; }
+.pv-card button { border: 1px solid #cbd5e1; background: #fff; border-radius: 6px; padding: 4px 10px; font-size: 13px; cursor: pointer; }
+.pv-card button:disabled { opacity: 0.5; cursor: default; }
