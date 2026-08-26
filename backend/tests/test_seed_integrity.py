@@ -13,11 +13,11 @@ def _content(db, artifact_id: str) -> str:
     return json.dumps(db.get(Artifact, artifact_id).content)
 
 
-def test_single_clinic_four_users_one_patient(db_session):
-    assert len(db_session.scalars(select(Clinic)).all()) == 1
+def test_fixture_shape(db_session):
+    assert len(db_session.scalars(select(Clinic)).all()) == 2
     users = db_session.scalars(select(User)).all()
     assert {u.role for u in users} == {"patient", "staff", "clinician", "admin"}
-    assert len(db_session.scalars(select(Patient)).all()) == 1
+    assert len(db_session.scalars(select(Patient)).all()) == 2
 
 
 def test_event_timeline_dates_and_types(db_session):

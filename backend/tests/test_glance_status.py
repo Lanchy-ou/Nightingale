@@ -1,4 +1,4 @@
-"""Glance API + highlight status interactions (M2 additional tests)."""
+"""Glance API + highlight status interactions (M2 tests, M3-authorized)."""
 from __future__ import annotations
 
 import pytest
@@ -14,27 +14,26 @@ def _fresh_state(db_session):
     yield
 
 
-def test_glance_returns_top_5_sorted_desc(client):
-    r = client.get(f"/api/patients/{fixture.PATIENT_ID}/glance")
+def test_glance_returns_top_5_sorted_desc(clinician_client):
+    r = clinician_client.get(f"/api/patients/{fixture.PATIENT_ID}/glance")
     assert r.status_code == 200
     hs = r.json()["highlights"]
     assert len(hs) == 5
     scores = [h["importance_score"] for h in hs]
     assert scores == sorted(scores, reverse=True)
     ids = {h["highlight_id"] for h in hs}
-    # score-0 medication candidate is truncated from the top 5.
     assert "hl_medication_existing" not in ids
 
 
-def test_glance_excludes_rejected(client):
-    client.post("/api/highlights/hl_blood_test_pending/status", json={"status": "rejected"})
-    r = client.get(f"/api/patients/{fixture.PATIENT_ID}/glance")
+def test_glance_excludes_rejected(clinician_client):
+    clinician_client.post("/api/highlights/hl_blood_test_pending/status", json={"status": "rejected"})
+    r = clinician_client.get(f"/api/patients/{fixture.PATIENT_ID}/glance")
     ids = {h["highlight_id"] for h in r.json()["highlights"]}
     assert "hl_blood_test_pending" not in ids
 
 
-def test_status_legal_transition_records_history(client):
-    r = client.post("/api/highlights/hl_bp_elevated/status", json={"status": "accepted"})
+def test_status_legal_transition_records_history(clinician_client):
+    r = clinician_client.post("/api/highlights/hl_bp_elevated/status", json={"status": "accepted"})
     assert r.status_code == 200
     body = r.json()
     assert body["status"] == "accepted"
@@ -42,20 +41,19 @@ def test_status_legal_transition_records_history(client):
     assert body["status_history"][-1]["to"] == "accepted"
 
 
-def test_status_invalid_value_422(client):
-    r = client.post("/api/highlights/hl_bp_elevated/status", json={"status": "banana"})
+def test_status_invalid_value_422(clinician_client):
+    r = clinician_client.post("/api/highlights/hl_bp_elevated/status", json={"status": "banana"})
     assert r.status_code == 422
 
 
-def test_status_illegal_transition_422(client):
-    client.post("/api/highlights/hl_bp_elevated/status", json={"status": "rejected"})
-    # rejected -> pinned is not a legal transition (only accepted is).
-    r = client.post("/api/highlights/hl_bp_elevated/status", json={"status": "pinned"})
+def test_status_illegal_transition_422(clinician_client):
+    clinician_client.post("/api/highlights/hl_bp_elevated/status", json={"status": "rejected"})
+    r = clinician_client.post("/api/highlights/hl_bp_elevated/status", json={"status": "pinned"})
     assert r.status_code == 422
 
 
-def test_provenance_endpoint_returns_full_chain(client):
-    r = client.get("/api/highlights/hl_headache_worsening/provenance")
+def test_provenance_endpoint_returns_full_chain(clinician_client):
+    r = clinician_client.get("/api/highlights/hl_headache_worsening/provenance")
     assert r.status_code == 200
     body = r.json()
     assert body["event"]["event_id"] == fixture.EVT_PRE_0820
