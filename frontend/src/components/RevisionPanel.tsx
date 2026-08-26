@@ -6,12 +6,14 @@ export default function RevisionPanel({
   artifact,
   onReverted,
   canRevert = true,
+  defaultOpen = false,
 }: {
   artifact: Artifact;
   onReverted: () => void;
   canRevert?: boolean;
+  defaultOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const [versions, setVersions] = useState<ArtifactVersion[]>([]);
   const [since, setSince] = useState<number>(1);
   const [diff, setDiff] = useState<string | null>(null);

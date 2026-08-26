@@ -2,8 +2,14 @@ import { useEffect, useState } from 'react';
 import { api } from '../api';
 import type { AuditLog } from '../types';
 
-export default function AuditList({ eventId }: { eventId: string }) {
-  const [open, setOpen] = useState(false);
+export default function AuditList({
+  eventId,
+  defaultOpen = false,
+}: {
+  eventId: string;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [error, setError] = useState<string | null>(null);
 

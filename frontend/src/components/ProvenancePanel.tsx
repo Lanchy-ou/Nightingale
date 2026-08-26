@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { artifactLabel, formatDate, formatDateTime } from '../clinical';
 import type { ProvenanceResult } from '../types';
 import ArtifactContent from './ArtifactContent';
 
@@ -32,28 +33,36 @@ export default function ProvenancePanel({
   return (
     <div className="provenance-panel">
       <div className="provenance-head">
-        <h3>Source · “{quote ?? 'unresolved'}”</h3>
-        <button onClick={onClose}>✕</button>
+        <div>
+          <p className="eyebrow">Provenance</p>
+          <h3>{quote ? 'Supporting source' : 'Exact source unavailable'}</h3>
+        </div>
+        <button onClick={onClose} aria-label="Close source viewer">✕</button>
       </div>
+      {quote && <blockquote className="source-quote-preview">“{quote}”</blockquote>}
       <ol className="chain">
         <li>
           <span className="chain-type">Event</span>
-          {TYPE_LABELS[event.event_type] ?? event.event_type} · {new Date(event.started_at).toLocaleDateString()}
+          <span>{TYPE_LABELS[event.event_type] ?? event.event_type}<small>{formatDate(event.started_at)}</small></span>
         </li>
         {summary_artifact && (
           <li>
             <span className="chain-type">AI Summary</span>
-            {summary_artifact.artifact_type} <span className="system-tag">System-generated</span>
+            <span>{artifactLabel(summary_artifact)}<small>System-generated</small></span>
           </li>
         )}
         <li>
           <span className="chain-type">Source</span>
-          {source_artifact.artifact_type} · {source_artifact.author_role}
+          <span>{artifactLabel(source_artifact)}<small>{source_artifact.author_role} · created {formatDateTime(source_artifact.created_at)}</small></span>
         </li>
       </ol>
-      <div className="source-box">
-        <ArtifactContent artifact={source_artifact} span={span} markRef={markRef} />
-      </div>
+      {quote ? (
+        <div className="source-box">
+          <ArtifactContent artifact={source_artifact} span={span} markRef={markRef} />
+        </div>
+      ) : (
+        <div className="form-error">The provenance span could not be resolved; no source text is being claimed.</div>
+      )}
       {conflict_artifact && (
         <div className="conflict-box">
           <span className="needs-review-tag">Needs review</span>

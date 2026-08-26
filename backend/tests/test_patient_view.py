@@ -226,6 +226,36 @@ def test_unknown_instruction_key_not_returned(patient_client, db_session):
     assert match["follow_up"] == "Return in one week."
 
 
+def test_non_clinician_authored_instructions_are_excluded(patient_client, db_session):
+    cases = (
+        ("system", None, "SYSTEM_INSTRUCTION_SENTINEL"),
+        ("staff", fixture.USER_STAFF_ID, "STAFF_INSTRUCTION_SENTINEL"),
+        ("patient", fixture.USER_PATIENT_ID, "PATIENT_INSTRUCTION_SENTINEL"),
+        # Artifact metadata alone is not authoritative: the DB user must also
+        # be a clinician in this patient's clinic.
+        ("clinician", fixture.USER_STAFF_ID, "FALSE_CLINICIAN_SENTINEL"),
+    )
+    for index, (author_role, author_id, sentinel) in enumerate(cases):
+        _add_artifact(
+            db_session,
+            event_id=fixture.EVT_REVIEW_0826,
+            artifact_type="patient_instruction",
+            author_role=author_role,
+            author_id=author_id,
+            content={"instruction": sentinel},
+            created_at=datetime(2026, 8, 26, 13, index),
+            artifact_id=f"art_non_clinician_{index}",
+        )
+
+    r = patient_client.get(PV_URL)
+    assert r.status_code == 200
+    body = r.json()
+    raw = json.dumps(body)
+    for _, _, sentinel in cases:
+        assert sentinel not in raw
+    assert body["current_summary"]["source_artifact_id"] == fixture.ART_REVIEW_INSTRUCTION
+
+
 # --- current_summary selection --------------------------------------------
 def test_current_summary_latest_event_then_created_at_then_id(patient_client, db_session):
     # Same event, later created_at wins.

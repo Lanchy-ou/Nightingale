@@ -36,6 +36,7 @@ PERMISSIONS: dict[str, dict[str, bool]] = {
         "write_staff_note": True,
         "edit_staff_note": True,
         "ingest_nurse_transcript": True,
+        "list_clinic_patients": True,
         "comment": True,
         "highlight_status": True,
     },
@@ -51,6 +52,8 @@ PERMISSIONS: dict[str, dict[str, bool]] = {
         "write_clinician_note": True,
         "edit_clinician_note": True,
         "ingest_doctor_transcript": True,
+        "create_doctor_consult": True,
+        "list_clinic_patients": True,
         "comment": True,
         "highlight_status": True,
     },
@@ -64,6 +67,7 @@ PERMISSIONS: dict[str, dict[str, bool]] = {
         "read_comments": True,
         "read_versions": True,
         "read_audit": True,
+        "list_clinic_patients": True,
     },
 }
 

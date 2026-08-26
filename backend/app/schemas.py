@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class ClinicOut(BaseModel):
@@ -28,6 +28,7 @@ class EventOut(BaseModel):
     patient_id: str
     clinic_id: str
     event_type: str
+    encounter_id: str | None
     started_at: datetime
     ended_at: datetime | None
     created_at: datetime
@@ -187,6 +188,88 @@ class SessionIngestRequest(BaseModel):
     started_at: datetime
     ended_at: datetime | None = None
     content: dict
+
+
+# --- C1 Doctor Consult ingestion (strict manual transcript boundary) ---
+class DoctorTranscriptSegment(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    index: int = Field(ge=0)
+    speaker: Literal["doctor", "patient"]
+    text: str = Field(min_length=1, max_length=4000)
+
+    @field_validator("text")
+    @classmethod
+    def trim_non_empty_text(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("segment text must not be empty")
+        return value
+
+
+class DoctorTranscriptContent(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    segments: list[DoctorTranscriptSegment] = Field(min_length=1, max_length=500)
+
+    @model_validator(mode="after")
+    def continuous_indexes(self):
+        indexes = [segment.index for segment in self.segments]
+        if indexes != list(range(len(indexes))):
+            raise ValueError("segment indexes must start at 0 and be continuous")
+        return self
+
+
+class DoctorConsultCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    consult_id: str = Field(min_length=1, max_length=64)
+    ingestion_key: str = Field(min_length=1, max_length=64)
+    # JSON transports datetimes as ISO-8601 strings; keep all other request
+    # fields strict while allowing Pydantic's datetime parser at this boundary.
+    started_at: datetime = Field(strict=False)
+    ended_at: datetime | None = Field(default=None, strict=False)
+    content: DoctorTranscriptContent
+
+    @field_validator("consult_id", "ingestion_key")
+    @classmethod
+    def trim_non_empty_id(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("identifier must not be empty")
+        return value
+
+    @model_validator(mode="after")
+    def valid_time_range(self):
+        if self.ended_at is not None and self.ended_at < self.started_at:
+            raise ValueError("ended_at must be >= started_at")
+        return self
+
+
+class DoctorConsultOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    event: EventOut
+    encounter_id: str
+    source_artifact_id: str
+    ai_summary_artifact_id: str
+    highlight_ids: list[str]
+    generation_method: str
+    degraded: bool
+    fallback_reason: str | None
+    idempotent_replay: bool
+
+
+class CurrentIdentityOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user_id: str | None
+    role: str | None
+    clinic_id: str | None
+    patient_id: str | None
+    display_name: str | None
+    clinic_name: str | None
+    authenticated: bool
 
 
 # --- M6 Patient View (explicit field projection; extra keys are forbidden) ---

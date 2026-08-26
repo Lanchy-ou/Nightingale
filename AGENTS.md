@@ -845,8 +845,63 @@ M6 (Patient View) is complete. Conventions added:
 
 - **Endpoint**: `GET /api/patients/{patient_id}/patient-view` in `backend/app/api/patient_view.py`; read-only aggregate, deterministic read-time projection (NO LLM, NO second summary artifact, NO fallback to clinician/staff notes). Registered in `app/main.py`.
 - **RBAC action**: `read_patient_view` in `PERMISSIONS`, granted to `patient` only. Endpoint uses unified `authorize` (scope-first 404 / same-scope non-patient 403 / anonymous 401).
-- **Explicit field projection (anti-leak core)**: only `patient_instruction` artifacts whose `content.instruction` is a non-empty string are projected; only `instruction` + `follow_up` (optional non-empty string) are copied. Response schemas in `app/schemas.py` (`PatientViewOut` / `PatientViewSummary` / `PatientViewInstruction` / `PatientViewUpcoming` / `PatientViewSession`) use `extra="forbid"`. No `highlight_ids`/`review_status`/`importance_score`/`entity_key`/`provenance_pointer`/span/comment/audit/version/author_id/generation metadata ever appear.
+- **Explicit field projection (anti-leak core)**: only `patient_instruction` artifacts whose `author_role=clinician`, `author_id` resolves to a same-clinic clinician `User`, and `content.instruction` is a non-empty string are projected; only `instruction` + `follow_up` (optional non-empty string) are copied. Response schemas in `app/schemas.py` (`PatientViewOut` / `PatientViewSummary` / `PatientViewInstruction` / `PatientViewUpcoming` / `PatientViewSession`) use `extra="forbid"`. No `highlight_ids`/`review_status`/`importance_score`/`entity_key`/`provenance_pointer`/span/comment/audit/version/author_id/generation metadata ever appear.
 - **Ordering**: `current_summary` = latest by `Event.started_at` desc, then `Artifact.created_at` desc, then `artifact_id` desc. `instructions`/`upcoming` by `event_time` desc; `sessions` by `started_at` desc. All with stable id tie-break.
 - **Sessions**: only this patient's `patient_ai_preconsult|patient_followup` Events that have a `raw_conversation` authored by this patient user (`author_id == ctx.user_id`). No persisted processing status is returned or fabricated.
 - **Frontend**: `PatientViewPage` (`frontend/src/pages/PatientViewPage.tsx`) — patient-role route; `App.tsx` does role-level binary render (patient → PatientViewPage, others → PatientPage) with whole-tree remount via `key={roleKey}`. Patient view only calls `patient-view` (initial load) + existing session POST (then refresh); it never requests events/artifacts/glance/highlights/comments/audit/revisions.
-- **Tests**: `tests/test_patient_view.py` (14 tests) locks exact key sets, sentinel-based leak scans, latest-summary selection, upcoming projection, own-session filtering, RBAC 401/403/404 matrix, and M3 whitelist regression. 132 tests green.
+- **Tests**: `tests/test_patient_view.py` (15 tests) locks exact key sets, sentinel-based leak scans, clinician-authorship validation, latest-summary selection, upcoming projection, own-session filtering, RBAC 401/403/404 matrix, and M3 whitelist regression. 133 tests green.
+
+---
+
+## 20. Current Execution Phase C — Clinician Consult Workflow（2026-08-26）
+
+M1–M6 remain complete. Before Phase 6 Performance + Core Hardening, execute two task cards in order:
+
+1. `Task_Card/C1_Task_Card.md` — Encounter + Manual Doctor Consult Backend;
+2. `Task_Card/C2_Task_Card.md` — Clinician Workspace + Consult Review UX.
+
+Phase C is a productization pass over existing contracts, not authorization to add Voice, Task, Doctor AI Assistant, model training, external dataset ingestion, production auth, Patient Experience redesign, or a dedicated Nurse Workspace.
+
+Permanent Phase C decisions:
+
+- **New Consult semantics**: `New Consult` is an operation that creates a new real-world `doctor_consult` Event on the main Timeline. It must never continue writing to the hard-coded `evt_doc_0821`.
+- **Clinic Visit grouping**: add optional `Event.encounter_id` (string; no Encounter table in C1). Events with the same non-empty encounter id may be presented as one `Clinic Visit` in the UI. Nurse and Doctor Consults remain separate Events with separate authorship, permissions and Artifacts. Never group by date alone.
+- **Clinician-first scope**: C implements Doctor Consult input and the clinician workspace. Existing staff RBAC, Staff Note, Comment and Nurse AI Summary paths must remain green, but Nurse input/UI is deferred.
+- **Input boundary**: only manual speaker-labelled text transcripts are added. Canonical segments use continuous indexes and `speaker ∈ doctor|patient`; unknown speakers, empty text and invented timestamps fail closed. No audio/ASR/OCR/EHR import.
+- **Synthetic data**: the C demo transcript is hand-written and must remain consistent with `backend/seed/fixture.py` FACTS. Public datasets such as PriMock57 may inform structure only; do not import them into the canonical record unless separately authorized and attributed.
+- **Authority**: transcript is immutable raw source (`artifact_type=transcript`, `author_role=system`); AI Doctor Summary remains an independent system Artifact; formal assessment/plan is a clinician-owned note. Corrections use Comment + Clinician Note, never raw overwrite.
+- **Backend orchestration**: C1 adds clinician-only `POST /api/patients/{patient_id}/doctor-consults`, creates Event + raw Transcript first, then reuses the existing `app/api/sources.py` / `LLMClient` / redaction / fallback / provenance path. Do not create a second LLM exit.
+- **Frontend target**: C2 implements the confirmed three-column desktop clinician shell: clinician identity + `Clinic Patients`; center `Glance | Timeline | Notes`; right contextual Source/Comments/Versions/Audit. Do not display fake Tasks, `My Patients`, AI Assistant, appointment or assignment states.
+- **Timeline hierarchy**: main Timeline = Event / explicit Clinic Visit group; Event Detail = Artifact/Comment/Revision lifecycle ordered by record time; Artifact Reader = Transcript/AI Summary/Clinician Note; provenance resolves to exact Span. Comments and audit activity never become new medical Events.
+- **Comment boundary**: retain existing Event/Artifact anchors, reply, same-clinic mentions, resolve/unresolve and audit. Comment is collaboration, not clinical authority or a Task substitute. Span-level comments are out of C.
+- **State isolation**: patientId remains a workspace remount/security boundary; switching patient/role must clear source, Event detail, comments, draft and pending responses. Patient continues to render the independent M6 Patient View and must not request clinical endpoints.
+- **Gate order**: C1 Exit Gate → C2 Exit Gate → Phase 6 Performance. Do not begin P95 measurement/Bonus while the clinician input/review workflow is incomplete.
+
+---
+
+## 21. C1 Implementation Status（2026-08-26）
+
+C1 (Encounter + Manual Doctor Consult Backend) is complete. C2 is now the active task card. Conventions added:
+
+- **Encounter grouping**: `Event.encounter_id` is optional and returned by `EventOut`; canonical `evt_nurse_0821` / `evt_doc_0821` share `enc_visit_20260821`. Null/different identities never group, including Events on the same date. No Encounter table exists.
+- **Strict manual transcript**: `DoctorTranscriptSegment` / `DoctorTranscriptContent` / `DoctorConsultCreate` in `backend/app/schemas.py`; 0-based continuous indexes, `speaker ∈ doctor|patient`, trimmed non-empty text, no timestamps/unknown keys. `backend/seed/fixture.py::C1_DEMO_DOCTOR_TRANSCRIPT` is hand-written and FACTS-consistent.
+- **New Consult endpoint**: clinician-only `POST /api/patients/{patient_id}/doctor-consults` in `backend/app/api/sources.py`. Stable Event/encounter/source IDs derive from clinic + patient + consult identity; namespaced idempotency prevents duplicate Events/Artifacts and a reused consult with a different ingestion key fails 409.
+- **Raw-first + authority**: Event + immutable system-authored Transcript + metadata-only audit commit before `_ingest_common`; derived processing reuses the existing redaction → `LLMClient` → extraction/conflict/scoring/provenance pipeline. AI Doctor Summary and Highlights are independent rows; Transcript remains forbidden through edit/revert APIs.
+- **C2 API handoff**: enhanced `GET /api/me`, clinic-scoped `GET /api/patients`, Event `encounter_id`, and frontend `CurrentIdentity` / `DoctorConsultResult` / `createDoctorConsult` types are frozen.
+- **Tests**: `backend/tests/test_doctor_consult_ingestion.py` plus encounter/fixture regressions; **156 pytest passed** and frontend production build passed at C1 Exit Gate.
+
+---
+
+## 22. C2 Implementation Status（2026-08-26）
+
+C2 (Clinician Workspace + Consult Review UX) is complete. Phase 6 Performance + Core Hardening is now the active phase. Conventions added:
+
+- **Role-level shell boundary**: `frontend/src/App.tsx` renders patient → independent `PatientViewPage`, clinician → `ClinicianWorkspacePage`, staff/admin → retained minimal `PatientPage`. The demo role toolbar is structurally outside product shells. Role change remounts the complete product root.
+- **Clinician shell**: `ClinicianWorkspacePage.tsx` owns DB-authoritative identity, factual Clinic dashboard, `Clinic Patients` directory/search, patient switching and URL/history state. It displays no Tasks, My Patients, assignment, appointment, Mentions inbox or AI Assistant fiction.
+- **Patient isolation**: patient workspace is keyed by `roleKey:patientId`; switching patient clears provenance, Event/Artifact context, comments, New Consult draft and pending UI responses. Clinical loads use AbortController/stale-response guards. Patient browser QA confirms no Timeline/Glance/Artifact/Comment/Audit requests.
+- **Main views**: center navigation is exactly `Glance | Timeline | Notes`. `ClinicalTimeline` groups only identical non-empty `encounter_id`; same-date Events are never inferred as one visit. `ClinicalNotesView` is a client projection whose cards navigate back to canonical Event/Artifact anchors.
+- **Event hierarchy**: `ClinicalEventDetail` shows real-world Event time separately from Artifact/Comment/Audit record-time lifecycle. Artifact Reader handles Transcript, AI Summary and human notes; immutable Transcript has no edit/revert. Formal correction is Comment + clinician-owned note.
+- **Context panel**: only real Source/Comments/Versions/Audit capabilities appear. Glance provenance remains in the right panel with exact `<mark>` span; unresolved source explicitly fails closed. Existing comment anchor/reply/mention/resolve, revision/diff/revert and metadata audit APIs are reused.
+- **New Consult**: `NewDoctorConsult.tsx` has a strict manual `DOCTOR:` / `PATIENT:` parser, 0-based continuous preview, no inferred timestamps/speakers, stable retry IDs, retained draft on failure and explicit raw/derived/fallback states. Datetime-local is sent as clinic-local naive time to preserve the Event time axis. Success navigates to the new Event and refreshes Timeline/Glance.
+- **Responsive target**: full three-column shell at ≥1280px; reduced layouts fail safely below that. C2 browser QA passed at 1280×800 and 1440×900 without critical horizontal overflow.
+- **Exit Gate**: New Consult → AI fallback summary/highlights → new Transcript exact span → Comment/@mention/resolve → Clinician Note edit/version/revert → Audit was exercised end-to-end. Backend **156 passed**, frontend TypeScript/Vite production build passed. Performance/Bonus was not started during C2.

@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session
 
 from ..authz import authorize, require_auth, resource_not_found
 from ..db import get_db
-from ..models import Artifact, Event, Patient
+from ..models import Artifact, Event, Patient, User
 from ..role_context import RoleContext
 from ..schemas import (
     PatientViewInstruction,
@@ -72,10 +72,14 @@ def get_patient_view(
     rows = db.execute(
         select(Artifact, Event)
         .join(Event, Artifact.event_id == Event.event_id)
+        .join(User, Artifact.author_id == User.user_id)
         .where(
             Event.patient_id == patient_id,
             Event.clinic_id == patient.clinic_id,
             Artifact.artifact_type == "patient_instruction",
+            Artifact.author_role == "clinician",
+            User.role == "clinician",
+            User.clinic_id == patient.clinic_id,
         )
     ).all()
 

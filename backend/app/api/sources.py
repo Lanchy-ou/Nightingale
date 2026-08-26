@@ -14,7 +14,7 @@ import os
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..ai_pipeline import persist_derived, run_pipeline
@@ -25,7 +25,13 @@ from ..ids import new_id, stable_id
 from ..llm_client import build_client
 from ..models import Artifact, Event, Highlight, Patient
 from ..role_context import RoleContext
-from ..schemas import SessionIngestRequest, SourceIngestRequest
+from ..schemas import (
+    DoctorConsultCreate,
+    DoctorConsultOut,
+    EventOut,
+    SessionIngestRequest,
+    SourceIngestRequest,
+)
 
 router = APIRouter(prefix="/api", tags=["sources"])
 
@@ -40,6 +46,14 @@ def _derive_summary_id(source_artifact_id: str, summary_type: str) -> str:
 
 def _session_event_id(patient_id: str, session_id: str) -> str:
     return f"evt_{stable_id(patient_id, session_id)}"
+
+
+def _doctor_consult_ids(clinic_id: str, patient_id: str, consult_id: str) -> tuple[str, str, str]:
+    """Stable Event, encounter, and raw Transcript identities for a consult."""
+    event_id = f"evt_{stable_id('doctor_consult', clinic_id, patient_id, consult_id)}"
+    encounter_id = f"enc_{stable_id('clinic_visit', clinic_id, patient_id, consult_id)}"
+    source_id = f"art_{stable_id('doctor_transcript', clinic_id, patient_id, consult_id)}"
+    return event_id, encounter_id, source_id
 
 
 def _namespaced_key(*parts: str) -> str:
@@ -119,6 +133,131 @@ def _ingest_common(
         "fallback_reason": output.fallback_reason,
         "idempotent_replay": False,
     }
+
+
+@router.post(
+    "/patients/{patient_id}/doctor-consults",
+    response_model=DoctorConsultOut,
+)
+def create_doctor_consult(
+    patient_id: str,
+    body: DoctorConsultCreate,
+    db: Session = Depends(get_db),
+    ctx: RoleContext = Depends(require_auth),
+):
+    """Create one new Doctor Consult Event and ingest its immutable Transcript.
+
+    Event + raw Transcript are committed before the existing AI pipeline runs.
+    A retry with the same consult/ingestion identity reuses every stable row.
+    """
+    patient = db.get(Patient, patient_id)
+    if patient is None:
+        raise resource_not_found()
+    # Unified scope/permission check: same-clinic non-clinicians receive 403;
+    # cross-clinic callers receive the same generic 404 as an absent patient.
+    authorize(ctx, "create_doctor_consult", patient.clinic_id, patient.patient_id)
+
+    event_id, encounter_id, source_id = _doctor_consult_ids(
+        patient.clinic_id, patient.patient_id, body.consult_id
+    )
+    key = _namespaced_key(
+        patient.clinic_id,
+        patient.patient_id,
+        "doctor_consult",
+        stable_id(body.consult_id, body.ingestion_key),
+    )
+
+    raw = _existing_raw(db, key)
+    event = db.get(Event, event_id)
+    if raw is not None:
+        if raw.event_id != event_id or event is None:
+            raise HTTPException(status_code=409, detail="Idempotency identity conflict")
+    else:
+        # consult_id is itself a stable business identity. A different
+        # ingestion key must not append a second Transcript to that consult.
+        if event is not None or db.get(Artifact, source_id) is not None:
+            raise HTTPException(status_code=409, detail="consult_id already exists")
+
+        now = datetime.now()
+        event = Event(
+            event_id=event_id,
+            patient_id=patient.patient_id,
+            clinic_id=patient.clinic_id,
+            event_type="doctor_consult",
+            encounter_id=encounter_id,
+            started_at=body.started_at,
+            ended_at=body.ended_at,
+            created_at=now,
+        )
+        raw = Artifact(
+            artifact_id=source_id,
+            event_id=event_id,
+            artifact_type="transcript",
+            author_role="system",
+            author_id=None,
+            # Persist only the validated, trimmed canonical shape. No preview,
+            # guessed speaker, or invented timestamp crosses this boundary.
+            content=body.content.model_dump(),
+            created_at=now,
+            version=1,
+            provenance_pointer=None,
+            ingestion_key=key,
+        )
+        db.add(event)
+        db.add(raw)
+        add_audit(
+            db,
+            actor_id=ctx.user_id,
+            actor_role=ctx.role,
+            action="doctor_consult_create",
+            target_type="event",
+            target_id=event_id,
+            clinic_id=patient.clinic_id,
+            patient_id=patient.patient_id,
+            event_id=event_id,
+        )
+        add_audit(
+            db,
+            actor_id=ctx.user_id,
+            actor_role=ctx.role,
+            action="source_ingest",
+            target_type="artifact",
+            target_id=source_id,
+            clinic_id=patient.clinic_id,
+            patient_id=patient.patient_id,
+            event_id=event_id,
+        )
+        # Raw-first durability boundary: derived processing starts only after
+        # this transaction is committed.
+        db.commit()
+        event = db.get(Event, event_id)
+        raw = db.get(Artifact, source_id)
+
+    result = _ingest_common(
+        db,
+        event,
+        raw,
+        "ai_doctor_consult_summary",
+        ctx,
+        patient_visible=False,
+    )
+    artifact_count = db.scalar(
+        select(func.count()).select_from(Artifact).where(Artifact.event_id == event_id)
+    ) or 0
+    event_out = EventOut.model_validate(event).model_copy(
+        update={"artifact_count": artifact_count}
+    )
+    return DoctorConsultOut(
+        event=event_out,
+        encounter_id=event.encounter_id,
+        source_artifact_id=result["source_artifact_id"],
+        ai_summary_artifact_id=result["ai_summary_artifact_id"],
+        highlight_ids=result["highlight_ids"],
+        generation_method=result["generation_method"],
+        degraded=result["degraded"],
+        fallback_reason=result["fallback_reason"],
+        idempotent_replay=result["idempotent_replay"],
+    )
 
 
 @router.post("/events/{event_id}/sources")

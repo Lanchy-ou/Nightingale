@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import ClinicianWorkspacePage from './pages/ClinicianWorkspacePage';
 import PatientPage from './pages/PatientPage';
 import PatientViewPage from './pages/PatientViewPage';
 import { ROLE_USERS, setRole } from './api';
@@ -18,9 +19,11 @@ export default function App() {
 
   return (
     <div className="app">
-      {/* NOTE: role switcher is demo-only; not a security boundary — RBAC is enforced server-side */}
-      <div className="role-bar">
-        <label htmlFor="role-select">Viewing as:</label>
+      {/* Demo controls are visually and structurally outside every product shell.
+          They are never a security boundary; the backend resolves the DB role. */}
+      <div className="demo-toolbar">
+        <strong>DEMO CONTROLS</strong>
+        <label htmlFor="role-select">Role</label>
         <select
           id="role-select"
           value={roleIndex}
@@ -32,16 +35,19 @@ export default function App() {
             </option>
           ))}
         </select>
-        <span className="role-note">demo-only · server enforces real RBAC</span>
+        <span>Server-enforced demo identities</span>
       </div>
-      {/* Role-level binary render: the patient gets the dedicated Patient View
-          page, never a trimmed clinical workspace. Remount on every role
-          change so no role-sensitive state can survive. */}
-      {selected.role === 'patient' ? (
-        <PatientViewPage key={roleKey} patientId={PATIENT_ID} roleKey={roleKey} />
-      ) : (
-        <PatientPage key={roleKey} patientId={PATIENT_ID} roleKey={roleKey} />
-      )}
+      {/* Role-level binary render is permanent: patient never mounts or calls
+          the clinical shell. Staff/Admin keep the pre-C2 minimal demo path. */}
+      <div className="product-root" key={roleKey}>
+        {selected.role === 'patient' ? (
+          <PatientViewPage patientId={PATIENT_ID} roleKey={roleKey} />
+        ) : selected.role === 'clinician' ? (
+          <ClinicianWorkspacePage roleKey={roleKey} />
+        ) : (
+          <PatientPage patientId={PATIENT_ID} roleKey={roleKey} />
+        )}
+      </div>
     </div>
   );
 }

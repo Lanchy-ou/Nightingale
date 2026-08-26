@@ -6,10 +6,12 @@ export default function CommentThread({
   eventId,
   artifacts,
   canWrite,
+  onChanged,
 }: {
   eventId: string;
   artifacts: Artifact[];
   canWrite: boolean;
+  onChanged?: () => void;
 }) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [body, setBody] = useState('');
@@ -45,6 +47,7 @@ export default function CommentThread({
       setMentions([]);
       setReplyTo(null);
       await load();
+      onChanged?.();
     } catch (e: any) {
       setError(String(e.message ?? e));
     }
@@ -55,6 +58,7 @@ export default function CommentThread({
       if (c.resolved) await api.unresolveComment(c.comment_id);
       else await api.resolveComment(c.comment_id);
       await load();
+      onChanged?.();
     } catch (e: any) {
       setError(String(e.message ?? e));
     }

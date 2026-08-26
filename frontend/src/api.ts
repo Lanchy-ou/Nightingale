@@ -3,7 +3,10 @@ import type {
   ArtifactVersion,
   AuditLog,
   Comment,
+  CurrentIdentity,
   DiffResult,
+  DoctorConsultResult,
+  DoctorTranscriptSegment,
   Event,
   Highlight,
   Patient,
@@ -63,15 +66,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-function get<T>(path: string): Promise<T> {
-  return request<T>(path, { headers: headers() });
+function get<T>(path: string, signal?: AbortSignal): Promise<T> {
+  return request<T>(path, { headers: headers(), signal });
 }
 
-function post<T>(path: string, body: unknown): Promise<T> {
+function post<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
   return request<T>(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...headers() },
     body: JSON.stringify(body),
+    signal,
   });
 }
 
@@ -84,11 +88,13 @@ function patch<T>(path: string, body: unknown): Promise<T> {
 }
 
 export const api = {
-  getPatient: (id: string) => get<Patient>(`/api/patients/${id}`),
+  getCurrentIdentity: (signal?: AbortSignal) => get<CurrentIdentity>(`/api/me`, signal),
+  getClinicPatients: (signal?: AbortSignal) => get<Patient[]>(`/api/patients`, signal),
+  getPatient: (id: string, signal?: AbortSignal) => get<Patient>(`/api/patients/${id}`, signal),
   getPatientView: (id: string) => get<PatientView>(`/api/patients/${id}/patient-view`),
-  getEvents: (id: string) => get<Event[]>(`/api/patients/${id}/events`),
-  getArtifacts: (eventId: string) => get<Artifact[]>(`/api/events/${eventId}/artifacts`),
-  getGlance: (patientId: string) => get<{ highlights: Highlight[] }>(`/api/patients/${patientId}/glance`),
+  getEvents: (id: string, signal?: AbortSignal) => get<Event[]>(`/api/patients/${id}/events`, signal),
+  getArtifacts: (eventId: string, signal?: AbortSignal) => get<Artifact[]>(`/api/events/${eventId}/artifacts`, signal),
+  getGlance: (patientId: string, signal?: AbortSignal) => get<{ highlights: Highlight[] }>(`/api/patients/${patientId}/glance`, signal),
   getProvenance: (highlightId: string) => get<ProvenanceResult>(`/api/highlights/${highlightId}/provenance`),
   setStatus: (highlightId: string, status: string) =>
     post<Highlight>(`/api/highlights/${highlightId}/status`, { status }),
@@ -109,8 +115,8 @@ export const api = {
   createComment: (body: Record<string, any>) => post<Comment>(`/api/comments`, body),
   resolveComment: (id: string) => post<Comment>(`/api/comments/${id}/resolve`, {}),
   unresolveComment: (id: string) => post<Comment>(`/api/comments/${id}/unresolve`, {}),
-  getComments: (eventId: string) => get<Comment[]>(`/api/events/${eventId}/comments`),
-  getAudit: (eventId: string) => get<AuditLog[]>(`/api/events/${eventId}/audit`),
+  getComments: (eventId: string, signal?: AbortSignal) => get<Comment[]>(`/api/events/${eventId}/comments`, signal),
+  getAudit: (eventId: string, signal?: AbortSignal) => get<AuditLog[]>(`/api/events/${eventId}/audit`, signal),
 
   ingestSource: (eventId: string, ingestionKey: string, content: Record<string, any>) =>
     post<any>(`/api/events/${eventId}/sources`, {
@@ -118,6 +124,22 @@ export const api = {
       artifact_type: 'transcript',
       content,
     }),
+  createDoctorConsult: (
+    patientId: string,
+    consultId: string,
+    ingestionKey: string,
+    startedAt: string,
+    endedAt: string | null,
+    segments: DoctorTranscriptSegment[],
+    signal?: AbortSignal,
+  ) =>
+    post<DoctorConsultResult>(`/api/patients/${patientId}/doctor-consults`, {
+      consult_id: consultId,
+      ingestion_key: ingestionKey,
+      started_at: startedAt,
+      ended_at: endedAt,
+      content: { segments },
+    }, signal),
   createSession: (
     patientId: string,
     sessionId: string,

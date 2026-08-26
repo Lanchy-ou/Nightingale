@@ -14,6 +14,30 @@ from ..schemas import EventOut, PatientOut
 router = APIRouter(prefix="/api", tags=["patients"])
 
 
+@router.get("/patients", response_model=list[PatientOut])
+def list_clinic_patients(
+    db: Session = Depends(get_db),
+    ctx: RoleContext = Depends(require_auth),
+):
+    """Minimal C1 clinic-scoped directory for the C2 clinician shell."""
+    authorize(ctx, "list_clinic_patients", ctx.clinic_id, None)
+    clinic = db.get(Clinic, ctx.clinic_id)
+    patients = db.scalars(
+        select(Patient)
+        .where(Patient.clinic_id == ctx.clinic_id)
+        .order_by(Patient.name, Patient.patient_id)
+    ).all()
+    return [
+        PatientOut(
+            patient_id=patient.patient_id,
+            clinic_id=patient.clinic_id,
+            name=patient.name,
+            clinic_name=clinic.name if clinic else None,
+        )
+        for patient in patients
+    ]
+
+
 @router.get("/patients/{patient_id}", response_model=PatientOut)
 def get_patient(
     patient_id: str,
@@ -45,7 +69,9 @@ def list_events(
     authorize(ctx, "read_events", patient.clinic_id, patient.patient_id)
 
     events = db.scalars(
-        select(Event).where(Event.patient_id == patient_id).order_by(Event.started_at)
+        select(Event)
+        .where(Event.patient_id == patient_id)
+        .order_by(Event.started_at, Event.event_id)
     ).all()
 
     result: list[EventOut] = []

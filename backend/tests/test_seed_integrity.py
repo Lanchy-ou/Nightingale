@@ -85,8 +85,38 @@ def test_doctor_transcript_has_20_plus_segments(db_session):
     t = db_session.get(Artifact, fixture.ART_DOC_TRANSCRIPT)
     segs = t.content["segments"]
     assert len(segs) >= 20
-    # Segment 17 is reserved for the Phase 2 provenance example.
-    assert segs[16]["index"] == 17
+    # C1 canonical Doctor Transcript contract: 0-based continuous indexes.
+    assert [segment["index"] for segment in segs] == list(range(len(segs)))
+    assert {segment["speaker"] for segment in segs} <= {"doctor", "patient"}
+    summary = db_session.get(Artifact, fixture.ART_DOC_SUMMARY)
+    assert extract_text(t.content, summary.provenance_pointer["span"]) == (
+        "I'm ordering a blood test to check for any underlying causes."
+    )
+
+
+def test_explicit_encounter_groups_only_nurse_and_doctor_visit(db_session):
+    nurse = db_session.get(Event, fixture.EVT_NURSE_0821)
+    doctor = db_session.get(Event, fixture.EVT_DOC_0821)
+    assert nurse.encounter_id == doctor.encounter_id == fixture.ENCOUNTER_0821
+    for event_id in (
+        fixture.EVT_HIST_2025,
+        fixture.EVT_HIST_2026,
+        fixture.EVT_PRE_0820,
+        fixture.EVT_FU_0824,
+        fixture.EVT_REVIEW_0826,
+    ):
+        assert db_session.get(Event, event_id).encounter_id is None
+
+
+def test_c1_demo_transcript_is_strict_and_fact_consistent():
+    segments = fixture.C1_DEMO_DOCTOR_TRANSCRIPT["segments"]
+    assert [segment["index"] for segment in segments] == list(range(len(segments)))
+    assert {segment["speaker"] for segment in segments} <= {"doctor", "patient"}
+    text = " ".join(segment["text"] for segment in segments).lower()
+    assert "3 out of 10" in text
+    assert "nauseous" in text
+    assert "blood test" in text and "not yet" in text
+    assert "propranolol 20 mg daily" in text
 
 
 def test_event5_review_exists_and_ordered(db_session):

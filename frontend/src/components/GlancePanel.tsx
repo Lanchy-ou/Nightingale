@@ -18,18 +18,24 @@ export default function GlancePanel({
 }) {
   const [highlights, setHighlights] = useState<Highlight[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (signal?: AbortSignal) => {
     try {
-      setHighlights((await api.getGlance(patientId)).highlights);
+      setHighlights((await api.getGlance(patientId, signal)).highlights);
       setError(null);
-    } catch (e) {
-      setError(String(e));
+    } catch (e: any) {
+      if (e?.name !== 'AbortError') setError(String(e));
+    } finally {
+      if (!signal?.aborted) setLoading(false);
     }
   }, [patientId]);
 
   useEffect(() => {
-    refresh();
+    const controller = new AbortController();
+    setLoading(true);
+    refresh(controller.signal);
+    return () => controller.abort();
   }, [refresh]);
 
   async function setStatus(id: string, status: string) {
@@ -50,21 +56,25 @@ export default function GlancePanel({
   }
 
   return (
-    <div className="glance-panel">
-      <h2>Glance</h2>
-      {error && <div className="error">{error}</div>}
-      {highlights.length === 0 && <p className="muted">No highlights.</p>}
+    <section className="glance-panel clinical-view" aria-labelledby="glance-heading">
+      <div className="view-title-row">
+        <div><p className="eyebrow">What matters now</p><h2 id="glance-heading">Glance</h2></div>
+        <span className="record-count">Top {highlights.length}</span>
+      </div>
+      {loading && <div className="loading-card">Loading precomputed priorities…</div>}
+      {error && <div className="form-error">{error}</div>}
+      {!loading && highlights.length === 0 && <div className="empty-state"><h3>No current highlights</h3><p>Nothing has been prioritized for this patient.</p></div>}
       {highlights.map((h) => (
         <div key={h.highlight_id} className={`highlight-card ${h.status}`}>
-          <span className="risk-dot" style={{ background: riskColor(h) }} />
+          <span className="risk-dot" style={{ background: riskColor(h) }} aria-hidden="true" />
           <div className="highlight-body">
             <div className="highlight-text">{h.text}</div>
             <div className="highlight-reason">{h.risk_reason}</div>
             <div className="highlight-actions">
-              <button onClick={() => viewSource(h.highlight_id)}>View source</button>
-              <button onClick={() => setStatus(h.highlight_id, 'accepted')} title="Accept">✓</button>
-              <button onClick={() => setStatus(h.highlight_id, 'rejected')} title="Reject">✗</button>
-              <button onClick={() => setStatus(h.highlight_id, 'pinned')} title="Pin">📌</button>
+              <button className="source-action" onClick={() => viewSource(h.highlight_id)}>View source <span aria-hidden="true">→</span></button>
+              <button className="feedback-action" onClick={() => setStatus(h.highlight_id, 'accepted')} aria-label={`Accept ${h.text}`} title="Accept">✓ Accept</button>
+              <button className="feedback-action" onClick={() => setStatus(h.highlight_id, 'rejected')} aria-label={`Reject ${h.text}`} title="Reject">✗ Reject</button>
+              <button className="feedback-action" onClick={() => setStatus(h.highlight_id, 'pinned')} aria-label={`Pin ${h.text}`} title="Pin">⌖ Pin</button>
               {h.feature_flags.clinician_confirmed && (
                 <span className="confirmed-tag">Clinician-confirmed</span>
               )}
@@ -75,6 +85,6 @@ export default function GlancePanel({
           </div>
         </div>
       ))}
-    </div>
+    </section>
   );
 }

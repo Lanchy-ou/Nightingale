@@ -47,6 +47,10 @@ EVT_DOC_0821 = "evt_doc_0821"
 EVT_FU_0824 = "evt_fu_0824"
 EVT_REVIEW_0826 = "evt_review_0826"
 
+# Explicit Clinic Visit grouping. Only this non-empty identity (never date alone)
+# groups the 2026-08-21 Nurse and Doctor Consult Events.
+ENCOUNTER_0821 = "enc_visit_20260821"
+
 ART_HIST_2025_NOTE = "art_hist_2025_note"
 ART_HIST_2026_NOTE = "art_hist_2026_note"
 ART_PRE_RAW = "art_pre_raw"
@@ -73,6 +77,18 @@ FACTS = {
     "blood_test": "ordered 2026-08-21, still pending as of 2026-08-26",
     "follow_up": "scheduled during 2026-08-21 doctor consult",
     "review_0826": "clinician review 2026-08-26: severity improved to ~3/10, frequency not re-assessed, nausea persists, continue propranolol 20 mg daily, chase blood test result",
+}
+
+# Hand-written C1/C2 paste demo. It adds no facts beyond FACTS and already uses
+# the strict server canonical shape (0-based continuous doctor/patient segments).
+C1_DEMO_DOCTOR_TRANSCRIPT = {
+    "segments": [
+        {"index": 0, "speaker": "doctor", "text": "How has your headache changed?"},
+        {"index": 1, "speaker": "patient", "text": "It is better, about 3 out of 10, but I still feel nauseous in the morning."},
+        {"index": 2, "speaker": "doctor", "text": "Have you completed the blood test?"},
+        {"index": 3, "speaker": "patient", "text": "Not yet."},
+        {"index": 4, "speaker": "doctor", "text": "Please continue propranolol 20 mg daily while we chase the result."},
+    ]
 }
 
 # ---------------------------------------------------------------------------
@@ -236,13 +252,13 @@ def build_events() -> list[Event]:
         ),
         Event(
             event_id=EVT_NURSE_0821, patient_id=PATIENT_ID, clinic_id=CLINIC_ID,
-            event_type="nurse_consult",
+            event_type="nurse_consult", encounter_id=ENCOUNTER_0821,
             started_at=datetime(2026, 8, 21, 9, 0), ended_at=datetime(2026, 8, 21, 9, 15),
             created_at=datetime(2026, 8, 21, 9, 16),
         ),
         Event(
             event_id=EVT_DOC_0821, patient_id=PATIENT_ID, clinic_id=CLINIC_ID,
-            event_type="doctor_consult",
+            event_type="doctor_consult", encounter_id=ENCOUNTER_0821,
             started_at=datetime(2026, 8, 21, 10, 0), ended_at=datetime(2026, 8, 21, 10, 35),
             created_at=datetime(2026, 8, 21, 10, 36),
         ),
@@ -349,29 +365,29 @@ def build_artifacts() -> list[Artifact]:
             artifact_type="transcript", author_role="system", author_id=None,
             content={
                 "segments": [
-                    {"index": 1, "speaker": "doctor", "text": "Good morning. I've reviewed your pre-consult notes and the nurse's vitals."},
-                    {"index": 2, "speaker": "patient", "text": "Morning, doctor."},
-                    {"index": 3, "speaker": "doctor", "text": "So your headaches have gone from once a week to almost every day?"},
-                    {"index": 4, "speaker": "patient", "text": "Yes, for about two weeks now."},
-                    {"index": 5, "speaker": "doctor", "text": "And the nausea - is it mainly in the morning?"},
-                    {"index": 6, "speaker": "patient", "text": "Yes, mostly in the morning."},
-                    {"index": 7, "speaker": "doctor", "text": "Any visual changes, weakness, or numbness?"},
-                    {"index": 8, "speaker": "patient", "text": "No, none of those."},
-                    {"index": 9, "speaker": "doctor", "text": "The nurse recorded your blood pressure at 158 over 96."},
-                    {"index": 10, "speaker": "patient", "text": "Yes, that worried me a bit."},
-                    {"index": 11, "speaker": "doctor", "text": "We should keep an eye on it - it may be related to the headache changes."},
-                    {"index": 12, "speaker": "patient", "text": "Okay."},
-                    {"index": 13, "speaker": "doctor", "text": "You've been on propranolol 20 mg daily since February, correct?"},
-                    {"index": 14, "speaker": "patient", "text": "Yes, I haven't missed any doses."},
-                    {"index": 15, "speaker": "doctor", "text": "Good. We may need to adjust it, but first I want some tests."},
-                    {"index": 16, "speaker": "patient", "text": "What kind of tests?"},
-                    {"index": 17, "speaker": "doctor", "text": "I'm ordering a blood test to check for any underlying causes."},
-                    {"index": 18, "speaker": "patient", "text": "Alright."},
-                    {"index": 19, "speaker": "doctor", "text": "I'd also like to see you again after we get the results."},
-                    {"index": 20, "speaker": "patient", "text": "When should I come back?"},
-                    {"index": 21, "speaker": "doctor", "text": "We'll schedule a follow-up in a few days."},
-                    {"index": 22, "speaker": "doctor", "text": "For now, continue your medication and keep a symptom diary."},
-                    {"index": 23, "speaker": "patient", "text": "Thank you, doctor."},
+                    {"index": 0, "speaker": "doctor", "text": "Good morning. I've reviewed your pre-consult notes and the nurse's vitals."},
+                    {"index": 1, "speaker": "patient", "text": "Morning, doctor."},
+                    {"index": 2, "speaker": "doctor", "text": "So your headaches have gone from once a week to almost every day?"},
+                    {"index": 3, "speaker": "patient", "text": "Yes, for about two weeks now."},
+                    {"index": 4, "speaker": "doctor", "text": "And the nausea - is it mainly in the morning?"},
+                    {"index": 5, "speaker": "patient", "text": "Yes, mostly in the morning."},
+                    {"index": 6, "speaker": "doctor", "text": "Any visual changes, weakness, or numbness?"},
+                    {"index": 7, "speaker": "patient", "text": "No, none of those."},
+                    {"index": 8, "speaker": "doctor", "text": "The nurse recorded your blood pressure at 158 over 96."},
+                    {"index": 9, "speaker": "patient", "text": "Yes, that worried me a bit."},
+                    {"index": 10, "speaker": "doctor", "text": "We should keep an eye on it - it may be related to the headache changes."},
+                    {"index": 11, "speaker": "patient", "text": "Okay."},
+                    {"index": 12, "speaker": "doctor", "text": "You've been on propranolol 20 mg daily since February, correct?"},
+                    {"index": 13, "speaker": "patient", "text": "Yes, I haven't missed any doses."},
+                    {"index": 14, "speaker": "doctor", "text": "Good. We may need to adjust it, but first I want some tests."},
+                    {"index": 15, "speaker": "patient", "text": "What kind of tests?"},
+                    {"index": 16, "speaker": "doctor", "text": "I'm ordering a blood test to check for any underlying causes."},
+                    {"index": 17, "speaker": "patient", "text": "Alright."},
+                    {"index": 18, "speaker": "doctor", "text": "I'd also like to see you again after we get the results."},
+                    {"index": 19, "speaker": "patient", "text": "When should I come back?"},
+                    {"index": 20, "speaker": "doctor", "text": "We'll schedule a follow-up in a few days."},
+                    {"index": 21, "speaker": "doctor", "text": "For now, continue your medication and keep a symptom diary."},
+                    {"index": 22, "speaker": "patient", "text": "Thank you, doctor."},
                 ]
             },
             created_at=datetime(2026, 8, 21, 10, 36), version=1, provenance_pointer=None,
@@ -391,7 +407,7 @@ def build_artifacts() -> list[Artifact]:
                 ],
             },
             created_at=datetime(2026, 8, 21, 10, 42), version=1,
-            provenance_pointer={"event_id": EVT_DOC_0821, "artifact_id": ART_DOC_TRANSCRIPT, "span": _span("segment", 17)},
+            provenance_pointer={"event_id": EVT_DOC_0821, "artifact_id": ART_DOC_TRANSCRIPT, "span": _span("segment", 16)},
         ),
         Artifact(
             artifact_id=ART_DOC_NOTE, event_id=EVT_DOC_0821,

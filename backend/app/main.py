@@ -8,10 +8,14 @@ from __future__ import annotations
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import HTTPException, RequestValidationError
+from sqlalchemy.orm import Session
 
 from .api import audit, comments, events, highlights, notes, patient_view, patients, sources
+from .db import get_db
 from .errors import error_response
+from .models import Clinic, User
 from .role_context import RoleContext, get_role_context
+from .schemas import CurrentIdentityOut
 
 app = FastAPI(
     title="Nightingale API",
@@ -45,13 +49,24 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     return error_response(422, "validation_error", str(exc))
 
 
-@app.get("/api/me")
-def read_me(ctx: RoleContext = Depends(get_role_context)):
-    """Echo the parsed role context (testability aid; not a security boundary)."""
-    return {
-        "user_id": ctx.user_id,
-        "role": ctx.role,
-        "clinic_id": ctx.clinic_id,
-        "patient_id": ctx.patient_id,
-        "authenticated": ctx.authenticated,
-    }
+@app.get("/api/me", response_model=CurrentIdentityOut)
+def read_me(
+    ctx: RoleContext = Depends(get_role_context),
+    db: Session = Depends(get_db),
+):
+    """Current DB-authoritative identity for the C2 shell.
+
+    The unauthenticated shape remains available as a testability aid, but never
+    grants access to a protected resource.
+    """
+    user = db.get(User, ctx.user_id) if ctx.user_id else None
+    clinic = db.get(Clinic, ctx.clinic_id) if ctx.clinic_id else None
+    return CurrentIdentityOut(
+        user_id=ctx.user_id,
+        role=ctx.role,
+        clinic_id=ctx.clinic_id,
+        patient_id=ctx.patient_id,
+        display_name=user.name if user else None,
+        clinic_name=clinic.name if clinic else None,
+        authenticated=ctx.authenticated,
+    )

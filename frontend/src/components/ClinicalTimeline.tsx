@@ -1,0 +1,109 @@
+import { eventLabel, formatDate, formatDateTime } from '../clinical';
+import type { Event } from '../types';
+
+type TimelineItem =
+  | { kind: 'event'; key: string; events: [Event] }
+  | { kind: 'encounter'; key: string; encounterId: string; events: Event[] };
+
+export function buildTimelineItems(events: Event[]): TimelineItem[] {
+  const sorted = [...events].sort(
+    (a, b) => a.started_at.localeCompare(b.started_at) || a.event_id.localeCompare(b.event_id),
+  );
+  const byEncounter = new Map<string, Event[]>();
+  for (const event of sorted) {
+    if (!event.encounter_id) continue;
+    const group = byEncounter.get(event.encounter_id) ?? [];
+    group.push(event);
+    byEncounter.set(event.encounter_id, group);
+  }
+
+  const emitted = new Set<string>();
+  const items: TimelineItem[] = [];
+  for (const event of sorted) {
+    if (!event.encounter_id) {
+      items.push({ kind: 'event', key: event.event_id, events: [event] });
+      continue;
+    }
+    if (emitted.has(event.encounter_id)) continue;
+    emitted.add(event.encounter_id);
+    items.push({
+      kind: 'encounter',
+      key: `encounter:${event.encounter_id}`,
+      encounterId: event.encounter_id,
+      events: byEncounter.get(event.encounter_id) ?? [event],
+    });
+  }
+  return items;
+}
+
+function EventButton({ event, onOpen }: { event: Event; onOpen: (event: Event) => void }) {
+  return (
+    <button className="timeline-event-button" onClick={() => onOpen(event)}>
+      <span className="timeline-node" aria-hidden="true" />
+      <span className="timeline-event-copy">
+        <strong>{eventLabel(event)}</strong>
+        <small>{formatDateTime(event.started_at)}</small>
+      </span>
+      <span className="timeline-artifact-count">{event.artifact_count} artifacts</span>
+      <span aria-hidden="true">→</span>
+    </button>
+  );
+}
+
+export default function ClinicalTimeline({
+  events,
+  onOpenEvent,
+}: {
+  events: Event[];
+  onOpenEvent: (event: Event) => void;
+}) {
+  const items = buildTimelineItems(events);
+  return (
+    <section className="clinical-view" aria-labelledby="timeline-heading">
+      <div className="view-title-row">
+        <div>
+          <p className="eyebrow">Longitudinal record</p>
+          <h2 id="timeline-heading">Timeline</h2>
+        </div>
+        <span className="record-count">{events.length} events</span>
+      </div>
+      {items.length === 0 && (
+        <div className="empty-state">
+          <h3>No clinical events yet</h3>
+          <p>Create a Doctor Consult to begin this patient's longitudinal record.</p>
+        </div>
+      )}
+      <div className="clinical-timeline-list">
+        {items.map((item) => {
+          if (item.kind === 'event') {
+            const event = item.events[0];
+            return (
+              <article className="timeline-single" key={item.key}>
+                <div className="timeline-date-label">{formatDate(event.started_at)}</div>
+                <EventButton event={event} onOpen={onOpenEvent} />
+              </article>
+            );
+          }
+          return (
+            <article className="encounter-group" key={item.key}>
+              <header>
+                <div>
+                  <span className="encounter-kicker">Clinic Visit</span>
+                  <h3>{formatDate(item.events[0].started_at)}</h3>
+                </div>
+                <span className="encounter-id" title={item.encounterId}>
+                  Explicit encounter · {item.events.length} event{item.events.length === 1 ? '' : 's'}
+                </span>
+              </header>
+              <div className="encounter-events">
+                {item.events.map((event) => (
+                  <EventButton key={event.event_id} event={event} onOpen={onOpenEvent} />
+                ))}
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
+}

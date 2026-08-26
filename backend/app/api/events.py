@@ -29,4 +29,4 @@ def list_artifacts(
     if ctx.role == "patient":
         q = q.where(Artifact.artifact_type.in_(PATIENT_VISIBLE_ARTIFACT_TYPES))
 
-    return db.scalars(q.order_by(Artifact.created_at)).all()
+    return db.scalars(q.order_by(Artifact.created_at, Artifact.artifact_id)).all()

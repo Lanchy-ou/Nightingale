@@ -5,6 +5,8 @@
 > 截止时间：**2026-08-28 17:30 SGT/MYT**。
 >
 > 当前原则：**先打通一条真实、可验证的端到端闭环，再扩展功能；required gates 先于 bonus，正确性 / provenance / RBAC 先于 UI polish。**
+>
+> **当前执行状态（2026-08-26）**：M1–M6 与 Phase C（C1 Backend + C2 Clinician Workspace）已完成（156 pytest、frontend production build、1280px browser QA 通过）；当前进入 Phase 6 Performance + Core Hardening。Phase C 只把既有能力产品化，不改变 required gates，也未增加 Voice、Task、Doctor AI Assistant 或 Nurse Workspace。
 
 ---
 
@@ -68,6 +70,10 @@ Patient View = what the patient needs to know/do.
 替换为真正 AI pipeline
         ↓
 扩充 longitudinal synthetic data
+        ↓
+Clinician New Consult + Manual Transcript
+        ↓
+Clinician Shell + Event Detail + Comment Context
         ↓
 性能 / Required tests
         ↓
@@ -153,6 +159,16 @@ Clinic Scope
 ```
 
 `Care Episode` 第一版可以只作为 conceptual grouping / optional field，不强制为了它增加复杂数据库和 UI。
+
+同一次现实到院可能包含多个角色 Event。为支持已确认的前端视觉分组，C1 在 `Event` 增加可选 `encounter_id` 字符串，但不新建 Encounter 表：
+
+```text
+Clinic Visit（UI projection：相同且非空 encounter_id）
+  ├─ Nurse Consult Event
+  └─ Doctor Consult Event
+```
+
+`Event` 仍是 canonical Timeline unit。`encounter_id` 只用于说明两个 Event 属于同一次现实到院；不得按同一天、相近时间或结果需要自动合并。
 
 ## 2.2 多尺度时间模型
 
@@ -829,6 +845,84 @@ Scenario C 可以清楚回答：
 
 ---
 
+# 9A. Current Phase C — Clinician Consult Workflow（性能验收前）
+
+## 为什么插入 C
+
+M1–M6 已证明数据、安全和 AI 链路成立，但当前前端仍是固定患者、860px 单列、硬编码 transcript ingestion 的功能 Demo。直接进入 Performance 会测到一个尚未形成真实医生工作流的页面。
+
+C 阶段不增加新的产品方向，而是把现有能力组织成一条医生可操作的闭环：
+
+```text
+Clinician Workspace
+→ New Consult
+→ new Doctor Consult Event
+→ Manual Transcript
+→ AI Doctor Summary / Highlights
+→ Event Detail / exact source
+→ Clinician Note / Comment
+→ Timeline + Glance
+```
+
+详细合同以两张任务卡为准：
+
+- `Task_Card/C1_Task_Card.md`：Encounter + Transcript schema + clinician-only Doctor Consult backend；
+- `Task_Card/C2_Task_Card.md`：Clinician Shell + New Consult UI + Timeline master/detail + Comment/Source integration。
+
+## C1 — Encounter + Manual Doctor Consult Backend
+
+> 状态：**COMPLETE（2026-08-26）**；Exit Gate 为 156 pytest + frontend production build 通过。
+
+核心工作：
+
+- optional `Event.encounter_id`；
+- 2026-08-21 Nurse/Doctor Events 通过同一显式 encounter 组成 Clinic Visit，不按日期自动分组；
+- strict `doctor|patient` transcript segments；
+- `POST /api/patients/{patient_id}/doctor-consults`；
+- stable idempotency、raw-first persistence、metadata-only audit；
+- 复用现有 redaction / `LLMClient` / fallback / extraction / provenance pipeline；
+- clinic-scoped patient list/current identity 的最小只读支持；
+- RBAC、invalid input、idempotency、fallback、exact span 自动化测试。
+
+C1 不做 UI 重构、Nurse input、Voice、Task、AI Assistant 或外部 dataset ingestion。
+
+## C2 — Clinician Workspace + Consult Review UX
+
+> 状态：**COMPLETE（2026-08-26）**；三栏 shell、New Consult、explicit Clinic Visit、Event/Artifact lifecycle 与 Source/Comments/Versions/Audit 已集成，156 pytest + frontend build + browser QA 通过。
+
+核心工作：
+
+- 三栏 Clinician Shell；
+- `Clinic Patients`（不是尚无 assignment 支撑的 `My Patients`）；
+- `Glance | Timeline | Notes`；
+- 独立 New Consult paste / preview / processing/fallback 页面；
+- Clinic Visit explicit grouping；
+- Timeline master/detail、Event lifecycle、Artifact Reader；
+- Source Viewer 右栏化；
+- Comment/@mention/reply/resolve、revision、audit 上下文化；
+- patient/role switch state isolation；
+- full regression、frontend build、1280px/error-state visual QA。
+
+C2 不展示假的 Tasks、Doctor AI Assistant、assignment、appointment 或 Nurse Workspace。
+
+## Phase C Exit Gate
+
+只有以下流程可重复演示且全部安全回归通过，才进入 Phase 6：
+
+```text
+New Consult
+→ paste transcript
+→ raw source saved
+→ AI summary + Highlight
+→ exact source
+→ Comment / Clinician Note
+→ Timeline + Glance refresh
+```
+
+Phase C 完成不等于 Performance Complete；Glance P95 测量仍严格属于下一阶段。
+
+---
+
 # 10. Phase 6 — Performance + Core Hardening
 
 ## 目标
@@ -1143,6 +1237,8 @@ Subject:  Nightingale 72HR Build -- <Your Name>
 
 以 2026-08-25 22:31 SGT 计，距离截止约 **67 小时**。不应把 67 小时全部规划成开发时间，必须给 integration、视频和提交留 buffer。
 
+> 2026-08-26 状态更新：原 Milestone 1–4、M5 longitudinal data、M6 Patient View 与 Phase C（C1/C2）已完成。当前执行顺序更新为 **Phase 6 Performance → Freeze/Deliverables**；下列早期里程碑保留为历史计划记录。
+
 ## Milestone 1 — 最迟 8 月 26 日上午
 
 完成：
@@ -1190,8 +1286,10 @@ Subject:  Nightingale 72HR Build -- <Your Name>
 
 完成：
 
-- longitudinal demo data；
-- performance measurement；
+- longitudinal demo data 与 Patient View（已完成）；
+- C1 Encounter + Manual Doctor Consult Backend；
+- C2 Clinician Workspace + Consult Review UX；
+- C2 Exit Gate 后再做 performance measurement；
 - Scenario A/B/C walkthrough；
 - 若 core 稳定：self-learning；
 - 有余力再 data decay；

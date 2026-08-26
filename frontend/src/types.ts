@@ -10,6 +10,7 @@ export interface Event {
   patient_id: string;
   clinic_id: string;
   event_type: string;
+  encounter_id: string | null;
   started_at: string;
   ended_at: string | null;
   created_at: string;
@@ -131,6 +132,35 @@ export interface DiffResult {
   since_version: number;
   to_version: number;
   diff: string;
+}
+
+// --- C1 Clinician consult handoff ---
+export interface CurrentIdentity {
+  user_id: string | null;
+  role: string | null;
+  clinic_id: string | null;
+  patient_id: string | null;
+  display_name: string | null;
+  clinic_name: string | null;
+  authenticated: boolean;
+}
+
+export interface DoctorTranscriptSegment {
+  index: number;
+  speaker: 'doctor' | 'patient';
+  text: string;
+}
+
+export interface DoctorConsultResult {
+  event: Event;
+  encounter_id: string;
+  source_artifact_id: string;
+  ai_summary_artifact_id: string;
+  highlight_ids: string[];
+  generation_method: string;
+  degraded: boolean;
+  fallback_reason: string | null;
+  idempotent_replay: boolean;
 }
 
 // --- Patient View (M6) ---

@@ -50,6 +50,10 @@ AUDIT_ACTIONS = (
     "unresolve",
     "highlight_status",
     "conflict",
+    "doctor_consult_create",
+    "source_ingest",
+    "ai_generate",
+    "ai_fallback",
 )
 
 
@@ -96,6 +100,11 @@ class Event(Base):
         String(64), ForeignKey("clinics.clinic_id"), nullable=False
     )
     event_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    # Optional explicit grouping for Events from the same real-world clinic visit.
+    # Never infer grouping from date/time; C1 deliberately has no Encounter table.
+    encounter_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, index=True
+    )
     # Real-world clinical time axis (what the Timeline sorts by).
     started_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
