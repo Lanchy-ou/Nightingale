@@ -598,6 +598,24 @@ backend/    FastAPI + SQLAlchemy + SQLite（app/ 代码，seed/ fixture，tests/
 frontend/   Vite + React 18 + TS（单页 PatientPage）
 ```
 
+### Demo data（canonical fixture）
+
+一条跨 15 个月的纵向病历（`backend/seed/fixture.py` 是唯一事实源），reseed 命令见上（`python -m seed.seed`）：
+
+```text
+2025-04-15  historical_review   初次头痛评估（once weekly，无 red flag）
+2026-02-06  historical_review   药物复查（频率上升→启动 propranolol 20 mg daily）
+2026-08-20  patient_ai_preconsult  频率 near-daily、严重度 7/10、晨起恶心
+2026-08-21  nurse_consult          BP 158/96 升高
+2026-08-21  doctor_consult         blood test 开具、follow-up 预约
+2026-08-24  patient_followup       严重度降至 3/10、恶心持续、blood test pending
+2026-08-26  clinician_review       更新计划：继续 propranolol、催 blood test 结果
+```
+
+- 两个历史事件与当前 episode 形成真实跨年/跨月呼应；历史 highlight 低分（无 recency），自然让位于当前 episode。
+- `recency` 由 seed 冻结的 `as_of=2026-08-26 12:00` 计算；`repeated_mentions` 按相同 `entity_key` 的 distinct Event 分组（`symptom:headache frequency` 跨 3 个事件、`task:blood test` 跨 2 个事件），新旧两侧分数都重算。
+- **Synthea 决策：不采用**。手写 canonical fixture 已完全满足 Candidate Brief 的 Synthetic Data Only 要求，未引入 FHIR/Synthea 以避免反向重构内部模型。
+
 ### 安装与启动（M1/M2 已验证）
 
 ```bash

@@ -820,7 +820,7 @@ M1 (skeleton + canonical fixture), M2 (Glance → Provenance vertical slice), an
 - **Collaboration (M3)**: comments may anchor to Event or Artifact; replies preserve the parent's anchor, mentions are same-clinic staff/clinician only, and the Event feed includes both anchor types. The frontend supports anchor selection, threaded replies, resolve/unresolve, and remounts the whole patient workspace on role change so provenance cannot leak across roles.
 - **DB**: SQLite at `backend/nantingale.db` (gitignored); tests override via `NANTINGALE_DB_URL` env var (see `backend/tests/conftest.py`). Tests re-seed before every test (function-scoped autouse) for isolation.
 - **Two time axes**: Timeline sorts by `Event.started_at` only; `created_at` is record-keeping.
-- **Run/tests**: `cd backend && .venv/Scripts/python.exe -m pytest` (103 tests green as of M4).
+- **Run/tests**: `cd backend && .venv/Scripts/python.exe -m pytest` (116 tests green as of M5).
 
 M4 (AI pipeline + redaction + deterministic prioritization) is complete. Conventions added:
 
@@ -833,3 +833,10 @@ M4 (AI pipeline + redaction + deterministic prioritization) is complete. Convent
 - **Conflict**: `backend/app/conflicts.py` bounded medication/dose + task/status comparison vs clinician notes only; conflict => `review_status=needs_review` + `conflict_with_artifact_id`; never modifies clinician artifacts.
 - **Scoring**: `unresolved_task=false` in M4; `recency` computed from injected `as_of`; `repeated_mentions` from same `entity_key` across ≥2 events (both sides recomputed); `clinician_confirmed` only set when a clinician accept/pin (score recomputed).
 - **Ingestion**: `backend/app/api/sources.py` (source/session endpoints), idempotent via namespaced `Artifact.ingestion_key` + stable-derived IDs; raw source persisted BEFORE derived; patient session response hides internal summary/highlight ids.
+
+M5 (longitudinal demo data) is complete. Conventions added:
+
+- **Timeline (7 events)**: `2025-04-15` historical → `2026-02-06` historical → `2026-08-20` pre-consult → `08-21` nurse → `08-21` doctor → `08-24` follow-up → `08-26` clinician_review (Event 5, `evt_review_0826`). Sorted by `started_at` only.
+- **Seed scoring is structural, not hand-filled**: `backend/seed/highlights.py` computes `recency` from frozen `SEED_AS_OF = 2026-08-26 12:00`, `unresolved_task=false` (no Task model), and `repeated_mentions` from the SAME exact `entity_key` across ≥2 distinct Events (both sides recomputed). Quotes anchor via `locate_span`; a failed match drops the candidate and excludes it from repeated counting.
+- **Cross-event entities (demo)**: `symptom:headache frequency` spans `evt_hist_2025` / `evt_hist_2026` / `evt_pre_0820`; `task:blood test` spans `evt_doc_0821` / `evt_review_0826`.
+- **Synthea decision**: NOT adopted. Demo data is a hand-written canonical fixture (fully satisfies "Synthetic Data Only"). See README demo-data note.
