@@ -9,7 +9,7 @@ from __future__ import annotations
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import HTTPException, RequestValidationError
 
-from .api import events, patients
+from .api import events, highlights, patients
 from .errors import error_response
 from .role_context import RoleContext, get_role_context
 
@@ -21,11 +21,17 @@ app = FastAPI(
 
 app.include_router(patients.router)
 app.include_router(events.router)
+app.include_router(highlights.router)
 
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
-    code = "not_found" if exc.status_code == 404 else "http_error"
+    if exc.status_code == 404:
+        code = "not_found"
+    elif exc.status_code == 422:
+        code = "validation_error"
+    else:
+        code = "http_error"
     return error_response(exc.status_code, code, str(exc.detail))
 
 
