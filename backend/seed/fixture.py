@@ -31,6 +31,14 @@ USER_STAFF_ID = "usr_staff_01"
 USER_CLINICIAN_ID = "usr_clinician_01"
 USER_ADMIN_ID = "usr_admin_01"
 
+# Second patient (same clinic) + second clinic user, for RBAC isolation tests.
+PATIENT_B_ID = "pat_002"
+PATIENT_B_NAME = "Ben Lim"
+USER_PATIENT_B_ID = "usr_patient_02"
+CLINIC_B_ID = "clinic_002"
+CLINIC_B_NAME = "Other Demo Clinic"
+USER_CLINICIAN_B_ID = "usr_clinician_02"
+
 EVT_HIST_2025 = "evt_hist_2025"
 EVT_HIST_2026 = "evt_hist_2026"
 EVT_PRE_0820 = "evt_pre_0820"
@@ -138,21 +146,29 @@ def _span(kind: str, index: int) -> dict:
     return {"kind": kind, "index": index}
 
 
-def build_clinic() -> Clinic:
-    return Clinic(clinic_id=CLINIC_ID, name=CLINIC_NAME)
+def build_clinics() -> list[Clinic]:
+    return [
+        Clinic(clinic_id=CLINIC_ID, name=CLINIC_NAME),
+        Clinic(clinic_id=CLINIC_B_ID, name=CLINIC_B_NAME),
+    ]
 
 
 def build_users() -> list[User]:
     return [
-        User(user_id=USER_PATIENT_ID, clinic_id=CLINIC_ID, name=PATIENT_NAME, role="patient"),
+        User(user_id=USER_PATIENT_ID, clinic_id=CLINIC_ID, name=PATIENT_NAME, role="patient", patient_id=PATIENT_ID),
         User(user_id=USER_STAFF_ID, clinic_id=CLINIC_ID, name="Bob Lee", role="staff"),
         User(user_id=USER_CLINICIAN_ID, clinic_id=CLINIC_ID, name="Dr. Carol Wong", role="clinician"),
         User(user_id=USER_ADMIN_ID, clinic_id=CLINIC_ID, name="Nightingale Admin", role="admin"),
+        User(user_id=USER_PATIENT_B_ID, clinic_id=CLINIC_ID, name=PATIENT_B_NAME, role="patient", patient_id=PATIENT_B_ID),
+        User(user_id=USER_CLINICIAN_B_ID, clinic_id=CLINIC_B_ID, name="Dr. Other Clinic", role="clinician"),
     ]
 
 
-def build_patient() -> Patient:
-    return Patient(patient_id=PATIENT_ID, clinic_id=CLINIC_ID, name=PATIENT_NAME)
+def build_patients() -> list[Patient]:
+    return [
+        Patient(patient_id=PATIENT_ID, clinic_id=CLINIC_ID, name=PATIENT_NAME),
+        Patient(patient_id=PATIENT_B_ID, clinic_id=CLINIC_ID, name=PATIENT_B_NAME),
+    ]
 
 
 def build_events() -> list[Event]:

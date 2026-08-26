@@ -1,14 +1,34 @@
-"""Create schema + seed the canonical M1 fixture. Idempotent (clears then inserts)."""
+"""Create schema + seed the canonical M1 fixture. Idempotent (clears then inserts).
+
+M3 additions:
+- backfills an ArtifactVersion(v1) snapshot for every editable note so that
+  v1 can be diffed / reverted from the start;
+- clears tables in FK-safe order (AuditLog/Comment/ArtifactVersion reference
+  users/artifacts; User.patient_id references patients).
+"""
 from __future__ import annotations
 
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.db import Base, SessionLocal, engine
-from app.models import Artifact, Clinic, Event, Highlight, Patient, User
+from app.ids import new_id
+from app.models import (
+    Artifact,
+    ArtifactVersion,
+    AuditLog,
+    Clinic,
+    Comment,
+    Event,
+    Highlight,
+    Patient,
+    User,
+)
 
 from . import fixture
 from .highlights import generate_highlights
+
+EDITABLE_NOTE_TYPES = {"staff_note", "clinician_note"}
 
 
 def create_schema(target_engine=engine) -> None:
@@ -16,23 +36,46 @@ def create_schema(target_engine=engine) -> None:
     Base.metadata.create_all(target_engine)
 
 
+def _backfill_versions(db: Session) -> None:
+    editable = db.scalars(
+        select(Artifact).where(Artifact.artifact_type.in_(EDITABLE_NOTE_TYPES))
+    ).all()
+    for a in editable:
+        db.add(
+            ArtifactVersion(
+                version_id=new_id("ver"),
+                artifact_id=a.artifact_id,
+                version=a.version,
+                content=a.content,
+                actor_id=a.author_id or "system",
+                actor_role=a.author_role,
+                created_at=a.created_at,
+            )
+        )
+    db.commit()
+
+
 def seed(db: Session) -> None:
-    # Clear in FK-safe order, then insert the single source of truth.
+    # Clear in FK-safe order (children first).
+    db.execute(delete(AuditLog))
+    db.execute(delete(Comment))
+    db.execute(delete(ArtifactVersion))
     db.execute(delete(Highlight))
     db.execute(delete(Artifact))
     db.execute(delete(Event))
-    db.execute(delete(Patient))
     db.execute(delete(User))
+    db.execute(delete(Patient))
     db.execute(delete(Clinic))
 
-    db.add(fixture.build_clinic())
+    db.add_all(fixture.build_clinics())
     db.add_all(fixture.build_users())
-    db.add(fixture.build_patient())
+    db.add_all(fixture.build_patients())
     db.add_all(fixture.build_events())
     db.add_all(fixture.build_artifacts())
     db.commit()
 
     generate_highlights(db)
+    _backfill_versions(db)
 
 
 def main() -> None:

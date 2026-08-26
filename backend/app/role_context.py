@@ -1,20 +1,18 @@
-"""Server-side role context parsing.
+"""Server-side role context (M3: DB is the single authority for identity/role).
 
-M1 scope: parse X-User-Id / X-Role headers and inject a RoleContext into
-request.state. There is NO auth and NO enforcement yet (Phase 3). The resolved
-context must be testable, so /api/me echoes it back.
-
-Semantics:
-- user_id comes from the X-User-Id header.
-- role comes from the X-Role header (takes precedence); if absent, falls back
-  to the DB role of the resolved user.
-- clinic_id is resolved from the DB user (basis for clinic scoping in Phase 3).
+- `X-User-Id` must resolve to a real `User`; role, clinic_id and patient_id all
+  come from the DB record — NEVER from the client.
+- `X-Role` is only a demo-consistency assertion: if present and matching it is
+  accepted; if present but MISMATCHING the DB role the request is rejected; if
+  absent it is fine. It can never elevate privileges.
+- No/unknown user => unauthenticated context (endpoints must call require_auth
+  to enforce 401).
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-from fastapi import Depends, Request
+from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from .db import get_db
@@ -26,18 +24,31 @@ class RoleContext:
     user_id: str | None
     role: str | None
     clinic_id: str | None
+    patient_id: str | None
+    authenticated: bool
 
 
 def resolve_role_context(
-    user_id: str | None, role: str | None, db: Session
+    user_id: str | None, role_header: str | None, db: Session
 ) -> RoleContext:
-    clinic_id: str | None = None
     user = db.get(User, user_id) if user_id else None
-    if user is not None:
-        clinic_id = user.clinic_id
-        if role is None:
-            role = user.role
-    return RoleContext(user_id=user_id, role=role, clinic_id=clinic_id)
+    if user is None:
+        return RoleContext(None, None, None, None, False)
+
+    # DB is authoritative; a mismatched X-Role is a hard reject, not an override.
+    if role_header is not None and role_header != user.role:
+        raise HTTPException(
+            status_code=403,
+            detail="X-Role does not match the authenticated user's role",
+        )
+
+    return RoleContext(
+        user_id=user.user_id,
+        role=user.role,
+        clinic_id=user.clinic_id,
+        patient_id=user.patient_id,
+        authenticated=True,
+    )
 
 
 def get_role_context(

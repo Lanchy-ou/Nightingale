@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .db import Base
@@ -39,6 +39,19 @@ ARTIFACT_TYPES = (
 
 HIGHLIGHT_STATUSES = ("suggested", "accepted", "rejected", "pinned")
 
+COMMENT_ANCHOR_TYPES = ("event", "artifact")
+
+AUDIT_ACTIONS = (
+    "create_note",
+    "edit_note",
+    "revert",
+    "comment",
+    "resolve",
+    "unresolve",
+    "highlight_status",
+    "conflict",
+)
+
 
 class Clinic(Base):
     __tablename__ = "clinics"
@@ -56,6 +69,10 @@ class User(Base):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(String(32), nullable=False)
+    # Maps a patient-role user to their own Patient record (M3).
+    patient_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("patients.patient_id"), nullable=True
+    )
 
 
 class Patient(Base):
@@ -123,3 +140,56 @@ class Highlight(Base):
     status_history: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class Comment(Base):
+    __tablename__ = "comments"
+
+    comment_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    anchor_type: Mapped[str] = mapped_column(String(16), nullable=False)  # event | artifact
+    anchor_id: Mapped[str] = mapped_column(String(64), nullable=False)  # polymorphic, no FK
+    parent_comment_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    author_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("users.user_id"), nullable=False
+    )
+    author_role: Mapped[str] = mapped_column(String(32), nullable=False)
+    body: Mapped[str] = mapped_column(String(4000), nullable=False)
+    mentions: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    resolved: Mapped[bool] = mapped_column(nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    resolved_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+
+class ArtifactVersion(Base):
+    __tablename__ = "artifact_versions"
+    __table_args__ = (UniqueConstraint("artifact_id", "version", name="uq_artifact_version"),)
+
+    version_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    artifact_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("artifacts.artifact_id"), nullable=False, index=True
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    content: Mapped[dict] = mapped_column(JSON, nullable=False)  # full snapshot
+    actor_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    actor_role: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    audit_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    actor_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("users.user_id"), nullable=False
+    )
+    actor_role: Mapped[str] = mapped_column(String(32), nullable=False)
+    action: Mapped[str] = mapped_column(String(32), nullable=False)
+    target_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    target_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    from_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    to_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    clinic_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    patient_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    event_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
