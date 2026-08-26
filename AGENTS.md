@@ -803,18 +803,20 @@ If a proposed feature weakens provenance, role boundaries, or the main longitudi
 
 ---
 
-## 19. M1–M2 Implementation Status (2026-08-25)
+## 19. M1–M3 Implementation Status (2026-08-26)
 
-M1 (skeleton + canonical fixture) and M2 (Glance → Provenance vertical slice) are complete. Concrete conventions that later phases MUST respect:
+M1 (skeleton + canonical fixture), M2 (Glance → Provenance vertical slice), and M3 (collaboration + revision + RBAC + concurrency) are complete. Concrete conventions that later phases MUST respect:
 
-- **Schema location**: `backend/app/models.py`. Current tables: `clinics` / `users` / `patients` / `events` / `artifacts` / `highlights`. Comment / Version / Task / AuditLog are Phase 3 — do NOT add them early.
+- **Schema location**: `backend/app/models.py`. Current tables: `clinics` / `users` / `patients` / `events` / `artifacts` / `highlights` / `comments` / `artifact_versions` / `audit_logs`. Task table is Phase 3-remainder (assignment) — not yet added.
 - **Span is NOT a table**: expressed as a JSON pointer `{"kind", "index", "offset"}` where `kind ∈ segment|message|paragraph|timestamp_range|section`. Artifact spans live in `Artifact.provenance_pointer`; Highlight spans live in `Highlight.source_span`.
-- **Canonical fixture = single source of truth**: `backend/seed/fixture.py` (IDs + 6 FACTS + `HIGHLIGHT_CANDIDATES`). Any new narrative must stay consistent with `FACTS` and `tests/test_seed_integrity.py`.
-- **author_role semantics**: AI summaries = `system` (author_id null); raw_conversation = `patient`; transcript = `system`; clinician_note/patient_instruction = `clinician`.
-- **Span anchoring rule (M2, permanent)**: candidates carry a verbatim `quote`; spans are located by deterministic string matching in `app/highlights.py` (`locate_span` / `extract_text`). A failed match DROPS the candidate — never fabricate a span. Phase 4 LLM must follow this same contract.
+- **Canonical fixture = single source of truth**: `backend/seed/fixture.py` (IDs + 6 FACTS + `HIGHLIGHT_CANDIDATES`). Fixture now has 2 clinics, 2 patients, 6 users (for RBAC isolation tests). Any new narrative must stay consistent with `FACTS` and `tests/test_seed_integrity.py`.
+- **author_role semantics**: AI summaries = `system` (author_id null); raw_conversation = `patient`; transcript = `system`; clinician_note/patient_instruction = `clinician`; staff_note = `staff`.
+- **Span anchoring rule (permanent)**: candidates carry a verbatim `quote`; spans are located by deterministic string matching in `app/highlights.py` (`locate_span` / `extract_text`). A failed match DROPS the candidate — never fabricate a span. Phase 4 LLM must follow this same contract.
 - **Importance scoring**: transparent constant weights in `app/highlights.py` (`WEIGHTS` + `compute_score`), precomputed at write time; Glance read path does zero computation. `GLANCE_LIMIT = 5`.
-- **Highlight status machine**: `suggested → accepted|rejected|pinned` etc. (see `status_transitions()`); changes append to `Highlight.status_history` (JSON, temporary — folds into AuditLog in Phase 3).
-- **Role context**: `backend/app/role_context.py` parses `X-User-Id`/`X-Role` headers → `request.state.role_context`. Parse-only; enforcement lands in Phase 3. `GET /api/me` echoes it for tests.
-- **DB**: SQLite at `backend/nantingale.db` (gitignored); tests override via `NANTINGALE_DB_URL` env var (see `backend/tests/conftest.py`).
+- **Authorization (M3, permanent)**: ALL RBAC lives in `backend/app/authz.py` (`authorize(action, clinic_id, patient_id)` + `PERMISSIONS`). Identity/role authority is the DB `User` in `backend/app/role_context.py`; `X-Role` is a demo-only consistency assertion (mismatch → 403, never escalation). Endpoints use `require_auth` (401) + `authorize` (same-clinic no-permission 403 / cross-clinic or not-own-patient 404). `User.patient_id` maps a patient-role user to their own record.
+- **Revision strategy (M3)**: full snapshots in `artifact_versions` (unique `(artifact_id, version)`); diffs are computed on read with `difflib` (`app/revisions.py`); revert copies the target snapshot into a NEW version and never mutates history. New note creates Artifact(v1) + ArtifactVersion(v1) + AuditLog in one transaction.
+- **Concurrency (M3)**: editable artifacts require `expected_version`; stale write → 409 via atomic conditional UPDATE (`WHERE version=?`), plus a `conflict` AuditLog in its own transaction. Different sections (role-owned `staff_note`/`clinician_note`) never overwrite each other.
+- **Audit (M3)**: `backend/app/audit.py` `add_audit(...)` — metadata only (no raw content). `Highlight.status_history` is still present but highlight-status changes also write AuditLog now (Phase 7 feedback reads AuditLog).
+- **DB**: SQLite at `backend/nantingale.db` (gitignored); tests override via `NANTINGALE_DB_URL` env var (see `backend/tests/conftest.py`). Tests re-seed before every test (function-scoped autouse) for isolation.
 - **Two time axes**: Timeline sorts by `Event.started_at` only; `created_at` is record-keeping.
-- **Run/tests**: `cd backend && .venv/Scripts/python.exe -m pytest` (27 tests green as of M2).
+- **Run/tests**: `cd backend && .venv/Scripts/python.exe -m pytest` (54 tests green as of M3).

@@ -627,12 +627,12 @@ cd backend
 .venv/Scripts/python.exe -m pytest        # 覆盖第 12 节 required micro-tests
 ```
 
-> 当前进度：M1 冒烟 + M2 的 `test_highlight_provenance.py`（required）+ glance/status 测试已落地，共 27 个测试。剩余 required micro-tests（`test_rbac_scope` / `test_revision_history` / `test_concurrent_edits`）在 Phase 3 落地。
+> 当前进度：M1/M2/M3 已落地。required micro-tests 全部就位——`test_highlight_provenance`（M2）、`test_rbac_scope`、`test_revision_history`、`test_concurrent_edits`（M3），共 54 个测试。剩余 required micro-test 无。
 
 架构约定（记录确切位置，随阶段更新）：
 
-- **PHI redaction 发生位置**：所有文本在进入 LLM 调用之前，必须先经过一个独立的 redaction 模块（姓名 / IC / ID 号码 / 手机号）。**M1 无 LLM，redaction 尚未实现（Phase 4 落地）**；届时在此写明具体文件与函数入口。
-- **RBAC 强制点**：所有权限判断在 server-side 完成。**M1 仅解析 role context（`backend/app/role_context.py`，`X-User-Id`/`X-Role` header → `request.state.role_context`），不拦截（Phase 3 落地）**；UI 只做展示裁剪，不作为安全边界。
+- **PHI redaction 发生位置**：所有文本在进入 LLM 调用之前，必须先经过一个独立的 redaction 模块（姓名 / IC / ID 号码 / 手机号）。**M1–M3 无 LLM，redaction 尚未实现（Phase 4 落地）**；届时在此写明具体文件与函数入口。
+- **RBAC 强制点**：所有权限判断在 server-side 完成，集中在 `backend/app/authz.py`（`authorize(action, resource)` + `PERMISSIONS` 矩阵）与 `backend/app/role_context.py`（DB 为身份/角色唯一权威，`X-Role` 只能作 demo 一致性断言，不一致即拒绝，不可提权）。每个端点经 `require_auth`（401）+ `authorize`（同院无权限 403 / 跨院或非本人 404）。UI 只做展示裁剪，不作为安全边界。
 
 ---
 
