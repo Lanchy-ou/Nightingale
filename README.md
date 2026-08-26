@@ -627,13 +627,32 @@ cd backend
 .venv/Scripts/python.exe -m pytest        # 覆盖第 12 节 required micro-tests
 ```
 
-> 当前进度：M1/M2/M3/M4 已落地。required micro-tests 全部就位——`test_highlight_provenance`（M2）、`test_rbac_scope`、`test_revision_history`、`test_concurrent_edits`（M3）；M4 新增 redaction / extraction / fallback / e2e / ingestion-RBAC / conflict 覆盖，共 97 个测试。剩余 required micro-test 无。
+> 当前进度：M1/M2/M3/M4 已落地。required micro-tests 全部就位——`test_highlight_provenance`（M2）、`test_rbac_scope`、`test_revision_history`、`test_concurrent_edits`（M3）；M4 新增 redaction / extraction / fallback / e2e / ingestion-RBAC / conflict 覆盖，共 103 个测试。剩余 required micro-test 无。
 
 架构约定（记录确切位置，随阶段更新）：
 
 - **PHI redaction 发生位置**：`backend/app/redaction.py`（`redact_content` / `restore_placeholders`）。在 `backend/app/ai_pipeline.py` 中，所有文本在进入 provider 之前先经 `redact_content`（姓名 / IC·ID / 手机号）；`placeholder_mapping` 仅存在于单次 pipeline 内存，不进 LLM / 日志 / DB。AI summary 与 highlights 由 `persist_derived` 原子写入（raw source 先落库、永不被覆盖）。
 - **RBAC 强制点**：所有权限判断在 server-side 完成，集中在 `backend/app/authz.py`（`authorize(action, resource)` + `PERMISSIONS` 矩阵）与 `backend/app/role_context.py`（DB 为身份/角色唯一权威，`X-Role` 只能作 demo 一致性断言，不一致即拒绝，不可提权）。每个端点经 `require_auth`（401）+ `authorize`（同院无权限 403 / 跨院或非本人 404）；不存在、跨院和非本人资源使用相同 404 body，避免存在性探测。UI 只做展示裁剪，不作为安全边界，角色切换会重新挂载整个 patient workspace 以清除敏感状态。
-- **LLM 客户端出口**：`backend/app/llm_client.py`（`LLMClient` protocol）是唯一 provider 出口，只能接收 `RedactedContent`。默认 `mock`；DeepSeek adapter 因 Gate 0 `NOT_LIVE_VERIFIED` 被标记 blocked（详见 `backend/docs/gate0_provider_status.md`）。provider 由环境变量 `NANTINGALE_LLM_PROVIDER` 选择，key 只从环境变量读取，永不打印/入库。
+- **LLM 客户端出口**：`backend/app/llm_client.py`（`LLMClient` protocol）是唯一 provider 出口，只能接收 `RedactedContent`。当前 API 默认选择 `deepseek`，但 DeepSeek adapter 因 Gate 0 `NOT_LIVE_VERIFIED` 被标记 blocked，因此会明确降级到 deterministic fallback（详见 `backend/docs/gate0_provider_status.md`）。provider 由环境变量 `NANTINGALE_LLM_PROVIDER` 选择，key 只从环境变量读取，永不打印/入库。
+
+### DeepSeek API key 放在哪里
+
+不要把 key 写入源码、JSON、测试 fixture 或提交到 Git。本项目当前只从运行后端进程的环境变量 `DEEPSEEK_API_KEY` 读取。Windows PowerShell 中可只为当前终端设置：
+
+```powershell
+$env:DEEPSEEK_API_KEY = "你的 DeepSeek API key"
+$env:NANTINGALE_LLM_PROVIDER = "deepseek"
+cd backend
+.venv\Scripts\python.exe -m uvicorn app.main:app --reload
+```
+
+若希望以后新开的终端也能读取，可写入当前 Windows 用户的环境变量（执行后需重新打开终端）：
+
+```powershell
+[Environment]::SetEnvironmentVariable("DEEPSEEK_API_KEY", "你的 DeepSeek API key", "User")
+```
+
+项目 `.gitignore` 已排除 `.env`，但当前后端没有加载 `.env` 文件，因此仅创建 `.env` **不会生效**。另外，上传 key 不会自动解除 live adapter：在用该 key 完成无 PHI 的 Gate 0 smoke check 并取得 `LIVE_VERIFIED` 证据前，adapter 仍按任务合同保持 blocked，运行时走明确标记的 deterministic fallback。
 
 ---
 

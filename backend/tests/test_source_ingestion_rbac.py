@@ -26,6 +26,22 @@ def test_patient_creates_own_session_reduced_response(patient_client):
     assert "highlight_ids" not in body
 
 
+def test_patient_session_replay_keeps_reduced_response(patient_client):
+    payload = {
+        "session_id": "sess-patient-replay",
+        "event_type": "patient_followup",
+        "started_at": "2026-08-26T10:00:00",
+        "content": {"messages": [{"id": "m1", "speaker": "patient", "text": "Headache is worse."}]},
+    }
+    first = patient_client.post(f"/api/patients/{fixture.PATIENT_ID}/sessions", json=payload)
+    replay = patient_client.post(f"/api/patients/{fixture.PATIENT_ID}/sessions", json=payload)
+
+    assert first.status_code == replay.status_code == 200
+    assert replay.json() == first.json()
+    assert "ai_summary_artifact_id" not in replay.json()
+    assert "highlight_ids" not in replay.json()
+
+
 def test_patient_cannot_create_other_patient_session(patient_client):
     r = patient_client.post(
         f"/api/patients/{fixture.PATIENT_B_ID}/sessions",

@@ -85,8 +85,30 @@ def _clinician_notes(db: Session, patient_id: str) -> list[tuple[str, str]]:
 
 def _anchor(raw: dict, result, mapping: dict, use_restore: bool):
     """Return (anchored, dropped, reason). A non-None reason discards the result."""
-    if use_restore and unresolved_placeholders(result.summary, mapping):
-        return [], 0, "placeholder_error"
+    if use_restore:
+        fields = [result.summary]
+        for candidate in result.candidates:
+            fields.extend(
+                [
+                    candidate.text,
+                    candidate.quote,
+                    candidate.risk_reason,
+                    candidate.assertion_value or "",
+                ]
+            )
+        if any(unresolved_placeholders(value, mapping) for value in fields):
+            return [], 0, "placeholder_error"
+
+        result.summary = restore_placeholders(result.summary, mapping)
+        if result.chief_complaint is not None:
+            if unresolved_placeholders(result.chief_complaint, mapping):
+                return [], 0, "placeholder_error"
+            result.chief_complaint = restore_placeholders(result.chief_complaint, mapping)
+        for candidate in result.candidates:
+            candidate.text = restore_placeholders(candidate.text, mapping)
+            candidate.risk_reason = restore_placeholders(candidate.risk_reason, mapping)
+            if candidate.assertion_value is not None:
+                candidate.assertion_value = restore_placeholders(candidate.assertion_value, mapping)
 
     validated = [c for c in result.candidates if validate_candidate(c) is not None]
     anchored: list = []
@@ -94,9 +116,6 @@ def _anchor(raw: dict, result, mapping: dict, use_restore: bool):
     for c in validated:
         quote = c.quote
         if use_restore:
-            if unresolved_placeholders(quote, mapping):
-                dropped += 1
-                continue
             quote = restore_placeholders(quote, mapping)
         span = locate_span(raw, quote)
         if span is None or extract_text(raw, span) != quote:
@@ -317,5 +336,12 @@ def persist_derived(
         patient_id=event.patient_id,
         event_id=event.event_id,
     )
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        # Raw ingestion was committed by the caller before this derived
+        # transaction. Roll back every pending AI artifact/highlight/audit row
+        # while preserving that raw source for a later retry.
+        db.rollback()
+        raise
     return summary_id, highlight_ids

@@ -6,7 +6,7 @@ Minimal, non-clinical, no-PHI smoke check of the frozen "DeepSeek via anthropic 
 provider:          deepseek (anthropic-compatible endpoint)
 endpoint/base_url: https://api.deepseek.com/anthropic
 request protocol:  Anthropic Messages API
-SDK/package:       anthropic (pip-installed for the probe only; NOT in requirements.txt)
+SDK/package:       anthropic 1.0.0 (pip-installed for the probe only; NOT in requirements.txt)
 model:             deepseek-v4-flash (probe)
 timeout:           n/a (single probe)
 result:            NOT_LIVE_VERIFIED

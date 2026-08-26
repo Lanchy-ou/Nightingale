@@ -70,6 +70,16 @@ def _ingest_common(
     summary_id = _derive_summary_id(raw.artifact_id, summary_type)
     existing = db.get(Artifact, summary_id)
     if existing is not None:
+        if patient_visible:
+            # Idempotent replay must preserve the same patient-safe response
+            # boundary as the first request. Internal derived IDs are never
+            # exposed through the patient ingestion endpoint.
+            return {
+                "event_id": event.event_id,
+                "source_artifact_id": raw.artifact_id,
+                "processing_status": "completed",
+                "degraded": existing.generation_metadata.get("degraded"),
+            }
         highlights = db.scalars(
             select(Highlight).where(Highlight.source_artifact_id == raw.artifact_id)
         ).all()

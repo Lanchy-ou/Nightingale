@@ -37,3 +37,19 @@ def test_invalid_entity_type_rejected_by_schema():
 
     with pytest.raises(ValidationError):
         Candidate(text="t", quote="q", risk_reason="r", entity_type="bogus")
+
+
+def test_unknown_candidate_field_rejected_by_schema():
+    import pytest
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        Candidate.model_validate(
+            {
+                "text": "t",
+                "quote": "q",
+                "risk_reason": "r",
+                "entity_type": "risk",
+                "unexpected": "must not be ignored",
+            }
+        )

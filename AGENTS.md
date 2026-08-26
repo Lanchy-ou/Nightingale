@@ -820,7 +820,7 @@ M1 (skeleton + canonical fixture), M2 (Glance → Provenance vertical slice), an
 - **Collaboration (M3)**: comments may anchor to Event or Artifact; replies preserve the parent's anchor, mentions are same-clinic staff/clinician only, and the Event feed includes both anchor types. The frontend supports anchor selection, threaded replies, resolve/unresolve, and remounts the whole patient workspace on role change so provenance cannot leak across roles.
 - **DB**: SQLite at `backend/nantingale.db` (gitignored); tests override via `NANTINGALE_DB_URL` env var (see `backend/tests/conftest.py`). Tests re-seed before every test (function-scoped autouse) for isolation.
 - **Two time axes**: Timeline sorts by `Event.started_at` only; `created_at` is record-keeping.
-- **Run/tests**: `cd backend && .venv/Scripts/python.exe -m pytest` (97 tests green as of M4).
+- **Run/tests**: `cd backend && .venv/Scripts/python.exe -m pytest` (103 tests green as of M4).
 
 M4 (AI pipeline + redaction + deterministic prioritization) is complete. Conventions added:
 

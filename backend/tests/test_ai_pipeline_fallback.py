@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from app.ai_pipeline import run_pipeline
+from app.ai_pipeline import persist_derived, run_pipeline
 from app.extraction import AISummaryResult, Candidate
 from app.llm_client import (
     InvalidOutputError,
@@ -97,6 +97,26 @@ def test_placeholder_error_falls_back(db_session):
     assert out.fallback_reason == "placeholder_error"
 
 
+def test_placeholder_error_in_candidate_field_falls_back(db_session):
+    evt, art = _mk_source(db_session)
+    bad = AISummaryResult(
+        summary="ok",
+        candidates=[
+            Candidate(
+                text="Saw [NAME_99]",
+                quote="Your headache is worse and BP is elevated.",
+                risk_reason="risk",
+                entity_type="risk",
+            )
+        ],
+    )
+    out = run_pipeline(
+        db_session, evt, art, "ai_doctor_consult_summary", datetime(2026, 8, 26, 12, 0),
+        _FixedClient(bad), "mock",
+    )
+    assert out.fallback_reason == "placeholder_error"
+
+
 def test_anchor_drop_rate_falls_back(db_session):
     evt, art = _mk_source(db_session)
     bad = AISummaryResult(
@@ -127,3 +147,40 @@ def test_unsupported_source_allows_zero_highlights(db_session):
     assert out.candidates == []  # no fabricated candidates
     # raw artifact content is untouched by the pipeline
     assert art.content["segments"][0]["text"] == "Everything looks normal."
+
+
+def test_derived_write_failure_rolls_back_and_preserves_raw(db_session, monkeypatch):
+    evt, art = _mk_source(db_session)
+    out = run_pipeline(
+        db_session, evt, art, "ai_doctor_consult_summary", datetime(2026, 8, 26, 12, 0),
+        _FailingClient(ProviderUnavailableError("no key")), "deepseek",
+    )
+    real_commit = db_session.commit
+
+    def fail_after_flush():
+        db_session.flush()
+        raise RuntimeError("simulated derived commit failure")
+
+    monkeypatch.setattr(db_session, "commit", fail_after_flush)
+    import pytest
+
+    with pytest.raises(RuntimeError, match="simulated derived commit failure"):
+        persist_derived(
+            db_session,
+            evt,
+            art,
+            "ai_doctor_consult_summary",
+            out,
+            "usr_clinician_01",
+            "clinician",
+            None,
+            None,
+        )
+
+    monkeypatch.setattr(db_session, "commit", real_commit)
+    from app.api.sources import _derive_summary_id
+
+    assert db_session.get(Artifact, art.artifact_id) is not None
+    assert db_session.get(
+        Artifact, _derive_summary_id(art.artifact_id, "ai_doctor_consult_summary")
+    ) is None

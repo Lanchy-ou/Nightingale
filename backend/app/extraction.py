@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 EntityType = Literal["symptom", "medication", "allergy", "chief_complaint", "task", "risk"]
 
@@ -17,6 +17,8 @@ ENTITY_TYPES = {"symptom", "medication", "allergy", "chief_complaint", "task", "
 
 
 class Candidate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     text: str
     quote: str
     risk_reason: str
@@ -28,9 +30,11 @@ class Candidate(BaseModel):
 
 
 class AISummaryResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     summary: str
     chief_complaint: str | None = None
-    candidates: list[Candidate] = []
+    candidates: list[Candidate] = Field(default_factory=list)
 
 
 def normalize_token(text: str) -> str:

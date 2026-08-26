@@ -39,6 +39,21 @@ def test_structure_and_role_speaker_preserved():
     assert "Alice Tan" not in seg["text"]
 
 
+def test_named_speaker_is_normalized_or_redacted():
+    content = {
+        "segments": [
+            {"index": 1, "speaker": "Dr. Carol Wong", "text": "Hello."},
+            {"index": 2, "speaker": "Eve Adams", "text": "Eve Adams reports pain."},
+        ]
+    }
+    res = redact_content(content, ["Dr. Carol Wong"])
+    first, second = res.redacted.content["segments"]
+    assert first["speaker"] == "doctor"
+    assert "Eve Adams" not in second["speaker"]
+    assert "Eve Adams" not in second["text"]
+    assert second["speaker"].startswith("[NAME_")
+
+
 def test_no_raw_phi_in_redacted_content():
     import json
 
@@ -67,6 +82,14 @@ def test_unresolved_placeholder_detected():
     mapping = {"[NAME_1]": "Alice Tan"}
     assert unresolved_placeholders("I saw [NAME_1] and [NAME_99]", mapping) == ["[NAME_99]"]
     assert unresolved_placeholders("I saw [NAME_1]", mapping) == []
+
+
+def test_modified_or_concatenated_placeholder_is_rejected():
+    mapping = {"[NAME_1]": "Alice Tan"}
+    assert unresolved_placeholders("I saw [NAME-1]", mapping)
+    assert unresolved_placeholders("I saw [NAME_1]suffix", mapping)
+    assert unresolved_placeholders("I saw [NAME_1", mapping)
+    assert restore_placeholders("[NAME_1]suffix", mapping) == "[NAME_1]suffix"
 
 
 def test_ic_phone_no_double_replacement():
