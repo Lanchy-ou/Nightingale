@@ -332,6 +332,17 @@ Patient View 不是完整医生视图的复制。
 - raw AI-scribed notes；
 - 其他不应暴露的内部 clinical reasoning。
 
+**实现（M6）**：patient 角色登录后进入独立的 `PatientViewPage`（`frontend/src/pages/PatientViewPage.tsx`），不是临床工作区的删减版。数据来自唯一只读聚合端点 `GET /api/patients/{id}/patient-view`（`backend/app/api/patient_view.py`），它是对 clinician 已确认的 `patient_instruction` Artifact 的**读取时确定性投影**，不调用 LLM、不新建第二份 summary、不复制内部 clinical note。
+
+页面只含四块：
+
+1. **你现在需要知道的事** —— 最新 `patient_instruction` 的 `instruction` / `follow_up` 安全投影；
+2. **你的下一步** —— 只显示明确存在的非空 `follow_up` 字段，不从自由文本推断；
+3. **医生给你的说明** —— 按 Event 时间倒序的全部 `patient_instruction`；
+4. **和 AI 助手说说你的情况** —— 复用 M4 `POST /patients/{id}/sessions`，只返回 patient-safe 形状，成功后刷新本页。
+
+服务端合同（由 `tests/test_patient_view.py` 锁定）：只投影 `content.instruction`（非空字符串）与 `content.follow_up`（可选非空字符串）两个字段；未知 key 即使被写入也不会透出；`current_summary` 取最新 Event（再按 `Artifact.created_at`、`artifact_id` 稳定破平）；`upcoming` 只接受非空 `follow_up`；`sessions` 只含本人 `raw_conversation` 的 `patient_ai_preconsult|patient_followup` Event，不返回/伪造 `status`。`read_patient_view` 只授予 patient；staff/clinician/admin 同 scope 返 403，跨 clinic/非本人返统一 404，匿名返 401。
+
 ---
 
 ## 5. AI 的职责边界
@@ -645,7 +656,7 @@ cd backend
 .venv/Scripts/python.exe -m pytest        # 覆盖第 12 节 required micro-tests
 ```
 
-> 当前进度：M1/M2/M3/M4 已落地。required micro-tests 全部就位——`test_highlight_provenance`（M2）、`test_rbac_scope`、`test_revision_history`、`test_concurrent_edits`（M3）；M4 新增 redaction / extraction / fallback / e2e / ingestion-RBAC / conflict 覆盖，共 103 个测试。剩余 required micro-test 无。
+> 当前进度：M1–M6 已落地（M1 skeleton+fixture、M2 Glance→Provenance、M3 协作+修订+RBAC、M4 AI pipeline+redaction+deterministic ranking、M5 longitudinal demo data、M6 Patient View）。required micro-tests 全部就位——`test_highlight_provenance`（M2）、`test_rbac_scope`、`test_revision_history`、`test_concurrent_edits`（M3）、`test_patient_view`（M6）；另覆盖 redaction / extraction / fallback / e2e / ingestion-RBAC / conflict / longitudinal scoring，共 132 个测试。剩余 required micro-test 无。
 
 架构约定（记录确切位置，随阶段更新）：
 
