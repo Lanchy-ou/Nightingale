@@ -5,9 +5,10 @@ from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
 from app.db import Base, SessionLocal, engine
-from app.models import Artifact, Clinic, Event, Patient, User
+from app.models import Artifact, Clinic, Event, Highlight, Patient, User
 
 from . import fixture
+from .highlights import generate_highlights
 
 
 def create_schema(target_engine=engine) -> None:
@@ -17,6 +18,7 @@ def create_schema(target_engine=engine) -> None:
 
 def seed(db: Session) -> None:
     # Clear in FK-safe order, then insert the single source of truth.
+    db.execute(delete(Highlight))
     db.execute(delete(Artifact))
     db.execute(delete(Event))
     db.execute(delete(Patient))
@@ -29,6 +31,8 @@ def seed(db: Session) -> None:
     db.add_all(fixture.build_events())
     db.add_all(fixture.build_artifacts())
     db.commit()
+
+    generate_highlights(db)
 
 
 def main() -> None:

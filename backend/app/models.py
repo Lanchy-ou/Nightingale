@@ -37,6 +37,8 @@ ARTIFACT_TYPES = (
     "patient_instruction",
 )
 
+HIGHLIGHT_STATUSES = ("suggested", "accepted", "rejected", "pinned")
+
 
 class Clinic(Base):
     __tablename__ = "clinics"
@@ -101,3 +103,23 @@ class Artifact(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     provenance_pointer: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+
+class Highlight(Base):
+    __tablename__ = "highlights"
+
+    highlight_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    patient_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    event_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    artifact_id: Mapped[str] = mapped_column(String(64), nullable=False)  # derived-from (AI summary / note)
+    source_artifact_id: Mapped[str] = mapped_column(String(64), nullable=False)  # contains the quote
+    source_span: Mapped[dict] = mapped_column(JSON, nullable=False)
+    text: Mapped[str] = mapped_column(String(512), nullable=False)
+    risk_reason: Mapped[str] = mapped_column(String(512), nullable=False)
+    feature_flags: Mapped[dict] = mapped_column(JSON, nullable=False)
+    importance_score: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="suggested")
+    # Temporary audit field; folds into AuditLog in Phase 3.
+    status_history: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
