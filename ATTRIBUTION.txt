@@ -14,6 +14,7 @@ Declared in `backend/requirements.txt`:
 | Pydantic | MIT |
 | pytest | MIT |
 | httpx | BSD-3-Clause |
+| anthropic | MIT |
 
 ## Frontend (Node)
 
@@ -33,13 +34,13 @@ Declared in `frontend/package.json`:
 
 - Provider: DeepSeek (https://www.deepseek.com) via its anthropic-compatible endpoint
   (`https://api.deepseek.com/anthropic`), models `deepseek-v4-flash` / `deepseek-v4-pro`.
-- Status: **NOT_LIVE_VERIFIED** — see `backend/docs/gate0_provider_status.md`.
-  The live adapter is blocked; the build runs on `mock` / `deterministic_fallback`.
+- Status: **LIVE_VERIFIED** (2026-08-26) — see `backend/docs/gate0_provider_status.md`.
+  When no key is configured or a provider call fails, generation degrades to
+  `deterministic_fallback`.
 - No model weights are bundled. No provider API key is committed or logged.
 
 ## Notes
 
-- The `anthropic` Python SDK was pip-installed ONLY for the one-off Gate 0 protocol
-  probe; it is NOT a project dependency and is not in `requirements.txt`.
+- The `anthropic` Python SDK is a declared backend dependency (see above).
 - Synthetic demo data is authored in-repo (`backend/seed/fixture.py`); no external
   dataset is used.
