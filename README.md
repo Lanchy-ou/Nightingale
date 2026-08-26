@@ -593,17 +593,48 @@ Bonus：
 - 安全：TLS in transit（文档化）+ at-rest 用 `cryptography` 对 PHI 字段做 AES-GCM 加密
 - 角色：MVP 不做完整认证，用 server-side role context 注入（可测试），RBAC 服务端强制
 
-待补全内容：
+### 目录结构
 
-- 环境要求与依赖安装命令（TBD — 待技术栈确定后填写）；
-- 应用启动命令（TBD）；
-- 运行自动化测试的命令（TBD — 必须覆盖第 12 节列出的 required micro-tests）；
-- seed synthetic demo data 的方法（TBD）。
+```text
+backend/    FastAPI + SQLAlchemy + SQLite（app/ 代码，seed/ fixture，tests/ pytest）
+frontend/   Vite + React 18 + TS（单页 PatientPage）
+```
 
-架构约定（实现后必须在此记录确切位置）：
+### 安装与启动（M1 已验证）
 
-- **PHI redaction 发生位置**：所有文本在进入 LLM 调用之前，必须先经过一个独立的 redaction 模块（姓名 / IC / ID 号码 / 手机号）。实现后在此写明具体文件与函数入口。
-- **RBAC 强制点**：所有权限判断在 server-side 完成（middleware / 数据访问层 / RLS 任选），UI 只做展示裁剪，不作为安全边界。实现后在此写明具体机制与代码位置。
+```bash
+# 后端（Python 3.13+）
+cd backend
+python -m venv .venv
+.venv/Scripts/python.exe -m pip install -r requirements.txt    # Windows；Linux/macOS 用 .venv/bin/pip
+
+# seed synthetic demo data（可重复执行：先清库再灌入）
+.venv/Scripts/python.exe -m seed.seed
+
+# 启动后端（默认 http://localhost:8000）
+.venv/Scripts/python.exe -m uvicorn app.main:app --reload
+```
+
+```bash
+# 前端（Node 18+）
+cd frontend
+npm install
+npm run dev -- --host --port 5173    # Vite dev server，代理 /api 到 :8000
+```
+
+### 运行自动化测试
+
+```bash
+cd backend
+.venv/Scripts/python.exe -m pytest        # 覆盖第 12 节 required micro-tests
+```
+
+> M1 现状：测试仅覆盖 M1 冒烟（`test_seed_integrity.py` / `test_provenance_resolution.py` / `test_read_api.py`）。第 12 节的 4 个 required micro-tests（rbac / revision / highlight_provenance / concurrent_edits）在对应 Phase（3 / 2 / 3）落地。
+
+架构约定（记录确切位置，随阶段更新）：
+
+- **PHI redaction 发生位置**：所有文本在进入 LLM 调用之前，必须先经过一个独立的 redaction 模块（姓名 / IC / ID 号码 / 手机号）。**M1 无 LLM，redaction 尚未实现（Phase 4 落地）**；届时在此写明具体文件与函数入口。
+- **RBAC 强制点**：所有权限判断在 server-side 完成。**M1 仅解析 role context（`backend/app/role_context.py`，`X-User-Id`/`X-Role` header → `request.state.role_context`），不拦截（Phase 3 落地）**；UI 只做展示裁剪，不作为安全边界。
 
 ---
 
