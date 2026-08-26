@@ -9,7 +9,7 @@ from __future__ import annotations
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import HTTPException, RequestValidationError
 
-from .api import events, highlights, patients
+from .api import audit, comments, events, highlights, notes, patients
 from .errors import error_response
 from .role_context import RoleContext, get_role_context
 
@@ -22,6 +22,9 @@ app = FastAPI(
 app.include_router(patients.router)
 app.include_router(events.router)
 app.include_router(highlights.router)
+app.include_router(notes.router)
+app.include_router(comments.router)
+app.include_router(audit.router)
 
 
 @app.exception_handler(HTTPException)
@@ -43,4 +46,10 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 @app.get("/api/me")
 def read_me(ctx: RoleContext = Depends(get_role_context)):
     """Echo the parsed role context (testability aid; not a security boundary)."""
-    return {"user_id": ctx.user_id, "role": ctx.role, "clinic_id": ctx.clinic_id}
+    return {
+        "user_id": ctx.user_id,
+        "role": ctx.role,
+        "clinic_id": ctx.clinic_id,
+        "patient_id": ctx.patient_id,
+        "authenticated": ctx.authenticated,
+    }
