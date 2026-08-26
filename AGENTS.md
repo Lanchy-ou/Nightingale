@@ -803,15 +803,18 @@ If a proposed feature weakens provenance, role boundaries, or the main longitudi
 
 ---
 
-## 19. M1 Implementation Status (2026-08-25)
+## 19. M1–M2 Implementation Status (2026-08-25)
 
-M1 (skeleton + canonical fixture) is complete. Concrete conventions that later phases MUST respect:
+M1 (skeleton + canonical fixture) and M2 (Glance → Provenance vertical slice) are complete. Concrete conventions that later phases MUST respect:
 
-- **Schema location**: `backend/app/models.py`. M1 tables only: `clinics` / `users` / `patients` / `events` / `artifacts`. Comment / Version / Task / AuditLog are Phase 3 — do NOT add them early.
-- **Span is NOT a table**: expressed as a JSON pointer in `Artifact.provenance_pointer` = `{"event_id", "artifact_id", "span": {"kind", "index"}}`, `kind ∈ segment|message|paragraph|timestamp_range|section`.
-- **Canonical fixture = single source of truth**: `backend/seed/fixture.py` (IDs + 6 FACTS). Any new narrative must stay consistent with `FACTS` and `tests/test_seed_integrity.py`.
+- **Schema location**: `backend/app/models.py`. Current tables: `clinics` / `users` / `patients` / `events` / `artifacts` / `highlights`. Comment / Version / Task / AuditLog are Phase 3 — do NOT add them early.
+- **Span is NOT a table**: expressed as a JSON pointer `{"kind", "index", "offset"}` where `kind ∈ segment|message|paragraph|timestamp_range|section`. Artifact spans live in `Artifact.provenance_pointer`; Highlight spans live in `Highlight.source_span`.
+- **Canonical fixture = single source of truth**: `backend/seed/fixture.py` (IDs + 6 FACTS + `HIGHLIGHT_CANDIDATES`). Any new narrative must stay consistent with `FACTS` and `tests/test_seed_integrity.py`.
 - **author_role semantics**: AI summaries = `system` (author_id null); raw_conversation = `patient`; transcript = `system`; clinician_note/patient_instruction = `clinician`.
-- **Role context**: `backend/app/role_context.py` parses `X-User-Id`/`X-Role` headers → `request.state.role_context`. Parse-only in M1; enforcement lands in Phase 3. `GET /api/me` echoes it for tests.
+- **Span anchoring rule (M2, permanent)**: candidates carry a verbatim `quote`; spans are located by deterministic string matching in `app/highlights.py` (`locate_span` / `extract_text`). A failed match DROPS the candidate — never fabricate a span. Phase 4 LLM must follow this same contract.
+- **Importance scoring**: transparent constant weights in `app/highlights.py` (`WEIGHTS` + `compute_score`), precomputed at write time; Glance read path does zero computation. `GLANCE_LIMIT = 5`.
+- **Highlight status machine**: `suggested → accepted|rejected|pinned` etc. (see `status_transitions()`); changes append to `Highlight.status_history` (JSON, temporary — folds into AuditLog in Phase 3).
+- **Role context**: `backend/app/role_context.py` parses `X-User-Id`/`X-Role` headers → `request.state.role_context`. Parse-only; enforcement lands in Phase 3. `GET /api/me` echoes it for tests.
 - **DB**: SQLite at `backend/nantingale.db` (gitignored); tests override via `NANTINGALE_DB_URL` env var (see `backend/tests/conftest.py`).
 - **Two time axes**: Timeline sorts by `Event.started_at` only; `created_at` is record-keeping.
-- **Run/tests**: `cd backend && .venv/Scripts/python.exe -m pytest` (16 tests green as of M1).
+- **Run/tests**: `cd backend && .venv/Scripts/python.exe -m pytest` (27 tests green as of M2).

@@ -582,8 +582,6 @@ Bonus：
 
 ## 15. Setup / Run / Tests
 
-> ⚠️ 当前仓库处于文档与合同阶段，应用 scaffold 尚未创建，本节命令为 **待实现项（TBD）**。scaffold 落地后必须用真实命令补全本节；在此之前不得伪造安装、启动或测试命令。
-
 **技术栈（已冻结，2026-08-25）**：
 
 - 后端：Python 3.13 + FastAPI + Uvicorn + SQLAlchemy 2.x + SQLite + Pydantic v2
@@ -600,7 +598,7 @@ backend/    FastAPI + SQLAlchemy + SQLite（app/ 代码，seed/ fixture，tests/
 frontend/   Vite + React 18 + TS（单页 PatientPage）
 ```
 
-### 安装与启动（M1 已验证）
+### 安装与启动（M1/M2 已验证）
 
 ```bash
 # 后端（Python 3.13+）
@@ -629,7 +627,7 @@ cd backend
 .venv/Scripts/python.exe -m pytest        # 覆盖第 12 节 required micro-tests
 ```
 
-> M1 现状：测试仅覆盖 M1 冒烟（`test_seed_integrity.py` / `test_provenance_resolution.py` / `test_read_api.py`）。第 12 节的 4 个 required micro-tests（rbac / revision / highlight_provenance / concurrent_edits）在对应 Phase（3 / 2 / 3）落地。
+> 当前进度：M1 冒烟 + M2 的 `test_highlight_provenance.py`（required）+ glance/status 测试已落地，共 27 个测试。剩余 required micro-tests（`test_rbac_scope` / `test_revision_history` / `test_concurrent_edits`）在 Phase 3 落地。
 
 架构约定（记录确切位置，随阶段更新）：
 
