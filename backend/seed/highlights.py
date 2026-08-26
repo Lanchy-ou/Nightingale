@@ -45,6 +45,11 @@ def generate_highlights(db: Session) -> list[Highlight]:
                 status_history=[],
                 created_at=_GENERATED_AT,
                 updated_at=_GENERATED_AT,
+                entity_type=cand.get("entity_type"),
+                entity_key=cand.get("entity_key"),
+                assertion_value=cand.get("assertion_value"),
+                conflict_with_artifact_id=None,
+                review_status=None,
             )
         )
         created.append(cand["highlight_id"])

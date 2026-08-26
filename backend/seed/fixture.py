@@ -88,6 +88,7 @@ HIGHLIGHT_CANDIDATES = [
         "text": "Worsening headache frequency",
         "risk_reason": "Headache frequency increased from once weekly to near-daily",
         "feature_flags": {"recency": True, "explicit_risk": False, "unresolved_task": False, "clinician_confirmed": False, "symptom_change": True, "repeated_mentions": False},
+        "entity_type": "symptom", "entity_key": "symptom:headache frequency", "assertion_value": "worsening",
     },
     {
         "highlight_id": "hl_nausea_persists",
@@ -98,6 +99,7 @@ HIGHLIGHT_CANDIDATES = [
         "text": "Morning nausea persists",
         "risk_reason": "Nausea still present despite headache improvement",
         "feature_flags": {"recency": True, "explicit_risk": False, "unresolved_task": False, "clinician_confirmed": False, "symptom_change": True, "repeated_mentions": False},
+        "entity_type": "symptom", "entity_key": "symptom:nausea", "assertion_value": "persistent",
     },
     {
         "highlight_id": "hl_bp_elevated",
@@ -108,6 +110,7 @@ HIGHLIGHT_CANDIDATES = [
         "text": "Blood pressure elevated (158/96)",
         "risk_reason": "Elevated blood pressure measured at nurse consult",
         "feature_flags": {"recency": False, "explicit_risk": True, "unresolved_task": False, "clinician_confirmed": False, "symptom_change": False, "repeated_mentions": False},
+        "entity_type": "risk", "entity_key": "risk:blood pressure", "assertion_value": "158/96",
     },
     {
         "highlight_id": "hl_blood_test_pending",
@@ -118,6 +121,7 @@ HIGHLIGHT_CANDIDATES = [
         "text": "Blood test ordered - pending",
         "risk_reason": "Blood test ordered to rule out underlying causes; result still pending",
         "feature_flags": {"recency": False, "explicit_risk": False, "unresolved_task": True, "clinician_confirmed": False, "symptom_change": False, "repeated_mentions": False},
+        "entity_type": "task", "entity_key": "task:blood test", "assertion_value": "pending",
     },
     {
         "highlight_id": "hl_followup_scheduled",
@@ -128,6 +132,7 @@ HIGHLIGHT_CANDIDATES = [
         "text": "Follow-up scheduled",
         "risk_reason": "Follow-up appointment scheduled to review blood test results",
         "feature_flags": {"recency": False, "explicit_risk": False, "unresolved_task": True, "clinician_confirmed": False, "symptom_change": False, "repeated_mentions": False},
+        "entity_type": "task", "entity_key": "task:follow-up", "assertion_value": "scheduled",
     },
     {
         "highlight_id": "hl_medication_existing",
@@ -138,6 +143,7 @@ HIGHLIGHT_CANDIDATES = [
         "text": "Existing medication: propranolol 20 mg daily",
         "risk_reason": "Prophylactic medication active since Feb 2026",
         "feature_flags": {"recency": False, "explicit_risk": False, "unresolved_task": False, "clinician_confirmed": False, "symptom_change": False, "repeated_mentions": False},
+        "entity_type": "medication", "entity_key": "medication:propranolol", "assertion_value": "20 mg daily",
     },
 ]
 

@@ -120,6 +120,10 @@ class Artifact(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     provenance_pointer: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # Namespaced idempotency key (raw sources only); globally unique.
+    ingestion_key: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)
+    # Metadata-only generation record for AI artifacts (never prompt/raw text).
+    generation_metadata: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
 
 class Highlight(Base):
@@ -140,6 +144,12 @@ class Highlight(Base):
     status_history: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    # M4: deterministic ranking / conflict / provenance fields.
+    entity_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    entity_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    assertion_value: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    conflict_with_artifact_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    review_status: Mapped[str | None] = mapped_column(String(16), nullable=True)
 
 
 class Comment(Base):
