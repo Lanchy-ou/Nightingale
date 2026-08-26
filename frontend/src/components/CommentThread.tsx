@@ -1,17 +1,21 @@
 import { useEffect, useState } from 'react';
 import { MENTIONABLE, api } from '../api';
-import type { Comment } from '../types';
+import type { Artifact, Comment } from '../types';
 
 export default function CommentThread({
   eventId,
+  artifacts,
   canWrite,
 }: {
   eventId: string;
+  artifacts: Artifact[];
   canWrite: boolean;
 }) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [body, setBody] = useState('');
   const [mentions, setMentions] = useState<string[]>([]);
+  const [anchorKey, setAnchorKey] = useState(`event:${eventId}`);
+  const [replyTo, setReplyTo] = useState<Comment | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showMentions, setShowMentions] = useState(false);
 
@@ -29,9 +33,17 @@ export default function CommentThread({
 
   async function postComment() {
     try {
-      await api.createComment({ anchor_type: 'event', anchor_id: eventId, body, mentions });
+      const [selectedType, ...idParts] = anchorKey.split(':');
+      await api.createComment({
+        anchor_type: replyTo?.anchor_type ?? selectedType,
+        anchor_id: replyTo?.anchor_id ?? idParts.join(':'),
+        parent_comment_id: replyTo?.comment_id ?? null,
+        body,
+        mentions,
+      });
       setBody('');
       setMentions([]);
+      setReplyTo(null);
       await load();
     } catch (e: any) {
       setError(String(e.message ?? e));
@@ -54,27 +66,74 @@ export default function CommentThread({
     setShowMentions(false);
   }
 
+  const commentIds = new Set(comments.map((c) => c.comment_id));
+  const roots = comments.filter(
+    (c) => c.parent_comment_id === null || !commentIds.has(c.parent_comment_id),
+  );
+
+  function anchorLabel(c: Comment): string {
+    if (c.anchor_type === 'event') return 'Event';
+    const artifact = artifacts.find((a) => a.artifact_id === c.anchor_id);
+    return artifact ? artifact.artifact_type.replace(/_/g, ' ') : 'Artifact';
+  }
+
+  function renderComment(c: Comment, depth = 0) {
+    const replies = comments.filter((candidate) => candidate.parent_comment_id === c.comment_id);
+    return (
+      <div key={c.comment_id} style={{ marginLeft: `${Math.min(depth, 3) * 20}px` }}>
+        <div className={`comment ${c.resolved ? 'resolved' : ''}`}>
+          <div className="comment-meta">
+            {c.author_role} · {anchorLabel(c)} · {new Date(c.created_at).toLocaleString()}
+            {c.resolved && <span className="resolved-tag">resolved</span>}
+          </div>
+          <div className="comment-body">{c.body}</div>
+          {canWrite && (
+            <div className="inline-actions">
+              <button className="link-btn" onClick={() => setReplyTo(c)}>
+                Reply
+              </button>
+              <button className="link-btn" onClick={() => toggleResolved(c)}>
+                {c.resolved ? 'Unresolve' : 'Resolve'}
+              </button>
+            </div>
+          )}
+        </div>
+        {replies.map((reply) => renderComment(reply, depth + 1))}
+      </div>
+    );
+  }
+
   return (
     <div className="comment-thread">
       <h4>Comments</h4>
       {error && <div className="error-inline">{error}</div>}
       {comments.length === 0 && <div className="muted">No comments yet.</div>}
-      {comments.map((c) => (
-        <div key={c.comment_id} className={`comment ${c.resolved ? 'resolved' : ''}`}>
-          <div className="comment-meta">
-            {c.author_role} · {new Date(c.created_at).toLocaleString()}
-            {c.resolved && <span className="resolved-tag">resolved</span>}
-          </div>
-          <div className="comment-body">{c.body}</div>
-          {canWrite && (
-            <button className="link-btn" onClick={() => toggleResolved(c)}>
-              {c.resolved ? 'Unresolve' : 'Resolve'}
-            </button>
-          )}
-        </div>
-      ))}
+      {roots.map((c) => renderComment(c))}
       {canWrite && (
         <div className="comment-composer">
+          {replyTo ? (
+            <div className="comment-meta">
+              Replying to {replyTo.author_role} on {anchorLabel(replyTo)}
+              <button className="link-btn" onClick={() => setReplyTo(null)}>
+                Cancel reply
+              </button>
+            </div>
+          ) : (
+            <label>
+              Attach to{' '}
+              <select value={anchorKey} onChange={(e) => setAnchorKey(e.target.value)}>
+                <option value={`event:${eventId}`}>Event</option>
+                {artifacts.map((artifact) => (
+                  <option
+                    key={artifact.artifact_id}
+                    value={`artifact:${artifact.artifact_id}`}
+                  >
+                    {artifact.artifact_type.replace(/_/g, ' ')}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <textarea
             value={body}
             onChange={(e) => setBody(e.target.value)}

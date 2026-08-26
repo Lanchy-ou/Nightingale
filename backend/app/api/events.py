@@ -1,11 +1,11 @@
 """Read-only event artifact endpoints (under unified authorization)."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..authz import PATIENT_VISIBLE_ARTIFACT_TYPES, authorize, require_auth
+from ..authz import PATIENT_VISIBLE_ARTIFACT_TYPES, authorize, require_auth, resource_not_found
 from ..db import get_db
 from ..models import Artifact, Event
 from ..role_context import RoleContext
@@ -22,7 +22,7 @@ def list_artifacts(
 ):
     event = db.get(Event, event_id)
     if event is None:
-        raise HTTPException(status_code=404, detail=f"Event {event_id} not found")
+        raise resource_not_found()
     authorize(ctx, "read_artifacts", event.clinic_id, event.patient_id)
 
     q = select(Artifact).where(Artifact.event_id == event_id)

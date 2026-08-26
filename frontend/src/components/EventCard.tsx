@@ -124,7 +124,11 @@ export default function EventCard({
           )}
           {isNonPatient && (
             <>
-              <CommentThread eventId={event.event_id} canWrite={canWriteNote} />
+              <CommentThread
+                eventId={event.event_id}
+                artifacts={artifacts ?? []}
+                canWrite={canWriteNote}
+              />
               <AuditList eventId={event.event_id} />
             </>
           )}

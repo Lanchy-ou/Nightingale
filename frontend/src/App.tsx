@@ -7,6 +7,7 @@ const PATIENT_ID = 'pat_001';
 export default function App() {
   const [roleIndex, setRoleIndex] = useState(0);
   const selected = ROLE_USERS[roleIndex];
+  const roleKey = `${selected.role}:${selected.userId}`;
 
   function changeRole(i: number) {
     // setRole is synchronous so PatientPage sees the new role on the same render.
@@ -32,7 +33,9 @@ export default function App() {
         </select>
         <span className="role-note">demo-only · server enforces real RBAC</span>
       </div>
-      <PatientPage patientId={PATIENT_ID} roleKey={`${selected.role}:${selected.userId}`} />
+      {/* Remount the whole patient workspace so role-sensitive state such as
+          provenance panels cannot survive a role change. */}
+      <PatientPage key={roleKey} patientId={PATIENT_ID} roleKey={roleKey} />
     </div>
   );
 }

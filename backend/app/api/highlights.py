@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..audit import add_audit
-from ..authz import authorize, require_auth
+from ..authz import authorize, require_auth, resource_not_found
 from ..db import get_db
 from ..highlights import GLANCE_LIMIT, extract_text, status_transitions
 from ..models import Artifact, Event, Highlight, Patient
@@ -33,7 +33,7 @@ def get_glance(
 ):
     patient = db.get(Patient, patient_id)
     if patient is None:
-        raise HTTPException(status_code=404, detail=f"Patient {patient_id} not found")
+        raise resource_not_found()
     authorize(ctx, "read_glance", patient.clinic_id, patient.patient_id)
 
     highlights = db.scalars(
@@ -59,22 +59,22 @@ def get_provenance(
 ):
     hl = db.get(Highlight, highlight_id)
     if hl is None:
-        raise HTTPException(status_code=404, detail=f"Highlight {highlight_id} not found")
+        raise resource_not_found()
 
     event = db.get(Event, hl.event_id)
     if event is None:
-        raise HTTPException(status_code=404, detail=f"Event {hl.event_id} not found")
+        raise resource_not_found()
     authorize(ctx, "read_provenance", event.clinic_id, event.patient_id)
 
     source = db.get(Artifact, hl.source_artifact_id)
     if source is None:
-        raise HTTPException(status_code=404, detail=f"Source artifact {hl.source_artifact_id} not found")
+        raise resource_not_found()
 
     summary = None
     if hl.artifact_id != hl.source_artifact_id:
         summary = db.get(Artifact, hl.artifact_id)
         if summary is None:
-            raise HTTPException(status_code=404, detail=f"Artifact {hl.artifact_id} not found")
+            raise resource_not_found()
 
     return ProvenanceOut(
         highlight_id=hl.highlight_id,
@@ -95,11 +95,11 @@ def update_status(
 ):
     hl = db.get(Highlight, highlight_id)
     if hl is None:
-        raise HTTPException(status_code=404, detail=f"Highlight {highlight_id} not found")
+        raise resource_not_found()
 
     event = db.get(Event, hl.event_id)
     if event is None:
-        raise HTTPException(status_code=404, detail=f"Event {hl.event_id} not found")
+        raise resource_not_found()
     authorize(ctx, "highlight_status", event.clinic_id, event.patient_id)
 
     new_status = body.status

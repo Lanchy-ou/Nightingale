@@ -1,11 +1,11 @@
 """Read-only patient + timeline endpoints (now under unified authorization)."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ..authz import PATIENT_VISIBLE_ARTIFACT_TYPES, authorize, require_auth
+from ..authz import PATIENT_VISIBLE_ARTIFACT_TYPES, authorize, require_auth, resource_not_found
 from ..db import get_db
 from ..models import Artifact, Clinic, Event, Patient
 from ..role_context import RoleContext
@@ -22,7 +22,7 @@ def get_patient(
 ):
     patient = db.get(Patient, patient_id)
     if patient is None:
-        raise HTTPException(status_code=404, detail=f"Patient {patient_id} not found")
+        raise resource_not_found()
     authorize(ctx, "read_patient", patient.clinic_id, patient.patient_id)
     clinic = db.get(Clinic, patient.clinic_id)
     return PatientOut(
@@ -41,7 +41,7 @@ def list_events(
 ):
     patient = db.get(Patient, patient_id)
     if patient is None:
-        raise HTTPException(status_code=404, detail=f"Patient {patient_id} not found")
+        raise resource_not_found()
     authorize(ctx, "read_events", patient.clinic_id, patient.patient_id)
 
     events = db.scalars(

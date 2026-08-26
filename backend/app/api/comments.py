@@ -13,7 +13,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from ..audit import add_audit
-from ..authz import authorize, require_auth
+from ..authz import authorize, require_auth, resource_not_found
 from ..db import get_db
 from ..ids import new_id
 from ..models import Artifact, Comment, Event, User
@@ -27,15 +27,15 @@ def _resolve_anchor(db: Session, anchor_type: str, anchor_id: str) -> Event:
     if anchor_type == "event":
         event = db.get(Event, anchor_id)
         if event is None:
-            raise HTTPException(status_code=404, detail=f"Event {anchor_id} not found")
+            raise resource_not_found()
         return event
     if anchor_type == "artifact":
         artifact = db.get(Artifact, anchor_id)
         if artifact is None:
-            raise HTTPException(status_code=404, detail=f"Artifact {anchor_id} not found")
+            raise resource_not_found()
         event = db.get(Event, artifact.event_id)
         if event is None:
-            raise HTTPException(status_code=404, detail=f"Event {artifact.event_id} not found")
+            raise resource_not_found()
         return event
     raise HTTPException(status_code=422, detail="Invalid anchor_type")
 
@@ -52,7 +52,9 @@ def create_comment(
     if body.parent_comment_id:
         parent = db.get(Comment, body.parent_comment_id)
         if parent is None:
-            raise HTTPException(status_code=404, detail="Parent comment not found")
+            raise resource_not_found()
+        parent_event = _resolve_anchor(db, parent.anchor_type, parent.anchor_id)
+        authorize(ctx, "read_comments", parent_event.clinic_id, parent_event.patient_id)
         if parent.anchor_type != body.anchor_type or parent.anchor_id != body.anchor_id:
             raise HTTPException(status_code=422, detail="Parent comment must share the same anchor")
 
@@ -101,7 +103,7 @@ def resolve_comment(
 ):
     comment = db.get(Comment, comment_id)
     if comment is None:
-        raise HTTPException(status_code=404, detail=f"Comment {comment_id} not found")
+        raise resource_not_found()
     event = _resolve_anchor(db, comment.anchor_type, comment.anchor_id)
     authorize(ctx, "comment", event.clinic_id, event.patient_id)
 
@@ -133,7 +135,7 @@ def unresolve_comment(
 ):
     comment = db.get(Comment, comment_id)
     if comment is None:
-        raise HTTPException(status_code=404, detail=f"Comment {comment_id} not found")
+        raise resource_not_found()
     event = _resolve_anchor(db, comment.anchor_type, comment.anchor_id)
     authorize(ctx, "comment", event.clinic_id, event.patient_id)
 
@@ -165,7 +167,7 @@ def list_comments(
 ):
     event = db.get(Event, event_id)
     if event is None:
-        raise HTTPException(status_code=404, detail=f"Event {event_id} not found")
+        raise resource_not_found()
     authorize(ctx, "read_comments", event.clinic_id, event.patient_id)
 
     artifact_ids = db.scalars(

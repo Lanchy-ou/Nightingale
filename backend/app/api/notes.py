@@ -15,7 +15,7 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from ..audit import add_audit
-from ..authz import authorize, note_edit_action, require_auth
+from ..authz import authorize, note_edit_action, require_auth, resource_not_found
 from ..db import get_db
 from ..ids import new_id
 from ..models import Artifact, ArtifactVersion, Event
@@ -36,19 +36,24 @@ router = APIRouter(prefix="/api", tags=["notes"])
 def _event(db: Session, event_id: str) -> Event:
     event = db.get(Event, event_id)
     if event is None:
-        raise HTTPException(status_code=404, detail=f"Event {event_id} not found")
+        raise resource_not_found()
     return event
 
 
 def _artifact_with_event(db: Session, artifact_id: str) -> tuple[Artifact, Event]:
     artifact = db.get(Artifact, artifact_id)
     if artifact is None:
-        raise HTTPException(status_code=404, detail=f"Artifact {artifact_id} not found")
+        raise resource_not_found()
     return artifact, _event(db, artifact.event_id)
 
 
 def _record_conflict(db: Session, ctx: RoleContext, event: Event, artifact_id: str, expected_version: int) -> None:
-    # Conflict audit must survive independently of the (non-)business transaction.
+    # End the failed/stale business transaction first, then persist the audit in
+    # a fresh transaction so the conflict record cannot be rolled back with it.
+    clinic_id = event.clinic_id
+    patient_id = event.patient_id
+    event_id = event.event_id
+    db.rollback()
     add_audit(
         db,
         actor_id=ctx.user_id,
@@ -56,9 +61,9 @@ def _record_conflict(db: Session, ctx: RoleContext, event: Event, artifact_id: s
         action="conflict",
         target_type="artifact",
         target_id=artifact_id,
-        clinic_id=event.clinic_id,
-        patient_id=event.patient_id,
-        event_id=event.event_id,
+        clinic_id=clinic_id,
+        patient_id=patient_id,
+        event_id=event_id,
         from_version=expected_version,
         to_version=None,
     )
@@ -144,6 +149,9 @@ def edit_artifact(
     ctx: RoleContext = Depends(require_auth),
 ):
     artifact, event = _artifact_with_event(db, artifact_id)
+    # Scope must be checked before artifact-type branching; otherwise a caller
+    # from another clinic can distinguish editable from non-editable resources.
+    authorize(ctx, "read_artifacts", event.clinic_id, event.patient_id)
     action = note_edit_action(artifact.artifact_type)
     if action is None:
         raise HTTPException(status_code=403, detail="This artifact type is not editable")
@@ -201,6 +209,7 @@ def revert_artifact(
     ctx: RoleContext = Depends(require_auth),
 ):
     artifact, event = _artifact_with_event(db, artifact_id)
+    authorize(ctx, "read_artifacts", event.clinic_id, event.patient_id)
     action = note_edit_action(artifact.artifact_type)
     if action is None:
         raise HTTPException(status_code=403, detail="This artifact type is not editable")

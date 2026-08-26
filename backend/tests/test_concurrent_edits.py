@@ -1,6 +1,12 @@
 """Required test: concurrent edits have deterministic behavior."""
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
+
+from fastapi.testclient import TestClient
+
+from app.main import app
 from seed import fixture
 
 
@@ -55,3 +61,27 @@ def test_same_section_conflict_is_deterministic(clinician_client):
     # The conflict must be recorded in the audit log.
     r3 = clinician_client.get(f"/api/events/{fixture.EVT_DOC_0821}/audit")
     assert any(l["action"] == "conflict" for l in r3.json())
+
+
+def test_simultaneous_same_section_writes_yield_one_success_and_one_conflict():
+    barrier = Barrier(3)
+
+    def write(content: str):
+        with TestClient(app, headers={"X-User-Id": fixture.USER_CLINICIAN_ID}) as client:
+            barrier.wait()
+            return client.patch(
+                f"/api/artifacts/{fixture.ART_DOC_NOTE}",
+                json={"content": {"assessment": content}, "expected_version": 1},
+            )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(write, "simultaneous writer A")
+        second = pool.submit(write, "simultaneous writer B")
+        barrier.wait()
+        responses = [first.result(), second.result()]
+
+    assert sorted(r.status_code for r in responses) == [200, 409]
+    winner = next(r for r in responses if r.status_code == 200)
+    conflict = next(r for r in responses if r.status_code == 409)
+    assert winner.json()["version"] == 2
+    assert conflict.json()["error"]["current_version"] == 2

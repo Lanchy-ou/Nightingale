@@ -129,3 +129,25 @@ def test_cross_clinic_access_404(client):
         headers={"X-User-Id": fixture.USER_CLINICIAN_B_ID},
     )
     assert r.status_code == 404
+
+
+def test_absent_and_cross_clinic_resources_are_indistinguishable(client):
+    headers = {"X-User-Id": fixture.USER_CLINICIAN_B_ID}
+    unknown = client.get("/api/patients/pat_does_not_exist", headers=headers)
+    cross = client.get(f"/api/patients/{fixture.PATIENT_ID}", headers=headers)
+    assert unknown.status_code == cross.status_code == 404
+    assert unknown.json() == cross.json()
+
+
+def test_cross_clinic_artifact_type_cannot_be_probed(client):
+    headers = {"X-User-Id": fixture.USER_CLINICIAN_B_ID}
+    payload = {"content": {"x": "y"}, "expected_version": 1}
+    unknown = client.patch("/api/artifacts/art_does_not_exist", headers=headers, json=payload)
+    noneditable = client.patch(
+        f"/api/artifacts/{fixture.ART_DOC_SUMMARY}", headers=headers, json=payload
+    )
+    editable = client.patch(
+        f"/api/artifacts/{fixture.ART_DOC_NOTE}", headers=headers, json=payload
+    )
+    assert unknown.status_code == noneditable.status_code == editable.status_code == 404
+    assert unknown.json() == noneditable.json() == editable.json()

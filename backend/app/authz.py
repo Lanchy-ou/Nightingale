@@ -70,6 +70,11 @@ PATIENT_VISIBLE_ARTIFACT_TYPES = {"patient_instruction"}
 EDITABLE_ARTIFACT_TYPES = {"staff_note", "clinician_note"}
 
 
+def resource_not_found() -> HTTPException:
+    """Return one indistinguishable response for absent and out-of-scope resources."""
+    return HTTPException(status_code=404, detail="Resource not found")
+
+
 def require_auth(ctx: RoleContext = Depends(get_role_context)) -> RoleContext:
     if not ctx.authenticated:
         raise HTTPException(status_code=401, detail="Authentication required")
@@ -84,13 +89,13 @@ def authorize(
 ) -> None:
     # Cross-clinic and not-own-patient both look like "not found" (no existence leak).
     if clinic_id is not None and ctx.clinic_id != clinic_id:
-        raise HTTPException(status_code=404, detail="Resource not found")
+        raise resource_not_found()
     if (
         ctx.role == "patient"
         and patient_id is not None
         and ctx.patient_id != patient_id
     ):
-        raise HTTPException(status_code=404, detail="Resource not found")
+        raise resource_not_found()
 
     if not PERMISSIONS.get(ctx.role, {}).get(action, False):
         raise HTTPException(status_code=403, detail="Forbidden")
