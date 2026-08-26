@@ -803,7 +803,7 @@ If a proposed feature weakens provenance, role boundaries, or the main longitudi
 
 ---
 
-## 19. M1–M3 Implementation Status (2026-08-26)
+## 19. M1–M4 Implementation Status (2026-08-26)
 
 M1 (skeleton + canonical fixture), M2 (Glance → Provenance vertical slice), and M3 (collaboration + revision + RBAC + concurrency) are complete. Concrete conventions that later phases MUST respect:
 
@@ -820,4 +820,16 @@ M1 (skeleton + canonical fixture), M2 (Glance → Provenance vertical slice), an
 - **Collaboration (M3)**: comments may anchor to Event or Artifact; replies preserve the parent's anchor, mentions are same-clinic staff/clinician only, and the Event feed includes both anchor types. The frontend supports anchor selection, threaded replies, resolve/unresolve, and remounts the whole patient workspace on role change so provenance cannot leak across roles.
 - **DB**: SQLite at `backend/nantingale.db` (gitignored); tests override via `NANTINGALE_DB_URL` env var (see `backend/tests/conftest.py`). Tests re-seed before every test (function-scoped autouse) for isolation.
 - **Two time axes**: Timeline sorts by `Event.started_at` only; `created_at` is record-keeping.
-- **Run/tests**: `cd backend && .venv/Scripts/python.exe -m pytest` (61 tests green as of M3, including simultaneous-client concurrency and collaboration coverage).
+- **Run/tests**: `cd backend && .venv/Scripts/python.exe -m pytest` (97 tests green as of M4).
+
+M4 (AI pipeline + redaction + deterministic prioritization) is complete. Conventions added:
+
+- **Provider protocol (Gate 0)**: `NOT_LIVE_VERIFIED` — DeepSeek live adapter is BLOCKED (see `backend/docs/gate0_provider_status.md`). The build runs `mock` / `deterministic_fallback`; provider chosen via `NANTINGALE_LLM_PROVIDER`, key read from env only.
+- **Redaction**: `backend/app/redaction.py` (`redact_content` / `restore_placeholders`). Deterministic coverage for known names + IC/ID + phone; `placeholder_mapping` is in-memory only. `backend/app/ai_pipeline.py` redacts BEFORE any provider call.
+- **LLM egress**: `backend/app/llm_client.py` `LLMClient` protocol is the ONLY provider exit; accepts `RedactedContent` only. No module may call an SDK/HTTP provider directly.
+- **Span anchoring (permanent)**: provider quotes are over REDACTED text; pipeline restores placeholders locally, then `locate_span` against the RAW source; a failed restore/anchore drops the candidate (never fuzzy match).
+- **Extraction**: `backend/app/extraction.py` strict Pydantic schema; `entity_key` is server-recomputed from `entity_type + normalized token` (never trusted from the LLM).
+- **Deterministic fallback**: `backend/app/deterministic_pipeline.py` is fixture-independent (never imports seed); conservative extractive summary + keyword candidates; 0 highlights allowed.
+- **Conflict**: `backend/app/conflicts.py` bounded medication/dose + task/status comparison vs clinician notes only; conflict => `review_status=needs_review` + `conflict_with_artifact_id`; never modifies clinician artifacts.
+- **Scoring**: `unresolved_task=false` in M4; `recency` computed from injected `as_of`; `repeated_mentions` from same `entity_key` across ≥2 events (both sides recomputed); `clinician_confirmed` only set when a clinician accept/pin (score recomputed).
+- **Ingestion**: `backend/app/api/sources.py` (source/session endpoints), idempotent via namespaced `Artifact.ingestion_key` + stable-derived IDs; raw source persisted BEFORE derived; patient session response hides internal summary/highlight ids.
