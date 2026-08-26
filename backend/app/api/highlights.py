@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from ..audit import add_audit
 from ..authz import authorize, require_auth, resource_not_found
 from ..db import get_db
-from ..highlights import GLANCE_LIMIT, extract_text, status_transitions
+from ..highlights import GLANCE_LIMIT, compute_score, extract_text, status_transitions
 from ..models import Artifact, Event, Highlight, Patient
 from ..role_context import RoleContext
 from ..schemas import (
@@ -76,6 +76,10 @@ def get_provenance(
         if summary is None:
             raise resource_not_found()
 
+    conflict_artifact = None
+    if hl.review_status == "needs_review" and hl.conflict_with_artifact_id:
+        conflict_artifact = db.get(Artifact, hl.conflict_with_artifact_id)
+
     return ProvenanceOut(
         highlight_id=hl.highlight_id,
         event=EventBrief.model_validate(event),
@@ -83,6 +87,7 @@ def get_provenance(
         source_artifact=ArtifactOut.model_validate(source),
         span=hl.source_span,
         quote=extract_text(source.content, hl.source_span),
+        conflict_artifact=ArtifactOut.model_validate(conflict_artifact) if conflict_artifact else None,
     )
 
 
@@ -117,6 +122,14 @@ def update_status(
     hl.status_history = history
     hl.status = new_status
     hl.updated_at = datetime.now()
+
+    # Clinician authority: only a clinician accept/pin marks clinician_confirmed
+    # and triggers a score recompute. Staff actions never change this flag.
+    if ctx.role == "clinician" and new_status in ("accepted", "pinned"):
+        if not hl.feature_flags.get("clinician_confirmed"):
+            hl.feature_flags = {**hl.feature_flags, "clinician_confirmed": True}
+            hl.importance_score = compute_score(hl.feature_flags)
+
     add_audit(
         db,
         actor_id=ctx.user_id,

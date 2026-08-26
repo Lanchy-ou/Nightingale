@@ -65,6 +65,11 @@ class HighlightOut(BaseModel):
     status_history: list = []
     created_at: datetime
     updated_at: datetime
+    entity_type: str | None = None
+    entity_key: str | None = None
+    assertion_value: str | None = None
+    conflict_with_artifact_id: str | None = None
+    review_status: str | None = None
 
 
 class GlanceOut(BaseModel):
@@ -91,6 +96,7 @@ class ProvenanceOut(BaseModel):
     source_artifact: ArtifactOut
     span: dict
     quote: str | None
+    conflict_artifact: ArtifactOut | None = None
 
 
 class CommentOut(BaseModel):
@@ -167,3 +173,17 @@ class DiffOut(BaseModel):
     since_version: int
     to_version: int
     diff: str
+
+
+class SourceIngestRequest(BaseModel):
+    ingestion_key: str
+    artifact_type: Literal["transcript"]
+    content: dict
+
+
+class SessionIngestRequest(BaseModel):
+    session_id: str
+    event_type: Literal["patient_ai_preconsult", "patient_followup"]
+    started_at: datetime
+    ended_at: datetime | None = None
+    content: dict

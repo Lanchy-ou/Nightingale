@@ -9,7 +9,7 @@ from __future__ import annotations
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import HTTPException, RequestValidationError
 
-from .api import audit, comments, events, highlights, notes, patients
+from .api import audit, comments, events, highlights, notes, patients, sources
 from .errors import error_response
 from .role_context import RoleContext, get_role_context
 
@@ -25,6 +25,7 @@ app.include_router(highlights.router)
 app.include_router(notes.router)
 app.include_router(comments.router)
 app.include_router(audit.router)
+app.include_router(sources.router)
 
 
 @app.exception_handler(HTTPException)

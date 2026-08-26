@@ -21,6 +21,7 @@ PERMISSIONS: dict[str, dict[str, bool]] = {
         "read_patient": True,
         "read_events": True,
         "read_artifacts": True,
+        "create_patient_session": True,
     },
     "staff": {
         "read_patient": True,
@@ -33,6 +34,7 @@ PERMISSIONS: dict[str, dict[str, bool]] = {
         "read_audit": True,
         "write_staff_note": True,
         "edit_staff_note": True,
+        "ingest_nurse_transcript": True,
         "comment": True,
         "highlight_status": True,
     },
@@ -47,6 +49,7 @@ PERMISSIONS: dict[str, dict[str, bool]] = {
         "read_audit": True,
         "write_clinician_note": True,
         "edit_clinician_note": True,
+        "ingest_doctor_transcript": True,
         "comment": True,
         "highlight_status": True,
     },
@@ -81,12 +84,7 @@ def require_auth(ctx: RoleContext = Depends(get_role_context)) -> RoleContext:
     return ctx
 
 
-def authorize(
-    ctx: RoleContext,
-    action: str,
-    clinic_id: str | None,
-    patient_id: str | None,
-) -> None:
+def authorize_scope(ctx: RoleContext, clinic_id: str | None, patient_id: str | None) -> None:
     # Cross-clinic and not-own-patient both look like "not found" (no existence leak).
     if clinic_id is not None and ctx.clinic_id != clinic_id:
         raise resource_not_found()
@@ -97,6 +95,14 @@ def authorize(
     ):
         raise resource_not_found()
 
+
+def authorize(
+    ctx: RoleContext,
+    action: str,
+    clinic_id: str | None,
+    patient_id: str | None,
+) -> None:
+    authorize_scope(ctx, clinic_id, patient_id)
     if not PERMISSIONS.get(ctx.role, {}).get(action, False):
         raise HTTPException(status_code=403, detail="Forbidden")
 
