@@ -1,0 +1,40 @@
+"""FastAPI entry point.
+
+Applies role-context parsing to every request (parse only, no enforcement in
+M1). Provides an auxiliary GET /api/me that echoes the resolved RoleContext so
+tests can assert header parsing.
+"""
+from __future__ import annotations
+
+from fastapi import Depends, FastAPI, Request
+from fastapi.exceptions import HTTPException, RequestValidationError
+
+from .api import events, patients
+from .errors import error_response
+from .role_context import RoleContext, get_role_context
+
+app = FastAPI(
+    title="Nightingale API",
+    version="0.1.0",
+    dependencies=[Depends(get_role_context)],
+)
+
+app.include_router(patients.router)
+app.include_router(events.router)
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    code = "not_found" if exc.status_code == 404 else "http_error"
+    return error_response(exc.status_code, code, str(exc.detail))
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    return error_response(422, "validation_error", str(exc))
+
+
+@app.get("/api/me")
+def read_me(ctx: RoleContext = Depends(get_role_context)):
+    """Echo the parsed role context (testability aid; not a security boundary)."""
+    return {"user_id": ctx.user_id, "role": ctx.role, "clinic_id": ctx.clinic_id}
