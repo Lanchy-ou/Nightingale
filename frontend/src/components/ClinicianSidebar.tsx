@@ -7,12 +7,14 @@ export default function ClinicianSidebar({
   selectedPatientId,
   onDashboard,
   onSelectPatient,
+  onLogout,
 }: {
   identity: CurrentIdentity;
   patients: Patient[];
   selectedPatientId: string | null;
   onDashboard: () => void;
   onSelectPatient: (patientId: string) => void;
+  onLogout?: () => void;
 }) {
   const [query, setQuery] = useState('');
   const filtered = useMemo(() => {
@@ -84,6 +86,11 @@ export default function ClinicianSidebar({
         ))}
       </nav>
       <p className="scope-note">Clinic-scoped access · server enforced</p>
+      {onLogout && (
+        <button className="sidebar-logout" onClick={onLogout}>
+          Logout
+        </button>
+      )}
     </aside>
   );
 }

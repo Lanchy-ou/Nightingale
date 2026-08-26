@@ -1,26 +1,32 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { api, DEMO_AUTH, ROLE_USERS, setRole, setSessionIdentity, setUnauthorizedHandler } from './api';
+import type { CurrentIdentity } from './types';
+import AdminInvitesPage from './pages/AdminInvitesPage';
 import ClinicianWorkspacePage from './pages/ClinicianWorkspacePage';
+import LoginPage from './pages/LoginPage';
 import PatientPage from './pages/PatientPage';
 import PatientViewPage from './pages/PatientViewPage';
-import { ROLE_USERS, setRole } from './api';
+import RegisterPage from './pages/RegisterPage';
 
-const PATIENT_ID = 'pat_001';
+const PATIENT_ID = 'pat_001'; // staff/admin pre-C2 minimal demo path
 
-export default function App() {
+// ---------------------------------------------------------------------------
+// Development demo mode. Only active when VITE_DEMO_AUTH=true (the backend
+// additionally requires NANTINGALE_DEMO_AUTH=true). The role toolbar is never
+// part of the product shell and is never a security boundary.
+// ---------------------------------------------------------------------------
+function DemoApp() {
   const [roleIndex, setRoleIndex] = useState(0);
   const selected = ROLE_USERS[roleIndex];
   const roleKey = `${selected.role}:${selected.userId}`;
 
   function changeRole(i: number) {
-    // setRole is synchronous so PatientPage sees the new role on the same render.
     setRole(ROLE_USERS[i].userId, ROLE_USERS[i].role);
     setRoleIndex(i);
   }
 
   return (
     <div className="app">
-      {/* Demo controls are visually and structurally outside every product shell.
-          They are never a security boundary; the backend resolves the DB role. */}
       <div className="demo-toolbar">
         <strong>DEMO CONTROLS</strong>
         <label htmlFor="role-select">Role</label>
@@ -35,18 +41,145 @@ export default function App() {
             </option>
           ))}
         </select>
-        <span>Server-enforced demo identities</span>
+        <span>Legacy header simulation (VITE_DEMO_AUTH only)</span>
       </div>
-      {/* Role-level binary render is permanent: patient never mounts or calls
-          the clinical shell. Staff/Admin keep the pre-C2 minimal demo path. */}
       <div className="product-root" key={roleKey}>
         {selected.role === 'patient' ? (
           <PatientViewPage patientId={PATIENT_ID} roleKey={roleKey} />
         ) : selected.role === 'clinician' ? (
           <ClinicianWorkspacePage roleKey={roleKey} />
         ) : (
-          <PatientPage patientId={PATIENT_ID} roleKey={roleKey} />
+          <PatientPage patientId={PATIENT_ID} roleKey={roleKey} role={selected.role} />
         )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Product mode. Identity comes exclusively from the server-side HttpOnly
+// session cookie: boot restores the session via GET /api/auth/session, any
+// 401 clears state and returns to Login, and logout unmounts the whole
+// product root so no patient/source/comment/draft state can survive.
+// ---------------------------------------------------------------------------
+export default function App() {
+  if (DEMO_AUTH) return <DemoApp />;
+  return <SessionApp />;
+}
+
+function SessionApp() {
+  const [identity, setIdentity] = useState<CurrentIdentity | null>(null);
+  const [booting, setBooting] = useState(true);
+  const [path, setPath] = useState(() => window.location.pathname);
+
+  useEffect(() => {
+    // 401 anywhere in product mode -> clear sensitive state and return to Login.
+    setUnauthorizedHandler(() => {
+      setIdentity(null);
+      setSessionIdentity(null);
+      if (window.location.pathname !== '/login') {
+        window.history.pushState({}, '', '/login');
+      }
+    });
+
+    // Refresh restores identity from the server session, never from localStorage.
+    api
+      .getSession()
+      .then((identity) => {
+        setSessionIdentity(identity);
+        setIdentity(identity);
+      })
+      .catch(() => setIdentity(null))
+      .finally(() => setBooting(false));
+
+    const onPopState = () => setPath(window.location.pathname);
+    window.addEventListener('popstate', onPopState);
+    return () => {
+      window.removeEventListener('popstate', onPopState);
+      setUnauthorizedHandler(null);
+    };
+  }, []);
+
+  const logout = useCallback(async () => {
+    try {
+      await api.logout();
+    } catch {
+      /* session already gone — still clear client state */
+    }
+    setIdentity(null);
+    setSessionIdentity(null);
+    setPath('/login');
+    if (window.location.pathname !== '/login') {
+      window.history.pushState({}, '', '/login');
+    }
+  }, []);
+
+  function navigate(next: string) {
+    window.history.pushState({}, '', next);
+    setPath(next);
+  }
+
+  if (booting) {
+    return <div className="auth-page"><p className="muted">Restoring session…</p></div>;
+  }
+
+  if (!identity) {
+    if (path.startsWith('/register')) return <RegisterPage />;
+    return <LoginPage onAuthenticated={(next) => { setSessionIdentity(next); setIdentity(next); }} />;
+  }
+
+  const role = identity.role ?? '';
+  const productKey = `session:${identity.user_id}:${role}`;
+
+  if (role === 'patient') {
+    return (
+      <div className="app" key={productKey}>
+        <div className="product-root">
+          <PatientViewPage
+            patientId={identity.patient_id ?? ''}
+            roleKey={productKey}
+            onLogout={logout}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  if (role === 'clinician') {
+    return (
+      <div className="app" key={productKey}>
+        <div className="product-root">
+          <ClinicianWorkspacePage roleKey={productKey} onLogout={logout} />
+        </div>
+      </div>
+    );
+  }
+
+  // staff | admin: retained minimal clinical demo path (C2 contract).
+  if (role === 'admin' && path.startsWith('/admin/invites')) {
+    return (
+      <div className="app" key={productKey}>
+        <div className="product-root">
+          <AdminInvitesPage
+            clinicName={identity.clinic_name}
+            onLogout={logout}
+            onBack={() => navigate('/')}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="app" key={productKey}>
+      <div className="product-root">
+        <PatientPage
+          patientId={PATIENT_ID}
+          roleKey={productKey}
+          role={role}
+          onLogout={logout}
+          onOpenInvites={role === 'admin' ? () => navigate('/admin/invites') : undefined}
+        />
       </div>
     </div>
   );

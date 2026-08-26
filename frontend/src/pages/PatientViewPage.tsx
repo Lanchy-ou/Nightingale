@@ -19,9 +19,11 @@ function fmtDate(iso: string | null): string {
 export default function PatientViewPage({
   patientId,
   roleKey,
+  onLogout,
 }: {
   patientId: string;
   roleKey: string;
+  onLogout?: () => void;
 }) {
   const [view, setView] = useState<PatientView | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -86,6 +88,9 @@ export default function PatientViewPage({
           <h1>你好，{view.display_name}</h1>
           <div className="meta">你的个人照护说明</div>
         </div>
+        {onLogout && (
+          <button className="secondary-button pv-logout" onClick={onLogout}>退出登录</button>
+        )}
       </header>
 
       <section className="pv-card pv-primary">

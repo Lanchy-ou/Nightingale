@@ -68,6 +68,9 @@ PERMISSIONS: dict[str, dict[str, bool]] = {
         "read_versions": True,
         "read_audit": True,
         "list_clinic_patients": True,
+        # D1: clinic-scoped invite administration (no cross-clinic invites).
+        "create_invite": True,
+        "list_invites": True,
     },
 }
 

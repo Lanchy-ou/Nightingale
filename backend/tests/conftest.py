@@ -14,6 +14,10 @@ import tempfile
 _tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
 _tmp.close()
 os.environ["NANTINGALE_DB_URL"] = f"sqlite:///{_tmp.name}"
+# Legacy X-User-Id/X-Role header auth is a test/development aid. D1 gates it
+# behind NANTINGALE_DEMO_AUTH (default off); the existing header-based
+# fixtures need it explicitly enabled. Session/cookie tests do not use it.
+os.environ["NANTINGALE_DEMO_AUTH"] = "true"
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402

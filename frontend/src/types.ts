@@ -163,6 +163,44 @@ export interface DoctorConsultResult {
   idempotent_replay: boolean;
 }
 
+// --- D1 Identity, Invite, Login and Session ---
+export interface InviteInfo {
+  invite_id: string;
+  email: string;
+  role: string;
+  patient_id: string | null;
+  created_by: string;
+  created_at: string;
+  expires_at: string;
+  used_at: string | null;
+  status: 'pending' | 'used' | 'expired';
+}
+
+export interface InviteCreated {
+  invite_id: string;
+  email: string;
+  role: string;
+  patient_id: string | null;
+  expires_at: string;
+  invite_link: string;
+}
+
+export interface InvitePreview {
+  status: 'valid' | 'used' | 'expired';
+  email_masked: string;
+  role: string;
+  clinic_name: string;
+  patient_name: string | null;
+  expires_at: string;
+}
+
+export interface RegisterResult {
+  user_id: string;
+  email: string;
+  role: string;
+  clinic_id: string;
+}
+
 // --- Patient View (M6) ---
 export interface PatientViewSummary {
   source_artifact_id: string;

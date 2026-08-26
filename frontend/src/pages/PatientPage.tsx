@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, getCurrentRole } from '../api';
+import { api } from '../api';
 import type { Event, Patient, ProvenanceResult } from '../types';
 import GlancePanel from '../components/GlancePanel';
 import IngestPanel from '../components/IngestPanel';
@@ -10,9 +10,15 @@ import Timeline from '../components/Timeline';
 export default function PatientPage({
   patientId,
   roleKey,
+  role,
+  onLogout,
+  onOpenInvites,
 }: {
   patientId: string;
   roleKey: string;
+  role: string;
+  onLogout?: () => void;
+  onOpenInvites?: () => void;
 }) {
   const [patient, setPatient] = useState<Patient | null>(null);
   const [events, setEvents] = useState<Event[]>([]);
@@ -20,7 +26,6 @@ export default function PatientPage({
   const [provenance, setProvenance] = useState<ProvenanceResult | null>(null);
   const [focusEventId, setFocusEventId] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
-  const role = getCurrentRole();
 
   useEffect(() => {
     let cancelled = false;
@@ -62,6 +67,14 @@ export default function PatientPage({
 
   return (
     <div className="patient-page">
+      <div className="shell-actions">
+        {onOpenInvites && (
+          <button className="secondary-button" onClick={onOpenInvites}>Invites</button>
+        )}
+        {onLogout && (
+          <button className="secondary-button" onClick={onLogout}>Logout</button>
+        )}
+      </div>
       <PatientHeader patient={patient} />
       {role !== 'patient' && (
         <GlancePanel key={`glance-${refreshKey}`} patientId={patientId} onViewSource={handleViewSource} />

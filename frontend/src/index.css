@@ -463,3 +463,76 @@ mark { background: #fde047; padding: 0 2px; border-radius: 2px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; }
 }
+
+/* --- D1 auth pages ------------------------------------------------------- */
+.auth-page {
+  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  padding: 24px; box-sizing: border-box; background:
+    radial-gradient(1200px 500px at 80% -10%, #e2f0ea 0%, transparent 60%),
+    var(--clinical-page);
+}
+.auth-card {
+  width: 100%; max-width: 430px; box-sizing: border-box; padding: 28px;
+  background: var(--clinical-surface); border: 1px solid var(--clinical-border);
+  border-radius: 16px; box-shadow: 0 18px 40px rgba(22, 62, 52, .08);
+}
+.auth-brand { display: flex; gap: 12px; align-items: center; margin-bottom: 18px; }
+.auth-brand h1 { margin: 0; font-size: 21px; }
+.auth-brand p { margin: 2px 0 0; }
+.auth-brand-mark {
+  width: 44px; height: 44px; display: grid; place-items: center; flex: none;
+  background: var(--clinical-brand); color: #fff; border-radius: 12px;
+  font-size: 22px; font-weight: 700;
+}
+.auth-card h2 { margin: 0 0 14px; font-size: 17px; }
+.auth-form { display: flex; flex-direction: column; gap: 7px; }
+.auth-form label { margin-top: 8px; font-size: 12px; font-weight: 600; color: #46584f; }
+.auth-form input, .auth-form select {
+  padding: 9px 11px; border: 1px solid var(--clinical-border); border-radius: 8px; background: #fff;
+}
+.auth-submit { margin-top: 16px; padding: 10px 14px; }
+.auth-foot { margin-top: 14px; line-height: 1.5; }
+.link-btn { border: 0; background: transparent; color: var(--clinical-brand); cursor: pointer; font-size: 12px; padding: 6px 0; text-decoration: underline; }
+.demo-accounts { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--clinical-border); }
+.demo-account-row {
+  width: 100%; display: flex; justify-content: space-between; gap: 10px;
+  padding: 7px 9px; margin-bottom: 4px; border: 1px solid var(--clinical-border);
+  border-radius: 8px; background: #fbfdfc; cursor: pointer; text-align: left;
+}
+.demo-account-row:hover { background: var(--clinical-brand-soft); }
+.demo-account-row span { color: var(--clinical-muted); font-size: 12px; }
+
+.invite-terminal { padding: 6px 0 2px; }
+.invite-terminal h2 { color: #7a2e2e; }
+.invite-terminal p { color: var(--clinical-muted); line-height: 1.55; font-size: 13px; }
+.invite-terminal .primary-button, .invite-terminal .secondary-button { margin-top: 6px; margin-right: 8px; }
+.invite-summary { display: grid; gap: 8px; margin-bottom: 14px; padding: 12px; background: #f4f9f7; border: 1px solid var(--clinical-border); border-radius: 10px; }
+.invite-summary p { margin: 0; display: flex; flex-direction: column; gap: 2px; }
+
+/* --- admin invite management -------------------------------------------- */
+.admin-invites { max-width: 980px; margin: 0 auto; padding: 28px 22px 60px; }
+.admin-invites-head { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; flex-wrap: wrap; margin-bottom: 20px; }
+.admin-invites-head h1 { margin: 0 0 6px; font-size: 24px; }
+.admin-invites-head p { margin: 0; max-width: 560px; }
+.admin-invites-actions { display: flex; gap: 8px; }
+.admin-invite-card { max-width: none; margin-bottom: 18px; }
+.invite-created { margin-top: 16px; padding: 12px; background: #eef7f3; border: 1px solid #cde4db; border-radius: 10px; font-size: 13px; }
+.invite-created code { display: block; margin: 8px 0; padding: 7px 9px; background: #fff; border: 1px solid var(--clinical-border); border-radius: 7px; word-break: break-all; }
+.invite-created p { margin: 8px 0 0; }
+.invite-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.invite-table th, .invite-table td { text-align: left; padding: 8px 9px; border-bottom: 1px solid var(--clinical-border); vertical-align: top; }
+.invite-table th { color: var(--clinical-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+.invite-status { padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+.invite-status-pending { background: #e8f3ee; color: #1e6a57; }
+.invite-status-used { background: #eef1f5; color: #56606a; }
+.invite-status-expired { background: #fdf0e7; color: #a05a1f; }
+
+/* --- shell logout / admin actions --------------------------------------- */
+.shell-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 10px 14px 0; }
+.sidebar-logout {
+  margin-top: 10px; width: 100%; padding: 8px 12px; border: 1px solid #cbdad4;
+  border-radius: 8px; background: #fff; color: #315e50; cursor: pointer; font-size: 12px; font-weight: 600;
+}
+.sidebar-logout:hover { background: #f0f7f4; }
+.pv-logout { margin-left: auto; }
+.pv-header { display: flex; align-items: center; gap: 12px; }

@@ -133,15 +133,15 @@ class AuditLogOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     audit_id: str
-    actor_id: str
-    actor_role: str
+    actor_id: str | None
+    actor_role: str | None
     action: str
     target_type: str
     target_id: str
     from_version: int | None
     to_version: int | None
-    clinic_id: str
-    patient_id: str
+    clinic_id: str | None
+    patient_id: str | None
     event_id: str | None
     created_at: datetime
 
@@ -321,3 +321,91 @@ class PatientViewOut(BaseModel):
     instructions: list[PatientViewInstruction]
     upcoming: list[PatientViewUpcoming]
     sessions: list[PatientViewSession]
+
+
+# --- D1 Identity, Invite, Login and Session ---------------------------------
+INVITE_ROLES = ("patient", "staff", "clinician", "admin")
+
+
+class InviteCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    email: str = Field(min_length=3, max_length=255)
+    role: Literal["patient", "staff", "clinician", "admin"]
+    # Required for patient invites (bound to the same clinic); forbidden for
+    # clinical roles. The inviter can never choose a clinic — it is ctx.clinic_id.
+    patient_id: str | None = None
+
+
+class InviteCreatedOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    invite_id: str
+    email: str
+    role: str
+    patient_id: str | None
+    expires_at: datetime
+    # One-time copy link carrying the raw token; never returned again.
+    invite_link: str
+
+
+class InviteOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    invite_id: str
+    email: str
+    role: str
+    patient_id: str | None
+    created_by: str
+    created_at: datetime
+    expires_at: datetime
+    used_at: datetime | None
+    status: Literal["pending", "used", "expired"]
+
+
+class InvitePreviewOut(BaseModel):
+    """Minimal invite context for the accept-invite page.
+
+    A token the caller actually holds may reveal its own binding; an unknown
+    token gets the uniform 404 (no invite existence enumeration).
+    """
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["valid", "used", "expired"]
+    email_masked: str
+    role: str
+    clinic_name: str
+    patient_name: str | None
+    expires_at: datetime
+
+
+class RegisterRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    token: str = Field(min_length=1)
+    password: str = Field(min_length=8, max_length=128)
+    # Display name for clinical roles. For patient invites the name is ignored:
+    # the bound Patient record is authoritative (invite binding wins).
+    name: str | None = Field(default=None, max_length=255)
+
+
+class RegisterOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user_id: str
+    email: str
+    role: str
+    clinic_id: str
+
+
+class LoginRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    email: str = Field(min_length=3, max_length=255)
+    password: str = Field(min_length=1, max_length=256)
+
+
+class LogoutOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["logged_out"]

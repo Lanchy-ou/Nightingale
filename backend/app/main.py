@@ -10,7 +10,17 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import HTTPException, RequestValidationError
 from sqlalchemy.orm import Session
 
-from .api import audit, comments, events, highlights, notes, patient_view, patients, sources
+from .api import (
+    audit,
+    auth,
+    comments,
+    events,
+    highlights,
+    notes,
+    patient_view,
+    patients,
+    sources,
+)
 from .db import get_db
 from .errors import error_response
 from .models import Clinic, User
@@ -23,6 +33,7 @@ app = FastAPI(
     dependencies=[Depends(get_role_context)],
 )
 
+app.include_router(auth.router)
 app.include_router(patients.router)
 app.include_router(patient_view.router)
 app.include_router(events.router)

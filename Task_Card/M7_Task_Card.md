@@ -5,7 +5,7 @@
 > 前置状态：M1–M6 + C1/C2 全部 Complete。
 > 完成验证：161 pytest 绿；frontend production build 绿；Glance Layer A P95 ≈ 3.8 ms（`backend/docs/perf_baseline.md`）。
 >
-> **阶段边界说明**：本卡是 Core Complete 前最后一个工程卡。只做 warm-path 性能取证 + 核心硬化，不加新功能。M7 通过后进入 Milestone 6（feature freeze → Technical Brief → demo video → 打包提交）。
+> **历史阶段边界说明**：本卡只做 warm-path 性能取证 + 核心硬化，不加新功能。M7 完成后原计划进入 Milestone 6；该后续安排已被 owner 的产品可用性复核更新为 Phase D Product Completion，见 `docs/phase_d_product_completion_plan.md`。M7 本身的范围与完成证据不变。
 
 ---
 
@@ -158,7 +158,7 @@ H3 处理原则：highlight status 状态机（`status_transitions`）已是确�
 
 > **M7 / Performance + Core Hardening Complete**
 >
-> 至此功能面 Core Complete（以 M1–M7 + C1/C2 全部 exit gate 与 required tests 全绿为准），立即进入 Milestone 6 feature freeze。
+> 至此当时定义的工程 Core Complete（以 M1–M7 + C1/C2 全部 exit gate 与 required tests 全绿为准）。原“立即进入 Milestone 6 feature freeze”安排已被后续 owner 产品可用性复核取代，当前执行 Phase D。
 
 ---
 
@@ -182,7 +182,9 @@ H3 处理原则：highlight status 状态机（`status_transitions`）已是确�
 
 ---
 
-## 11. 后续阶段预警（Milestone 6 — 截止前 8–10 小时 feature freeze）
+## 11. 历史后续安排（已由 Phase D 取代）
+
+> 以下是 M7 完成时的原始交付安排，保留作为历史记录；当前不得据此跳过 Phase D D1-D5。
 
 M7 之后不再有功能开发，剩余全部留给交付物：
 

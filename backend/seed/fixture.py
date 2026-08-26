@@ -15,7 +15,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from app.models import Artifact, Clinic, Event, Patient, User
+from app.models import Artifact, Clinic, Event, Patient, User, UserCredential
+from app.auth_security import hash_password
 
 # ---------------------------------------------------------------------------
 # IDs
@@ -38,6 +39,31 @@ USER_PATIENT_B_ID = "usr_patient_02"
 CLINIC_B_ID = "clinic_002"
 CLINIC_B_NAME = "Other Demo Clinic"
 USER_CLINICIAN_B_ID = "usr_clinician_02"
+
+# ---------------------------------------------------------------------------
+# D1 demo credentials (synthetic demo only — never real accounts).
+# One shared demo password, Argon2id-hashed exactly once per process (hashing
+# is deliberately expensive, and the seed runs before every test).
+# ---------------------------------------------------------------------------
+DEMO_PASSWORD = "nightingale-demo"
+
+DEMO_EMAILS = {
+    USER_PATIENT_ID: "alice@demo.clinic",
+    USER_STAFF_ID: "staff@demo.clinic",
+    USER_CLINICIAN_ID: "doctor@demo.clinic",
+    USER_ADMIN_ID: "admin@demo.clinic",
+    USER_PATIENT_B_ID: "ben@demo.clinic",
+    USER_CLINICIAN_B_ID: "doctor@other-demo.clinic",
+}
+
+_SEED_PASSWORD_HASH: str | None = None
+
+
+def _seed_hash() -> str:
+    global _SEED_PASSWORD_HASH
+    if _SEED_PASSWORD_HASH is None:
+        _SEED_PASSWORD_HASH = hash_password(DEMO_PASSWORD)
+    return _SEED_PASSWORD_HASH
 
 EVT_HIST_2025 = "evt_hist_2025"
 EVT_HIST_2026 = "evt_hist_2026"
@@ -227,6 +253,25 @@ def build_patients() -> list[Patient]:
     return [
         Patient(patient_id=PATIENT_ID, clinic_id=CLINIC_ID, name=PATIENT_NAME),
         Patient(patient_id=PATIENT_B_ID, clinic_id=CLINIC_ID, name=PATIENT_B_NAME),
+    ]
+
+
+def build_credentials() -> list[UserCredential]:
+    """D1: seeded demo accounts so every role can log in (shared demo password)."""
+    from datetime import datetime
+
+    now = datetime(2026, 8, 26, 8, 0)
+    hash_value = _seed_hash()
+    return [
+        UserCredential(
+            user_id=user_id,
+            email_normalized=email,
+            password_hash=hash_value,
+            created_at=now,
+            password_changed_at=now,
+            disabled_at=None,
+        )
+        for user_id, email in DEMO_EMAILS.items()
     ]
 
 

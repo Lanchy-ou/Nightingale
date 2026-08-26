@@ -910,7 +910,7 @@ C2 (Clinician Workspace + Consult Review UX) is complete. Phase 6 Performance + 
 
 ## 23. M7 Implementation Status（2026-08-26）
 
-M7 (Performance + Core Hardening) is complete. Milestone 6 (feature freeze → Technical Brief → demo video → submission) is the remaining work. Conventions added:
+M7 (Performance + Core Hardening) is complete. At M7 close the next planned work was Milestone 6 deliverables; owner review has since replaced that sequence with Phase D in §24. M7 conventions added:
 
 - **H1 Glance ordering determinism**: the read sort key is `(status != pinned, -importance_score, created_at, highlight_id)` in `backend/app/api/highlights.py`; `tests/test_glance_ordering.py` locks the final tiebreak and pinned priority.
 - **H2 write-after-read**: clinician accept/pin still recomputes `clinician_confirmed` + score at write time and the next Glance read reflects it (locked in `test_glance_ordering.py`).
@@ -919,3 +919,48 @@ M7 (Performance + Core Hardening) is complete. Milestone 6 (feature freeze → T
 - **Measurement**: `backend/scripts/measure_glance.py` samples glance / events / patient-view (100 samples, 10 warm-up) on a throwaway seeded SQLite, reporting Layer A (TestClient in-process) and Layer B (uvicorn HTTP) and writes `backend/docs/perf_baseline.md`. Glance Layer A P95 ≈ 3.8 ms on this machine; no index/cache work was needed.
 - **Honesty clause**: the baseline explicitly states single-user local SQLite numbers only prove the warm path has no synchronous LLM/full-history scan, not production capacity.
 - **Regression**: backend **161 passed**, frontend TypeScript/Vite production build passed.
+
+---
+
+## 24. Current Execution Phase D - Product Completion（2026-08-26）
+
+Owner review supersedes the prior "M7 -> immediate deliverables" sequence. The current system is classified as a strong technical vertical slice, not yet a usable product Demo. Phase D is now active; architecture-diagram, Technical Brief, demo recording and Bonus work remain paused until D1-D5 complete.
+
+Canonical plan and task order:
+
+1. `docs/phase_d_product_completion_plan.md` - Phase D master contract;
+2. `Task_Card/D1_Identity_Access_Task_Card.md` - invite/register/login/session/logout;
+3. `Task_Card/D2_Care_Tasks_Patient_Experience_Task_Card.md` - first-class Task lifecycle + patient product;
+4. `Task_Card/D3_Transcript_Reliability_Task_Card.md` - raw import preview + frozen transcript evaluation;
+5. `Task_Card/D4_Clinician_Copilot_Task_Card.md` - patient-scoped, evidence-bound, draft-only Copilot;
+6. `Task_Card/D5_Security_Integration_Task_Card.md` - TLS/at-rest evidence + cross-role E2E/usability gate.
+
+Permanent Phase D decisions:
+
+- **Identity**: clinical roles and patients register through scoped, single-use invites. Public self-selection of clinician/admin role and patient record search/claim are forbidden. Server-side session + DB User replace demo headers as product identity; demo headers may exist only behind an explicit development flag.
+- **Task authority**: Task is a first-class entity. Patient may report an assigned patient-visible Task as `reported_done`; only staff/clinician may confirm `completed`. Task transitions are audited, scope-checked, provenance-linked and use deterministic optimistic concurrency.
+- **Patient product**: patient shell is `Today | Care Plan | Check-in | Visit Summaries`, implemented through explicit allowlisted projections. It never becomes a filtered copy of the clinical workspace.
+- **Transcript boundary**: raw text is normalized without persistence/LLM, shown in a review preview, and blocked on unknown/ambiguous speakers. Only user-confirmed continuous `doctor|patient` canonical segments create an immutable Transcript and enter the existing redaction/LLM/provenance path. No audio/ASR/OCR/EHR import.
+- **Copilot authority**: Copilot reads only the authorized current patient, returns server-validated evidence for every clinical fact, marks inference/unknown, and creates preview drafts only. It never directly writes a note, completes a Task, changes author, or treats provider output as permission/provenance authority.
+- **Security evidence**: TLS, database/volume/backup encryption at rest, secure cookies, secrets and restore behavior must be demonstrated on the current deployment. Documentation-only claims do not pass. SQLite remains acceptable for unit tests; deployment database choice is a D5 Decision Gate.
+- **Gate order**: D1 -> D2 -> D3 -> D4 -> D5 by default. D2 UI design and D3 corpus preparation may overlap, but D4 cannot start before D2/D3 Exit Gates. No Task Card may relax RBAC, provenance, clinician authority, patient anti-leak or raw-source preservation.
+- **Out of scope**: real PHI, production medical use, Voice/ASR, model training, self-learning ranking, data decay, appointment/billing/prescription systems, multi-clinic membership and a dedicated Nurse Workspace.
+
+---
+
+## 24. D1 Implementation Status（2026-08-26）
+
+D1 (Identity, Invite, Login and Session) is complete. D2 is the next task card. Conventions added:
+
+- **New tables**: `invites` / `user_credentials` / `auth_sessions` in `backend/app/models.py` (model classes `Invite` / `UserCredential` / `AuthSession`). `AuditLog.actor_id/actor_role/clinic_id/patient_id` became nullable for auth events (e.g. unknown-email `login_failure`); clinical events always populate them.
+- **Passwords**: Argon2id via `argon2-cffi` (MIT, bundled reference impl CC0/Apache-2.0; ATTRIBUTION updated) in `backend/app/auth_security.py` (`hash_password`/`verify_password`). Plaintext passwords never touch DB, logs or AuditLog.
+- **Tokens**: invite and session tokens are 256-bit `secrets.token_urlsafe(32)`; only SHA-256 hashes are persisted (`hash_token`). The raw invite link is returned exactly once from `POST /api/auth/invites`.
+- **Auth API** (`backend/app/api/auth.py`): `POST /api/auth/invites` (admin, clinic-scoped; patient invites MUST bind a same-clinic patient; clinical invites MUST NOT carry patient_id), `GET /api/auth/invites` (admin list, no tokens), `GET /api/auth/invites/{token}/preview` (masked email/role/clinic/patient; unknown token → uniform 404; used/expired distinct only for a held token), `POST /api/auth/register` (invite consumption + User + UserCredential in ONE transaction; invite role/clinic/patient binding can never be overridden; patient register links the EXISTING Patient record and never creates a second one; no auto-login), `POST /api/auth/login` (uniform 401 for unknown email / wrong password / disabled; issues HttpOnly + SameSite=Lax cookie, `Secure` gated by `NANTINGALE_SECURE_COOKIES=true`), `POST /api/auth/logout` (atomic conditional UPDATE revoke + cookie clear), `GET /api/auth/session` (identity restore for refresh).
+- **RoleContext rework** (`backend/app/role_context.py`, permanent): resolution order per request = (1) valid server-side session cookie → DB User (role/clinic/patient always from DB; disabled credential / expired / revoked → unauthenticated); (2) legacy `X-User-Id/X-Role` ONLY when `NANTINGALE_DEMO_AUTH=true` (default off; X-Role mismatch still hard-403); (3) unauthenticated. A session cookie wins over headers; stale headers can never escalate. `last_seen_at` refreshes throttled (60s).
+- **RBAC additions**: `create_invite`/`list_invites` are admin-only in `PERMISSIONS` (`backend/app/authz.py`). Clinic comes from the inviter's session — never from the request.
+- **Seed**: all 6 fixture users get Argon2id credentials sharing demo password `nightingale-demo` (hash computed once per process); demo emails in `fixture.DEMO_EMAILS` (`doctor@demo.clinic` clinician, `staff@…`, `alice@…` patient, `admin@…`, plus isolation users). `seed.py` clears D1 tables FK-safely.
+- **Tests**: `tests/conftest.py` sets `NANTINGALE_DEMO_AUTH=true` for the existing header fixtures (zero regression, 161 legacy tests green). New files `tests/test_auth_invites.py` (24), `tests/test_auth_sessions.py` (19), `tests/test_auth_routing_scope.py` (13), plus seed credential integrity. **218 backend tests green**; frontend TypeScript/Vite production build green.
+- **Frontend**: product mode (`VITE_DEMO_AUTH` unset, default) boots via `GET /api/auth/session`, renders `LoginPage`/`RegisterPage` (valid/used/expired/invalid states) when unauthenticated, and routes by session role: patient → `PatientViewPage` (patientId from identity), clinician → `ClinicianWorkspacePage`, staff → minimal `PatientPage`, admin → `PatientPage` + `AdminInvitesPage` (`/admin/invites`). Any 401 clears identity and returns to Login; logout unmounts the whole product root (drafts/source/comments cleared). No role is ever read from localStorage. Demo toolbar + header simulation require `VITE_DEMO_AUTH=true` AND backend `NANTINGALE_DEMO_AUTH=true`.
+- **Audit actions added**: `invite_created`, `register`, `login_success`, `login_failure`, `logout` (metadata only; failed-login emails are never logged).
+- **README**: Demo auth flow, demo accounts, env vars, and the demo-vs-production identity boundary are documented (§7 + §15).
+- **Live E2E verified**: invite → register → login → session → logout, patient binding (no second Patient row), cross-clinic uniform 404, seeded four-role logins all exercised over real HTTP (uvicorn + curl).

@@ -17,12 +17,15 @@ from app.models import (
     Artifact,
     ArtifactVersion,
     AuditLog,
+    AuthSession,
     Clinic,
     Comment,
     Event,
     Highlight,
+    Invite,
     Patient,
     User,
+    UserCredential,
 )
 
 from . import fixture
@@ -56,8 +59,12 @@ def _backfill_versions(db: Session) -> None:
 
 
 def seed(db: Session) -> None:
-    # Clear in FK-safe order (children first).
+    # Clear in FK-safe order (children first). D1 identity tables reference
+    # users/patients/clinics and are cleared before them.
     db.execute(delete(AuditLog))
+    db.execute(delete(AuthSession))
+    db.execute(delete(UserCredential))
+    db.execute(delete(Invite))
     db.execute(delete(Comment))
     db.execute(delete(ArtifactVersion))
     db.execute(delete(Highlight))
@@ -70,6 +77,7 @@ def seed(db: Session) -> None:
     db.add_all(fixture.build_clinics())
     db.add_all(fixture.build_users())
     db.add_all(fixture.build_patients())
+    db.add_all(fixture.build_credentials())
     db.add_all(fixture.build_events())
     db.add_all(fixture.build_artifacts())
     db.commit()

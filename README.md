@@ -347,7 +347,7 @@ Patient View 不是完整医生视图的复制。
 
 ### 4.4 当前阶段：Clinician New Consult（Phase C）
 
-> 状态：**Phase C Complete（C1 Backend + C2 Clinician Workspace）。** M1–M6 保持完成；下一阶段为 Phase 6 Performance + Core Hardening。
+> 状态：**Phase C Complete（C1 Backend + C2 Clinician Workspace），M7 Performance + Core Hardening 亦已完成。** 当前进入 Phase D Product Completion，详见 `docs/phase_d_product_completion_plan.md`。
 
 当前前端仍是用于验证功能链路的单患者 Demo。下一阶段不另建 transcript 子系统，而是在现有 Event / Artifact / AI / provenance / comment 能力上完成医生端真实工作流：
 
@@ -520,6 +520,9 @@ pin unresolved_task
 - 权限必须 server-side enforced；
 - UI 隐藏按钮不能作为安全控制。
 
+**D1 身份进入（2026-08-26）**：产品模式下的身份完全来自 server-side session
+（HttpOnly cookie），不再接受 `X-User-Id/X-Role` 头。见 §15.4 Demo auth 与生产身份边界。
+
 ---
 
 ## 8. Revision / Collaboration
@@ -676,8 +679,8 @@ Bonus：
 - 前端：React 18 + Vite + TypeScript（SPA，调用 FastAPI JSON API）
 - LLM：DeepSeek（经 anthropic SDK，base_url / key 用环境变量注入）；deterministic stub 兜底，demo / 测试不依赖外部 API 实时可用
 - 测试：pytest（required tests 均为 `.py`）
-- 安全：TLS in transit（文档化）+ at-rest 用 `cryptography` 对 PHI 字段做 AES-GCM 加密
-- 角色：MVP 不做完整认证，用 server-side role context 注入（可测试），RBAC 服务端强制
+- 身份：D1 真实 Demo 身份流程（invite → register → login → HttpOnly session → logout）；密码 Argon2id 哈希，invite/session token 只存 SHA-256 哈希；TLS in transit 与 encryption at rest 是 D5 的部署证据目标（当前不做字段级加密声明）
+- 角色：产品模式不再接受 `X-User-Id/X-Role` 头；RBAC 服务端强制
 
 ### 目录结构
 
@@ -734,13 +737,60 @@ cd backend
 .venv/Scripts/python.exe -m pytest        # 覆盖第 12 节 required micro-tests
 ```
 
-> 当前进度：M1–M6、Phase C（C1+C2）与 **M7（Performance + Core Hardening）** 已落地。后端全量为 **161 passed**，TypeScript/Vite production build 通过；warm-path Glance Layer A P95 ≈ 3.8 ms（`backend/docs/perf_baseline.md`）。下一阶段为 **Milestone 6 feature freeze → Technical Brief → demo video → 打包提交**。
+> 当前进度：M1–M7、Phase C（C1+C2）与 **D1（Identity, Invite, Login and Session）** 已落地。后端全量为 **218 passed**，TypeScript/Vite production build 通过；warm-path Glance Layer A P95 ≈ 3.8 ms（`backend/docs/perf_baseline.md`）。剩余 Phase D 工作：D2 Task + Patient Experience、D3 Transcript Reliability、D4 evidence-bound Clinician Copilot、D5 TLS/at-rest 与跨角色集成。总方案见 `docs/phase_d_product_completion_plan.md`。
 
 架构约定（记录确切位置，随阶段更新）：
 
 - **PHI redaction 发生位置**：`backend/app/redaction.py`（`redact_content` / `restore_placeholders`）。在 `backend/app/ai_pipeline.py` 中，所有文本在进入 provider 之前先经 `redact_content`（姓名 / IC·ID / 手机号）；`placeholder_mapping` 仅存在于单次 pipeline 内存，不进 LLM / 日志 / DB。AI summary 与 highlights 由 `persist_derived` 原子写入（raw source 先落库、永不被覆盖）。
 - **RBAC 强制点**：所有权限判断在 server-side 完成，集中在 `backend/app/authz.py`（`authorize(action, resource)` + `PERMISSIONS` 矩阵）与 `backend/app/role_context.py`（DB 为身份/角色唯一权威，`X-Role` 只能作 demo 一致性断言，不一致即拒绝，不可提权）。每个端点经 `require_auth`（401）+ `authorize`（同院无权限 403 / 跨院或非本人 404）；不存在、跨院和非本人资源使用相同 404 body，避免存在性探测。UI 只做展示裁剪，不作为安全边界，角色切换会重新挂载整个 patient workspace 以清除敏感状态。
 - **LLM 客户端出口**：`backend/app/llm_client.py`（`LLMClient` protocol）是唯一 provider 出口，只能接收 `RedactedContent`。API 默认 `deepseek`（Gate 0 `LIVE_VERIFIED`，详见 `backend/docs/gate0_provider_status.md`）；无 key / provider 出错 / schema 非法时明确降级到 deterministic fallback。provider 由 `NANTINGALE_LLM_PROVIDER` 选择，key 只从环境变量读取，永不打印/入库。
+
+### Demo auth（D1）：Invite → Register → Login → Session → Logout
+
+产品模式的进入流程是真实身份流程（`backend/app/api/auth.py` + `backend/app/auth_security.py`）：
+
+```text
+Admin 创建 clinic invite（一次性链接，不发送真实邮件）
+  -> 被邀请者打开 /register?token=…（只预览掩码邮箱/角色/clinic，无存在性枚举）
+  -> 注册：invite 消耗 + User + UserCredential 在同一 transaction；
+     注册者不能覆盖 invite 的 role/clinic/patient binding；
+     patient invite 只能把新登录绑定到既有 Patient 记录，绝不创建第二条纵向记录
+  -> 登录：Argon2id 校验（argon2-cffi），未知邮箱/错误密码/禁用账号返回同一 401 body
+  -> 会话：256-bit 随机 token 只存 SHA-256 哈希，HttpOnly + SameSite=Lax cookie
+     （部署 HTTPS 后设 NANTINGALE_SECURE_COOKIES=true 加 Secure）
+  -> 每次请求都重新解析 cookie → DB User（role/clinic/patient 全来自 DB）
+  -> 登出：条件 UPDATE 原子 revoke，客户端 cookie 同时清除
+```
+
+内置 Demo 账号（synthetic，密码相同 `nightingale-demo`；见 `backend/seed/fixture.py`）：
+
+| 角色 | 邮箱 | 登录后进入 |
+|---|---|---|
+| Clinician | doctor@demo.clinic | 三栏 Clinician Workspace |
+| Staff | staff@demo.clinic | 最小临床 PatientPage |
+| Patient | alice@demo.clinic | 独立 Patient View（pat_001） |
+| Admin | admin@demo.clinic | PatientPage + Invite 管理页（`/admin/invites`） |
+
+相关环境变量（后端）：
+
+```text
+NANTINGALE_DEMO_AUTH=true          # 显式开启 legacy X-User-Id/X-Role 头模式（默认关闭；测试/开发专用）
+NANTINGALE_SESSION_TTL_HOURS=12    # session 有效期（默认 12 小时）
+NANTINGALE_INVITE_TTL_DAYS=7       # invite 有效期（默认 7 天）
+NANTINGALE_SECURE_COOKIES=true     # HTTPS 部署后开启 cookie Secure 标志
+```
+
+前端环境变量（`frontend/.env`）：
+
+```text
+VITE_DEMO_AUTH=true                # 前端与后端 demo 模式需同时开启；默认关闭
+```
+
+**Demo auth 与生产身份验证的边界（诚实声明）**：
+
+- 密码哈希（Argon2id）、token 哈希、server-side session、revoke/expiry、cookie 标志、单次 invite、注册绑定和 AuditLog 都是真实实现，不以明文落库/入日志；
+- 属于 Demo 的：不发真实邮件/SMS（admin 复制一次性链接）、无 MFA/SSO/OAuth、无 forgot-password（可 admin 重新邀请）、无跨 clinic membership、无生产 KYC/执照校验；
+- 未做：TLS 与 at-rest 加密的部署证据（D5 范围）、生产 PostgreSQL、真实 PHI。
 
 ### DeepSeek API key 放在哪里
 

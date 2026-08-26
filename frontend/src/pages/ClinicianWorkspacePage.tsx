@@ -316,7 +316,7 @@ function PatientWorkspace({
   );
 }
 
-export default function ClinicianWorkspacePage({ roleKey }: { roleKey: string }) {
+export default function ClinicianWorkspacePage({ roleKey, onLogout }: { roleKey: string; onLogout?: () => void }) {
   const [identity, setIdentity] = useState<CurrentIdentity | null>(null);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [route, setRoute] = useState<ClinicalRoute>(() => parseRoute());
@@ -372,6 +372,7 @@ export default function ClinicianWorkspacePage({ roleKey }: { roleKey: string })
         selectedPatientId={selectedPatientId}
         onDashboard={() => navigate({ kind: 'dashboard' })}
         onSelectPatient={(patientId) => navigate({ kind: 'patient', patientId, mode: 'glance' })}
+        onLogout={onLogout}
       />
       {route.kind === 'dashboard' ? (
         <div className="workspace-area dashboard-area">

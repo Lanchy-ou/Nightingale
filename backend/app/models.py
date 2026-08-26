@@ -54,6 +54,12 @@ AUDIT_ACTIONS = (
     "source_ingest",
     "ai_generate",
     "ai_fallback",
+    # D1 identity/access (metadata only — never secrets, passwords or tokens).
+    "invite_created",
+    "register",
+    "login_success",
+    "login_failure",
+    "logout",
 )
 
 
@@ -199,16 +205,85 @@ class AuditLog(Base):
     __tablename__ = "audit_logs"
 
     audit_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    actor_id: Mapped[str] = mapped_column(
-        String(64), ForeignKey("users.user_id"), nullable=False
+    # Nullable since D1: auth events (e.g. login_failure for an unknown email)
+    # may have no resolved actor, role, clinic or patient context. Clinical
+    # events always populate these fields. No secrets are ever stored.
+    actor_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("users.user_id"), nullable=True
     )
-    actor_role: Mapped[str] = mapped_column(String(32), nullable=False)
+    actor_role: Mapped[str | None] = mapped_column(String(32), nullable=True)
     action: Mapped[str] = mapped_column(String(32), nullable=False)
     target_type: Mapped[str] = mapped_column(String(16), nullable=False)
     target_id: Mapped[str] = mapped_column(String(64), nullable=False)
     from_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
     to_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    clinic_id: Mapped[str] = mapped_column(String(64), nullable=False)
-    patient_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    clinic_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    patient_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     event_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class Invite(Base):
+    """Clinic-scoped registration invite (D1).
+
+    - clinician/staff/admin join only through a clinic invite;
+    - a patient invite is pre-bound to clinic_id + patient_id;
+    - only the SHA-256 hash of the one-time token is persisted;
+    - the raw token is returned exactly once, embedded in the invite link.
+    """
+    __tablename__ = "invites"
+
+    invite_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    clinic_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("clinics.clinic_id"), nullable=False, index=True
+    )
+    email: Mapped[str] = mapped_column(String(255), nullable=False)
+    email_normalized: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    role: Mapped[str] = mapped_column(String(32), nullable=False)
+    # Required for patient invites; NULL for clinical roles.
+    patient_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("patients.patient_id"), nullable=True
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_by: Mapped[str] = mapped_column(
+        String(64), ForeignKey("users.user_id"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class UserCredential(Base):
+    """Login credential (D1). Argon2id password hash only — never plaintext."""
+    __tablename__ = "user_credentials"
+
+    user_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("users.user_id"), primary_key=True
+    )
+    email_normalized: Mapped[str] = mapped_column(
+        String(255), nullable=False, unique=True
+    )
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    password_changed_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    disabled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class AuthSession(Base):
+    """Server-side login session (D1).
+
+    The bearer token travels only in the HttpOnly cookie; the database stores
+    only its SHA-256 hash. Expiry, revocation and account disablement are all
+    enforced server-side on every request.
+    """
+    __tablename__ = "auth_sessions"
+
+    session_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("users.user_id"), nullable=False, index=True
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)

@@ -6,7 +6,7 @@
 >
 > 当前原则：**先打通一条真实、可验证的端到端闭环，再扩展功能；required gates 先于 bonus，正确性 / provenance / RBAC 先于 UI polish。**
 >
-> **当前执行状态（2026-08-26）**：M1–M6、Phase C（C1+C2）与 M7（Performance + Core Hardening）已完成（161 pytest、frontend production build、Glance Layer A P95 ≈ 3.8 ms）；当前进入 Milestone 6 feature freeze（Technical Brief → demo video → 打包提交）。Phase C/M7 只做产品化与性能取证，未增加 Voice、Task、Doctor AI Assistant 或 Nurse Workspace。
+> **当前执行状态（2026-08-26）**：M1–M6、Phase C（C1+C2）与 M7（Performance + Core Hardening）已完成（161 pytest、frontend production build、Glance Layer A P95 ≈ 3.8 ms）。经 owner 复核，当前成果被重新定义为“技术纵切原型”，不再直接进入提交材料阶段；当前执行 **Phase D Product Completion**（真实 Demo 身份、Task + Patient Experience、Transcript Reliability、evidence-bound Clinician Copilot、安全与集成）。总方案见 `docs/phase_d_product_completion_plan.md`。
 
 ---
 
@@ -1239,7 +1239,7 @@ Subject:  Nightingale 72HR Build -- <Your Name>
 
 以 2026-08-25 22:31 SGT 计，距离截止约 **67 小时**。不应把 67 小时全部规划成开发时间，必须给 integration、视频和提交留 buffer。
 
-> 2026-08-26 状态更新：原 Milestone 1–4、M5 longitudinal data、M6 Patient View、Phase C（C1/C2）与 M7（Performance + Core Hardening）已完成。当前执行顺序更新为 **Milestone 6 feature freeze → Freeze/Deliverables**；下列早期里程碑保留为历史计划记录。
+> 2026-08-26 状态更新：原 Milestone 1–4、M5 longitudinal data、M6 Patient View、Phase C（C1/C2）与 M7（Performance + Core Hardening）已完成。原“直接进入 Milestone 6 deliverables”安排已被 owner 的产品可用性复核取代；当前执行 `docs/phase_d_product_completion_plan.md` 的 D1-D5。下列早期里程碑保留为历史计划记录。
 
 ## Milestone 1 — 最迟 8 月 26 日上午
 

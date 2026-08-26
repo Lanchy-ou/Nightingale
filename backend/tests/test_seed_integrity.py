@@ -162,3 +162,15 @@ def test_all_candidate_quotes_anchor(db_session):
 def test_nine_highlights_seeded(db_session):
     highlights = db_session.scalars(select(Highlight)).all()
     assert len(highlights) == len(fixture.HIGHLIGHT_CANDIDATES) == 9
+
+
+def test_d1_demo_credentials_argon2_hashed_for_all_seeded_users(db_session):
+    from app.models import UserCredential
+
+    credentials = db_session.scalars(select(UserCredential)).all()
+    assert len(credentials) == len(fixture.DEMO_EMAILS) == 6
+    for credential in credentials:
+        # Argon2id hash only; the shared demo password is never stored raw.
+        assert credential.password_hash.startswith("$argon2")
+        assert fixture.DEMO_PASSWORD not in credential.password_hash
+        assert credential.email_normalized in fixture.DEMO_EMAILS.values()

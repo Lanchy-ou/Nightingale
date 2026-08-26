@@ -9,13 +9,29 @@ import type {
   DoctorTranscriptSegment,
   Event,
   Highlight,
+  InviteCreated,
+  InviteInfo,
+  InvitePreview,
   Patient,
   PatientView,
   ProvenanceResult,
+  RegisterResult,
 } from './types';
 
-// Demo-only role switcher mapping. NOT a security boundary — the backend
-// resolves identity from X-User-Id against the DB and enforces RBAC server-side.
+// ---------------------------------------------------------------------------
+// Identity mode (D1).
+//
+// Product mode (default): identity comes from the server-side HttpOnly session
+// cookie. No client-side identity headers are sent; role is NEVER read from
+// localStorage or any client state.
+//
+// Development/demo mode: only when VITE_DEMO_AUTH=true does the legacy
+// X-User-Id / X-Role header simulation apply (the backend additionally
+// requires NANTINGALE_DEMO_AUTH=true server-side, so both flags must match).
+// The demo toolbar in App.tsx is gated by the same flag.
+// ---------------------------------------------------------------------------
+export const DEMO_AUTH = import.meta.env.VITE_DEMO_AUTH === 'true';
+
 export const ROLE_USERS = [
   { role: 'clinician', userId: 'usr_clinician_01', label: 'Clinician' },
   { role: 'staff', userId: 'usr_staff_01', label: 'Staff' },
@@ -30,12 +46,32 @@ export const MENTIONABLE = [
 
 let current = { userId: ROLE_USERS[0].userId, role: ROLE_USERS[0].role };
 
+// Product-mode role source: the server session identity (set by App at boot
+// and login). Never trusted for authorization — the backend re-resolves the
+// DB user on every request.
+let sessionIdentity: CurrentIdentity | null = null;
+
+export function setSessionIdentity(identity: CurrentIdentity | null) {
+  sessionIdentity = identity;
+}
+
 export function setRole(userId: string, role: string) {
   current = { userId, role };
 }
 
 export function getCurrentRole(): string {
-  return current.role;
+  if (DEMO_AUTH) return current.role;
+  return sessionIdentity?.role ?? '';
+}
+
+// 401 handling: product mode clears client-sensitive state and returns to
+// Login. Auth endpoints (login/register/preview) opt out because they already
+// surface their own errors to the form.
+type UnauthorizedHandler = () => void;
+let unauthorizedHandler: UnauthorizedHandler | null = null;
+
+export function setUnauthorizedHandler(handler: UnauthorizedHandler | null) {
+  unauthorizedHandler = handler;
 }
 
 export class ApiError extends Error {
@@ -49,11 +85,19 @@ export class ApiError extends Error {
 }
 
 function headers(): Record<string, string> {
+  if (!DEMO_AUTH) return {};
   return { 'X-User-Id': current.userId, 'X-Role': current.role };
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, init);
+interface RequestOptions {
+  skipUnauthorized?: boolean;
+}
+
+async function request<T>(path: string, init?: RequestInit, options: RequestOptions = {}): Promise<T> {
+  const res = await fetch(path, { credentials: 'include', ...init });
+  if (res.status === 401 && !DEMO_AUTH && !options.skipUnauthorized) {
+    unauthorizedHandler?.();
+  }
   if (!res.ok) {
     let body: any = null;
     try {
@@ -66,17 +110,21 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-function get<T>(path: string, signal?: AbortSignal): Promise<T> {
-  return request<T>(path, { headers: headers(), signal });
+function get<T>(path: string, signal?: AbortSignal, options?: RequestOptions): Promise<T> {
+  return request<T>(path, { headers: headers(), signal }, options);
 }
 
-function post<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
-  return request<T>(path, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...headers() },
-    body: JSON.stringify(body),
-    signal,
-  });
+function post<T>(path: string, body: unknown, signal?: AbortSignal, options?: RequestOptions): Promise<T> {
+  return request<T>(
+    path,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...headers() },
+      body: JSON.stringify(body),
+      signal,
+    },
+    options,
+  );
 }
 
 function patch<T>(path: string, body: unknown): Promise<T> {
@@ -88,7 +136,23 @@ function patch<T>(path: string, body: unknown): Promise<T> {
 }
 
 export const api = {
-  getCurrentIdentity: (signal?: AbortSignal) => get<CurrentIdentity>(`/api/me`, signal),
+  // --- D1 auth ------------------------------------------------------------
+  login: (email: string, password: string) =>
+    post<CurrentIdentity>('/api/auth/login', { email, password }, undefined, { skipUnauthorized: true }),
+  logout: () => post<{ status: string }>('/api/auth/logout', {}),
+  getSession: (signal?: AbortSignal) =>
+    get<CurrentIdentity>('/api/auth/session', signal, { skipUnauthorized: true }),
+  getInvitePreview: (token: string) =>
+    get<InvitePreview>(`/api/auth/invites/${encodeURIComponent(token)}/preview`, undefined, {
+      skipUnauthorized: true,
+    }),
+  register: (payload: { token: string; password: string; name?: string }) =>
+    post<RegisterResult>('/api/auth/register', payload, undefined, { skipUnauthorized: true }),
+  createInvite: (payload: { email: string; role: string; patient_id?: string | null }) =>
+    post<InviteCreated>('/api/auth/invites', payload),
+  listInvites: (signal?: AbortSignal) => get<InviteInfo[]>('/api/auth/invites', signal),
+
+  getCurrentIdentity: (signal?: AbortSignal) => get<CurrentIdentity>(`/api/auth/session`, signal),
   getClinicPatients: (signal?: AbortSignal) => get<Patient[]>(`/api/patients`, signal),
   getPatient: (id: string, signal?: AbortSignal) => get<Patient>(`/api/patients/${id}`, signal),
   getPatientView: (id: string) => get<PatientView>(`/api/patients/${id}/patient-view`),
