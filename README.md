@@ -573,6 +573,14 @@ Consult Glance View：
 - importance score 预计算或增量更新；
 - 页面读取预计算结果。
 
+### 10.1 M7 实测基线（`backend/docs/perf_baseline.md`）
+
+`backend/scripts/measure_glance.py` 在一次性 reseed 的 SQLite 上，对 glance / events / patient-view 三个读端点分别采样 100 次（前 10 次 warm-up 丢弃），输出 Layer A（TestClient in-process，应用逻辑 + SQLite 查询）与 Layer B（真实 uvicorn + 本地 HTTP 往返）两层 P50/P95/Mean/Max。
+
+最新一轮：Layer A Glance P95 ≈ **3.8 ms**（远低于 300 ms），events ≈ 6.7 ms，patient-view ≈ 5.0 ms；Layer B 各端点仅增加 ~1 ms 本地往返/序列化开销。排序确定性（`highlight_id` tiebreak）、写后读一致与 highlight 状态并发乐观锁均由 `tests/test_glance_ordering.py` 锁定；读路径零-LLM 由 `tests/test_read_path_no_llm.py`（transitive import 守卫）证明。
+
+> 诚实条款：单用户本地 SQLite 数字只证明 warm read path 不含同步 LLM / 全量历史扫描，不代表分布式或生产级容量。
+
 ---
 
 ## 11. MVP 构建优先级
@@ -726,7 +734,7 @@ cd backend
 .venv/Scripts/python.exe -m pytest        # 覆盖第 12 节 required micro-tests
 ```
 
-> 当前进度：M1–M6 与 **Phase C（C1 + C2）** 已落地。后端全量为 **156 passed**，TypeScript/Vite production build 通过；C2 另完成 1280×800 / 1440×900 browser QA，实测 New Consult → fallback summary/highlight → new transcript exact source → Comment/@mention/resolve → Clinician Note edit/version/revert → Audit，以及 patient/role switch isolation。下一阶段为 **Phase 6 Performance + Core Hardening**。
+> 当前进度：M1–M6、Phase C（C1+C2）与 **M7（Performance + Core Hardening）** 已落地。后端全量为 **161 passed**，TypeScript/Vite production build 通过；warm-path Glance Layer A P95 ≈ 3.8 ms（`backend/docs/perf_baseline.md`）。下一阶段为 **Milestone 6 feature freeze → Technical Brief → demo video → 打包提交**。
 
 架构约定（记录确切位置，随阶段更新）：
 

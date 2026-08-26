@@ -905,3 +905,17 @@ C2 (Clinician Workspace + Consult Review UX) is complete. Phase 6 Performance + 
 - **New Consult**: `NewDoctorConsult.tsx` has a strict manual `DOCTOR:` / `PATIENT:` parser, 0-based continuous preview, no inferred timestamps/speakers, stable retry IDs, retained draft on failure and explicit raw/derived/fallback states. Datetime-local is sent as clinic-local naive time to preserve the Event time axis. Success navigates to the new Event and refreshes Timeline/Glance.
 - **Responsive target**: full three-column shell at ≥1280px; reduced layouts fail safely below that. C2 browser QA passed at 1280×800 and 1440×900 without critical horizontal overflow.
 - **Exit Gate**: New Consult → AI fallback summary/highlights → new Transcript exact span → Comment/@mention/resolve → Clinician Note edit/version/revert → Audit was exercised end-to-end. Backend **156 passed**, frontend TypeScript/Vite production build passed. Performance/Bonus was not started during C2.
+
+---
+
+## 23. M7 Implementation Status（2026-08-26）
+
+M7 (Performance + Core Hardening) is complete. Milestone 6 (feature freeze → Technical Brief → demo video → submission) is the remaining work. Conventions added:
+
+- **H1 Glance ordering determinism**: the read sort key is `(status != pinned, -importance_score, created_at, highlight_id)` in `backend/app/api/highlights.py`; `tests/test_glance_ordering.py` locks the final tiebreak and pinned priority.
+- **H2 write-after-read**: clinician accept/pin still recomputes `clinician_confirmed` + score at write time and the next Glance read reflects it (locked in `test_glance_ordering.py`).
+- **H3 highlight status concurrency**: `update_status` now uses an atomic conditional `UPDATE ... WHERE status = old_status`; a stale writer matches 0 rows and returns a deterministic 409 `conflict` (with a metadata-only conflict audit), never a silent last-write-wins merge. Locked by a concurrent-accept test asserting exactly one transition wins and history has a single entry.
+- **H4 read-path LLM-free guard**: `tests/test_read_path_no_llm.py` imports glance / patient-view / events / patients each in a clean interpreter subprocess and asserts their transitive import delta contains none of `ai_pipeline`, `llm_client`, `extraction`, `redaction`, `deterministic_pipeline`, `conflicts`.
+- **Measurement**: `backend/scripts/measure_glance.py` samples glance / events / patient-view (100 samples, 10 warm-up) on a throwaway seeded SQLite, reporting Layer A (TestClient in-process) and Layer B (uvicorn HTTP) and writes `backend/docs/perf_baseline.md`. Glance Layer A P95 ≈ 3.8 ms on this machine; no index/cache work was needed.
+- **Honesty clause**: the baseline explicitly states single-user local SQLite numbers only prove the warm path has no synchronous LLM/full-history scan, not production capacity.
+- **Regression**: backend **161 passed**, frontend TypeScript/Vite production build passed.

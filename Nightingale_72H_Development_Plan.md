@@ -6,7 +6,7 @@
 >
 > 当前原则：**先打通一条真实、可验证的端到端闭环，再扩展功能；required gates 先于 bonus，正确性 / provenance / RBAC 先于 UI polish。**
 >
-> **当前执行状态（2026-08-26）**：M1–M6 与 Phase C（C1 Backend + C2 Clinician Workspace）已完成（156 pytest、frontend production build、1280px browser QA 通过）；当前进入 Phase 6 Performance + Core Hardening。Phase C 只把既有能力产品化，不改变 required gates，也未增加 Voice、Task、Doctor AI Assistant 或 Nurse Workspace。
+> **当前执行状态（2026-08-26）**：M1–M6、Phase C（C1+C2）与 M7（Performance + Core Hardening）已完成（161 pytest、frontend production build、Glance Layer A P95 ≈ 3.8 ms）；当前进入 Milestone 6 feature freeze（Technical Brief → demo video → 打包提交）。Phase C/M7 只做产品化与性能取证，未增加 Voice、Task、Doctor AI Assistant 或 Nurse Workspace。
 
 ---
 
@@ -925,6 +925,8 @@ Phase C 完成不等于 Performance Complete；Glance P95 测量仍严格属于�
 
 # 10. Phase 6 — Performance + Core Hardening
 
+> 状态：**COMPLETE（2026-08-26）**；见 `backend/docs/perf_baseline.md`、`backend/scripts/measure_glance.py`、`backend/tests/test_glance_ordering.py`、`backend/tests/test_read_path_no_llm.py`。Glance Layer A P95 ≈ 3.8 ms。
+
 ## 目标
 
 在功能基本完整后，把 Glance 变成真正的 warm-path read，而不是 page-load LLM demo。
@@ -1237,7 +1239,7 @@ Subject:  Nightingale 72HR Build -- <Your Name>
 
 以 2026-08-25 22:31 SGT 计，距离截止约 **67 小时**。不应把 67 小时全部规划成开发时间，必须给 integration、视频和提交留 buffer。
 
-> 2026-08-26 状态更新：原 Milestone 1–4、M5 longitudinal data、M6 Patient View 与 Phase C（C1/C2）已完成。当前执行顺序更新为 **Phase 6 Performance → Freeze/Deliverables**；下列早期里程碑保留为历史计划记录。
+> 2026-08-26 状态更新：原 Milestone 1–4、M5 longitudinal data、M6 Patient View、Phase C（C1/C2）与 M7（Performance + Core Hardening）已完成。当前执行顺序更新为 **Milestone 6 feature freeze → Freeze/Deliverables**；下列早期里程碑保留为历史计划记录。
 
 ## Milestone 1 — 最迟 8 月 26 日上午
 
