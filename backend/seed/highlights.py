@@ -73,9 +73,7 @@ def generate_highlights(db: Session) -> list[str]:
             "unresolved_task": unresolved_task_exists(
                 db,
                 patient_id=fixture.PATIENT_ID,
-                event_id=event.event_id,
-                source_artifact_id=cand["source_artifact_id"],
-                source_span=span,
+                task_id=cand.get("task_id"),
             ),
             "clinician_confirmed": False,
             "symptom_change": bool(cand["feature_flags"].get("symptom_change")),
@@ -89,6 +87,7 @@ def generate_highlights(db: Session) -> list[str]:
                 artifact_id=cand["artifact_id"],
                 source_artifact_id=cand["source_artifact_id"],
                 source_span=span,
+                task_id=cand.get("task_id"),
                 text=cand["text"],
                 risk_reason=cand["risk_reason"],
                 feature_flags=flags,

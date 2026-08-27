@@ -167,6 +167,7 @@ HIGHLIGHT_CANDIDATES = [
         "event_id": EVT_DOC_0821,
         "artifact_id": ART_DOC_SUMMARY,
         "source_artifact_id": ART_DOC_TRANSCRIPT,
+        "task_id": TASK_BLOOD_TEST,
         "quote": "I'm ordering a blood test to check for any underlying causes.",
         "text": "Blood test ordered - pending",
         "risk_reason": "Blood test ordered to rule out underlying causes; result still pending",

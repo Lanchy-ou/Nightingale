@@ -164,6 +164,17 @@ def test_nine_highlights_seeded(db_session):
     assert len(highlights) == len(fixture.HIGHLIGHT_CANDIDATES) == 9
 
 
+def test_d2_task_glance_mapping_is_explicit(db_session):
+    # The blood-test Task owns exactly the blood-test highlight; no other
+    # highlight carries a task_id and the mapping is never event-inferred.
+    pending = db_session.get(Highlight, "hl_blood_test_pending")
+    assert pending.task_id == fixture.TASK_BLOOD_TEST
+    others = db_session.scalars(
+        select(Highlight).where(Highlight.highlight_id != "hl_blood_test_pending")
+    ).all()
+    assert all(highlight.task_id is None for highlight in others)
+
+
 def test_d1_demo_credentials_argon2_hashed_for_all_seeded_users(db_session):
     from app.models import UserCredential
 

@@ -1,13 +1,37 @@
-"""D2 care-task state, provenance and Glance integration."""
+"""D2 care-task state, provenance and Glance integration.
+
+Task↔Glance mapping contract (review-hardened 2026-08-27):
+- the mapping is ALWAYS explicit: `Highlight.task_id` points at exactly one
+  Task and each Task is represented by at most one Highlight;
+- an Event-only Task never flags unrelated Highlights in the same Event;
+- a new unresolved Task without an existing task Highlight creates its own
+  dedicated Highlight row, so it can always surface in Glance;
+- terminal statuses (completed/cancelled) deterministically clear the
+  unresolved weight on the Task's own Highlight only.
+"""
 from __future__ import annotations
+
+from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .highlights import compute_score
+from .ids import new_id
 from .models import Highlight, Task
 
 UNRESOLVED_TASK_STATUSES = {"open", "in_progress", "reported_done"}
+
+TASK_HIGHLIGHT_FLAGS = {
+    "recency": True,
+    "explicit_risk": False,
+    "unresolved_task": True,
+    "clinician_confirmed": False,
+    "symptom_change": False,
+    "repeated_mentions": False,
+}
+
+
 def task_transitions() -> dict[str, set[str]]:
     return {
         "open": {"in_progress", "reported_done", "cancelled"},
@@ -18,37 +42,83 @@ def task_transitions() -> dict[str, set[str]]:
     }
 
 
-def resolve_exact_span(content: dict, span: dict) -> str | None:
-    """Resolve only a structurally valid, in-bounds, non-empty exact span."""
-    if not isinstance(span, dict) or set(span) != {"kind", "index", "offset"}:
-        return None
-    offset = span.get("offset")
-    if (
-        not isinstance(offset, list)
-        or len(offset) != 2
-        or any(not isinstance(value, int) or isinstance(value, bool) for value in offset)
-    ):
+def _is_int(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _span_offset(offset: object) -> tuple[int, int] | None:
+    if not isinstance(offset, list) or len(offset) != 2:
         return None
     start, end = offset
+    if not _is_int(start) or not _is_int(end):
+        return None
     if start < 0 or end <= start:
         return None
+    return start, end
 
-    text: str | None = None
+
+def resolve_exact_span(content: object, span: object) -> str | None:
+    """Resolve only a structurally valid, in-bounds, non-empty exact span.
+
+    Hardened contract: ANY abnormal structure (content not a dict, segments/
+    messages not lists, members not dicts, wrong member types, malformed span
+    keys/offsets) fails closed and returns None — it never raises, so callers
+    can translate it into a deterministic 422/404 instead of a 500.
+    """
+    if not isinstance(content, dict) or not isinstance(span, dict):
+        return None
+    if set(span) != {"kind", "index", "offset"}:
+        return None
+    offset = _span_offset(span.get("offset"))
+    if offset is None:
+        return None
+    start, end = offset
+
     kind = span.get("kind")
     index = span.get("index")
-    if kind == "segment" and isinstance(index, int) and not isinstance(index, bool):
-        for segment in content.get("segments", []):
-            if segment.get("index") == index and isinstance(segment.get("text"), str):
-                text = segment["text"]
+    text: str | None = None
+
+    if kind == "segment":
+        if not _is_int(index):
+            return None
+        segments = content.get("segments")
+        if segments is None:
+            return None
+        if not isinstance(segments, list):
+            return None
+        for member in segments:
+            if not isinstance(member, dict):
+                continue
+            member_index = member.get("index")
+            member_text = member.get("text")
+            if _is_int(member_index) and member_index == index and isinstance(member_text, str):
+                text = member_text
                 break
-    elif kind == "message" and isinstance(index, int) and not isinstance(index, bool):
-        messages = content.get("messages", [])
-        if 1 <= index <= len(messages) and isinstance(messages[index - 1].get("text"), str):
-            text = messages[index - 1]["text"]
-    elif kind == "section" and isinstance(index, str):
+    elif kind == "message":
+        if not _is_int(index):
+            return None
+        messages = content.get("messages")
+        if not isinstance(messages, list):
+            return None
+        if not (1 <= index <= len(messages)):
+            return None
+        member = messages[index - 1]
+        if not isinstance(member, dict):
+            return None
+        member_text = member.get("text")
+        if not isinstance(member_text, str):
+            return None
+        text = member_text
+    elif kind == "section":
+        if not isinstance(index, str):
+            return None
         value = content.get(index)
-        if isinstance(value, str):
-            text = value
+        if not isinstance(value, str):
+            return None
+        text = value
+    else:
+        return None
+
     if text is None or end > len(text):
         return None
     quote = text[start:end]
@@ -59,41 +129,99 @@ def unresolved_task_exists(
     db: Session,
     *,
     patient_id: str,
-    event_id: str,
-    source_artifact_id: str | None,
-    source_span: dict | None,
+    task_id: str | None,
 ) -> bool:
-    tasks = db.scalars(
-        select(Task).where(
-            Task.patient_id == patient_id,
-            Task.event_id == event_id,
-            Task.status.in_(UNRESOLVED_TASK_STATUSES),
-        )
-    ).all()
-    for task in tasks:
-        if task.source_artifact_id is None:
-            return True
-        if task.source_artifact_id == source_artifact_id and task.source_span == source_span:
-            return True
-    return False
+    """Explicit mapping only: `task_id` names the Task that owns the Highlight.
+
+    Without a linked Task the flag is False — never inferred from the Event or
+    from shared provenance. Event-only tasks therefore cannot leak their
+    unresolved state onto unrelated Highlights.
+    """
+    if not task_id:
+        return False
+    task = db.get(Task, task_id)
+    return bool(
+        task is not None
+        and task.patient_id == patient_id
+        and task.status in UNRESOLVED_TASK_STATUSES
+    )
+
+
+def link_task_highlight(db: Session, task: Task) -> Highlight:
+    """Establish the explicit Task↔Glance mapping for a newly created Task.
+
+    - Exact provenance: adopt an existing UNOWNED task-type Highlight whose
+      patient/event/source_artifact/source_span match EXACTLY (1:1 adoption;
+      an owned Highlight can never be stolen by a later Task).
+    - Otherwise (event-level provenance or no exact match): create a dedicated
+      task Highlight row for this Task, so every unresolved Task can surface
+      in Glance through its own row.
+    """
+    if task.source_artifact_id is not None and task.source_span is not None:
+        candidates = db.scalars(
+            select(Highlight)
+            .where(
+                Highlight.patient_id == task.patient_id,
+                Highlight.event_id == task.event_id,
+                Highlight.entity_type == "task",
+                Highlight.source_artifact_id == task.source_artifact_id,
+                Highlight.task_id.is_(None),
+            )
+            .order_by(Highlight.highlight_id)
+        ).all()
+        for candidate in candidates:
+            if candidate.source_span == task.source_span:
+                candidate.task_id = task.task_id
+                db.add(candidate)
+                return candidate
+
+    now = datetime.now()
+    highlight = Highlight(
+        highlight_id=new_id("hl"),
+        patient_id=task.patient_id,
+        event_id=task.event_id,
+        artifact_id=task.source_artifact_id,
+        source_artifact_id=task.source_artifact_id,
+        source_span=task.source_span,
+        task_id=task.task_id,
+        text=task.title,
+        risk_reason=f"Unresolved care task ({task.assigned_role})",
+        feature_flags=dict(TASK_HIGHLIGHT_FLAGS),
+        importance_score=compute_score(TASK_HIGHLIGHT_FLAGS),
+        status="suggested",
+        status_history=[],
+        created_at=now,
+        updated_at=now,
+        entity_type="task",
+        entity_key=f"task:{task.task_id}",
+        assertion_value=None,
+        conflict_with_artifact_id=None,
+        review_status=None,
+    )
+    db.add(highlight)
+    return highlight
 
 
 def recompute_task_highlights(db: Session, patient_id: str) -> None:
-    """Write-through deterministic scoring; Glance reads remain computation-free."""
-    highlights = db.scalars(
-        select(Highlight).where(
-            Highlight.patient_id == patient_id,
-            Highlight.entity_type == "task",
+    """Deterministic write-through scoring; Glance reads remain computation-free.
+
+    Each Task updates ONLY its own linked Highlight (`Highlight.task_id ==
+    task.task_id`). Terminal statuses clear the unresolved weight on that
+    Highlight alone. Nothing is ever inferred from the Event or from other
+    tasks.
+    """
+    tasks = db.scalars(select(Task).where(Task.patient_id == patient_id)).all()
+    for task in tasks:
+        highlight = db.scalar(
+            select(Highlight).where(Highlight.task_id == task.task_id)
         )
-    ).all()
-    for highlight in highlights:
-        unresolved = unresolved_task_exists(
-            db,
-            patient_id=patient_id,
-            event_id=highlight.event_id,
-            source_artifact_id=highlight.source_artifact_id,
-            source_span=highlight.source_span,
-        )
+        if highlight is None:
+            continue
+        unresolved = task.status in UNRESOLVED_TASK_STATUSES
+        if highlight.feature_flags.get("unresolved_task") == unresolved:
+            continue
         flags = {**highlight.feature_flags, "unresolved_task": unresolved}
         highlight.feature_flags = flags
         highlight.importance_score = compute_score(flags)
+        highlight.updated_at = datetime.now()
+        db.add(highlight)

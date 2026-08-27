@@ -356,7 +356,7 @@ GET  /api/tasks/{task_id}/provenance
 
 Task 必须有 origin Event；Artifact/Span provenance 可选但必须成对并精确解析。transition 接收 `expected_status`，以原子条件更新实现 deterministic 409。患者只能推进本人、patient-visible、assigned-patient Task 到 `in_progress|reported_done`；只有 staff/clinician 可将 `reported_done` 确认为 `completed` 或取消未终结 Task。终态不可恢复。create/transition/conflict 进入 metadata-only AuditLog。
 
-`unresolved_task` 不再是 seed 常量：Task create/transition 的写路径按 Event/Artifact/Span 精确匹配 Task Highlight、重算 `feature_flags` 与 `importance_score`；Glance read path 仍只读预计算值。clinician/staff 共用 clinic shell 的 `Tasks` tab，并可从 Event 或当前 Artifact 创建 Task；没有 Nurse Workspace、假 appointment 或 assignment 状态。
+`unresolved_task` 不再是 seed 常量。Task↔Glance 映射是**显式的**：`Highlight.task_id` 指向唯一 Task；Task 创建时只有在 patient/event/source_artifact/source_span 完全精确匹配且 Highlight 未被占用时才采纳既有 task Highlight，否则为 Task 创建专属 Highlight（Event-only Task 因此不会误伤同 Event 无关 Highlight，新 unresolved Task 也总能进入 Glance）；`recompute_task_highlights` 只更新 `Highlight.task_id == task.task_id` 的行，completed/cancelled 确定性清除 unresolved 权重。精确 provenance 只有用户**明确选择 quote 并确认**后才保存，否则为 Event-level；Glance 的 Open Task 定位到具体 Task。`resolve_exact_span` 对任意异常结构 fail closed（422/404，绝不 500）。clinician/staff 共用 clinic shell 的 `Tasks` tab，并可从 Event 或当前 Artifact 创建 Task；没有 Nurse Workspace、假 appointment 或 assignment 状态。
 
 ---
 

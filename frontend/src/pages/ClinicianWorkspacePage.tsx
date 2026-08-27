@@ -85,6 +85,8 @@ function PatientWorkspace({
   const [eventContext, setEventContext] = useState<EventContextState>({ artifacts: [], selectedArtifact: null });
   const [initialArtifactId, setInitialArtifactId] = useState<string | null>(null);
   const [completion, setCompletion] = useState<DoctorConsultResult | null>(null);
+  // Glance "Open Task" target: lands on the SPECIFIC task in the Tasks view.
+  const [taskFocusId, setTaskFocusId] = useState<string | null>(null);
 
   const load = useCallback((signal?: AbortSignal) => {
     return Promise.all([
@@ -140,6 +142,11 @@ function PatientWorkspace({
     setInitialArtifactId(artifactId);
     setContextTab('comments');
     onNavigate({ kind: 'patient', patientId, mode: 'event', eventId: event.event_id });
+  }
+
+  function handleOpenTask(taskId: string) {
+    setTaskFocusId(taskId);
+    onNavigate({ kind: 'patient', patientId, mode: 'tasks' });
   }
 
   function handleViewSource(next: ProvenanceResult) {
@@ -226,7 +233,7 @@ function PatientWorkspace({
         )}
 
         {route.mode === 'glance' && (
-          <GlancePanel key={`glance:${refreshKey}`} patientId={patientId} onViewSource={handleViewSource} onOpenTasks={() => openTab('tasks')} />
+          <GlancePanel key={`glance:${refreshKey}`} patientId={patientId} onViewSource={handleViewSource} onOpenTasks={handleOpenTask} />
         )}
         {route.mode === 'timeline' && <ClinicalTimeline events={events} onOpenEvent={openEvent} />}
         {route.mode === 'notes' && (
@@ -243,6 +250,8 @@ function PatientWorkspace({
             events={events}
             identity={identity}
             refreshKey={refreshKey}
+            focusTaskId={taskFocusId}
+            onFocusHandled={() => setTaskFocusId(null)}
             onChanged={changed}
             onOpenEvent={openEvent}
           />

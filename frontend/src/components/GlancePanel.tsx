@@ -16,7 +16,7 @@ export default function GlancePanel({
 }: {
   patientId: string;
   onViewSource: (p: ProvenanceResult) => void;
-  onOpenTasks?: () => void;
+  onOpenTasks?: (taskId: string) => void;
 }) {
   const [highlights, setHighlights] = useState<Highlight[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -73,9 +73,18 @@ export default function GlancePanel({
             <div className="highlight-text">{h.text}</div>
             <div className="highlight-reason">{h.risk_reason}</div>
             <div className="highlight-actions">
-              <button className="source-action" onClick={() => viewSource(h.highlight_id)}>View source <span aria-hidden="true">→</span></button>
-              {h.feature_flags.unresolved_task && onOpenTasks && (
-                <button className="source-action" onClick={onOpenTasks}>Open Task</button>
+              {h.task_id ? (
+                <button
+                  className="source-action"
+                  onClick={() => onOpenTasks?.(h.task_id!)}
+                >
+                  Open Task <span aria-hidden="true">→</span>
+                </button>
+              ) : (
+                <button className="source-action" onClick={() => viewSource(h.highlight_id)}>View source <span aria-hidden="true">→</span></button>
+              )}
+              {h.task_id == null && h.feature_flags.unresolved_task && onOpenTasks && (
+                <span className="unresolved-tag">Unresolved task</span>
               )}
               <button className="feedback-action" onClick={() => setStatus(h.highlight_id, 'accepted')} aria-label={`Accept ${h.text}`} title="Accept">✓ Accept</button>
               <button className="feedback-action" onClick={() => setStatus(h.highlight_id, 'rejected')} aria-label={`Reject ${h.text}`} title="Reject">✗ Reject</button>

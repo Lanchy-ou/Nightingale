@@ -580,6 +580,17 @@ mark { background: #fde047; padding: 0 2px; border-radius: 2px; }
 .task-provenance blockquote { margin: 5px 0 0; padding: 9px 10px; border-left: 3px solid var(--clinical-brand); background: #eaf5f1; }
 .event-task-composer { margin-top: 18px; padding-top: 14px; border-top: 1px solid #e3ece8; }
 
+/* D2 review: explicit exact-source selection + confirmation (never auto) */
+.task-exact-source { padding: 10px; border: 1px dashed #cbdad4; border-radius: 9px; background: #fbfdfc; }
+.task-exact-source .eyebrow { margin: 0 0 6px; }
+.task-exact-source .muted { margin: 6px 0 0; }
+.task-quote-preview { margin-top: 8px; }
+.task-quote-preview blockquote { margin: 6px 0; padding: 8px 10px; border-left: 3px solid #b9d0c7; background: #f1f7f4; font-size: 11px; color: #3d534b; }
+.task-quote-confirm { display: flex; flex-direction: row !important; align-items: center; gap: 7px; font-weight: 550 !important; }
+.task-quote-confirm input { width: auto !important; }
+.clinical-task.task-focused { outline: 3px solid rgba(37, 99, 235, .45); outline-offset: 2px; background: #f5f9ff; }
+.unresolved-tag { margin-left: auto; padding: 2px 8px; border-radius: 999px; color: #1e40af; background: #eef2ff; font-size: 10px; font-weight: 650; }
+
 @media (max-width: 620px) {
   .pv-tabs { grid-template-columns: repeat(2, 1fr); }
   .task-form-row { grid-template-columns: 1fr; }
