@@ -334,7 +334,8 @@ function PatientWorkspace({
                 <div className="copilot-source-card">
                   <p className="eyebrow">Verified Copilot evidence</p>
                   <h3>{copilotEvidence.artifact_type.replace(/_/g, ' ')}</h3>
-                  <p>{copilotEvidence.event_type.replace(/_/g, ' ')} · {new Date(copilotEvidence.event_time).toLocaleString()}</p>
+                  <p>{copilotEvidence.event_type.replace(/_/g, ' ')} · Event {new Date(copilotEvidence.event_time).toLocaleString()}</p>
+                  <p>Recorded {new Date(copilotEvidence.record_time).toLocaleString()}</p>
                   <small>{copilotEvidence.author_role} · exact {copilotEvidence.span.kind} span</small>
                   <blockquote>{copilotEvidence.quote}</blockquote>
                   {copilotEvidence.review_required && <div className="verification-callout">Review flag on this source.</div>}

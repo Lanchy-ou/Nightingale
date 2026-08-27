@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from ..audit import add_audit
 from ..authz import authorize, note_edit_action, require_auth, resource_not_found
+from ..copilot_confirmation import audit_details, validate_confirmation_token
 from ..db import get_db
 from ..ids import new_id
 from ..models import Artifact, ArtifactVersion, Event
@@ -31,6 +32,21 @@ from ..schemas import (
 )
 
 router = APIRouter(prefix="/api", tags=["notes"])
+
+
+def _validate_patient_instruction(content: dict) -> None:
+    if set(content) - {"instruction", "follow_up"}:
+        raise HTTPException(status_code=422, detail="Invalid patient instruction")
+    instruction = content.get("instruction")
+    follow_up = content.get("follow_up")
+    if (
+        not isinstance(instruction, str)
+        or not instruction.strip()
+        or len(instruction) > 2000
+        or instruction.strip().upper().startswith("EDIT REQUIRED")
+        or (follow_up is not None and (not isinstance(follow_up, str) or len(follow_up) > 2000))
+    ):
+        raise HTTPException(status_code=422, detail="Invalid patient instruction")
 
 
 def _event(db: Session, event_id: str) -> Event:
@@ -96,6 +112,16 @@ def create_note(
     event = _event(db, event_id)
     # author_role is derived from role context only; never trusted from client.
     authorize(ctx, f"write_{body.artifact_type}", event.clinic_id, event.patient_id)
+    if body.artifact_type == "patient_instruction":
+        _validate_patient_instruction(body.content)
+    confirmation = validate_confirmation_token(
+        body.confirmation_token,
+        db=db,
+        ctx=ctx,
+        event=event,
+        expected_type=body.artifact_type,
+        content=body.content,
+    )
 
     now = datetime.now()
     artifact_id = new_id("art")
@@ -135,7 +161,7 @@ def create_note(
         event_id=event_id,
         from_version=None,
         to_version=1,
-        details={"draft_origin": body.draft_origin} if body.draft_origin else None,
+        details=audit_details(confirmation),
     )
     db.commit()
     artifact = db.get(Artifact, artifact_id)

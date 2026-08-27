@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 CopilotCategory = Literal["what_changed", "what_matters_now", "find_evidence", "draft_action"]
@@ -23,18 +23,10 @@ class CopilotProviderClaim(BaseModel):
     evidence_ids: list[str] = Field(default_factory=list, max_length=4)
 
 
-class CopilotProviderDraft(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    artifact_type: Literal["clinician_note", "patient_instruction", "task"]
-    evidence_ids: list[str] = Field(min_length=1, max_length=4)
-
-
 class CopilotProviderResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     claims: list[CopilotProviderClaim] = Field(default_factory=list, max_length=6)
-    draft: CopilotProviderDraft | None = None
 
 
 class CopilotEvidenceOut(BaseModel):
@@ -44,6 +36,7 @@ class CopilotEvidenceOut(BaseModel):
     event_id: str
     event_type: str
     event_time: datetime
+    record_time: datetime
     artifact_id: str
     artifact_type: str
     author_role: str
@@ -70,6 +63,7 @@ class CopilotDraftOut(BaseModel):
     patient_visible: bool
     ai_generated: Literal[True] = True
     requires_clinician_confirmation: Literal[True] = True
+    confirmation_token: str
 
 
 class CopilotQuery(BaseModel):
@@ -77,6 +71,15 @@ class CopilotQuery(BaseModel):
 
     category: CopilotCategory
     question: str = Field(default="", max_length=300)
+    draft_type: Literal["clinician_note", "patient_instruction", "task"] | None = None
+
+    @model_validator(mode="after")
+    def draft_type_matches_category(self):
+        if self.category == "draft_action" and self.draft_type is None:
+            raise ValueError("draft_type is required for draft_action")
+        if self.category != "draft_action" and self.draft_type is not None:
+            raise ValueError("draft_type is only valid for draft_action")
+        return self
 
 
 class CopilotResponse(BaseModel):

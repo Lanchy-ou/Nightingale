@@ -1,6 +1,6 @@
 # D4 任务卡 - Evidence-Bound Clinician Copilot
 
-> 状态：**BLOCKED BY D2 + D3**
+> 状态：**COMPLETE（2026-08-27，审查阻断项修复后重验）**
 >
 > 对应总计划：`docs/phase_d_product_completion_plan.md`
 >
@@ -175,6 +175,16 @@ backend/evals/copilot/
 6. Source/Comments/History 原能力零回归；
 7. eval、全量 tests、frontend build 全绿；
 8. UI 明确区分 source fact、inference、unknown 和 draft。
+
+### 7.1 审查阻断项关闭证据（2026-08-27）
+
+- clinician 在 UI 结构化选择 `clinician_note|task|patient_instruction`；Provider schema 不含 draft/type，服务端选择 Event、patient、visibility 和允许的既有写端点；
+- Preview 可编辑。服务端签发 5 分钟 HMAC confirmation token，绑定 actor/clinic/patient/Event/type/exact evidence；Note/Task API 只有验签、时效、绑定和 evidence 重解析全部成功后才写 `draft_origin=copilot` 审计元数据，客户端不能自行声明；
+- AI Summary 不可自证：只有能继续解析至同 Event raw source exact span 的指针才可成为 source fact；否则不进入 evidence；
+- `What changed` 固定返回两个相关 Event 的独立 source facts，再返回显式 comparison inference；`Find evidence` 在当前授权 patient 全历史执行服务器端匹配，只把最多 12 个匹配 exact spans 送 Provider；
+- patient instruction 原始占位 preview 禁止确认；UI 和服务端均要求有效、已编辑的 patient-facing instruction；
+- frozen eval 锁定四类 query 的 Event/Artifact/quote/exact span，覆盖全历史命中、无关 span 排除、AI self-citation 拒绝、draft type authority、token 防伪，并独立报告 `COPILOT_READ_PATH` latency；
+- 最终门禁：backend **316 passed**；D4 frozen eval PASS；D3 corpus/runtime evaluators PASS；frontend production build PASS；浏览器 E2E 覆盖双 Event comparison、draft 编辑、Source/Comments/History、patient/role/logout isolation，console 0 warning/error。
 
 ---
 

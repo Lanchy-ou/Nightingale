@@ -291,6 +291,7 @@ export interface CopilotEvidence {
   event_id: string;
   event_type: string;
   event_time: string;
+  record_time: string;
   artifact_id: string;
   artifact_type: string;
   author_role: string;
@@ -313,6 +314,7 @@ export interface CopilotDraft {
   patient_visible: boolean;
   ai_generated: true;
   requires_clinician_confirmation: true;
+  confirmation_token: string;
 }
 
 export interface CopilotResponse {

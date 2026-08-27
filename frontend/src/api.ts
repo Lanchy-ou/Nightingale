@@ -175,7 +175,7 @@ export const api = {
       due_at: string | null;
       source_artifact_id: string | null;
       source_span: Span | null;
-      draft_origin?: 'copilot';
+      confirmation_token?: string;
     },
   ) => post<ClinicalTask>(`/api/events/${eventId}/tasks`, payload),
   transitionTask: (taskId: string, expectedStatus: string, status: string) =>
@@ -191,10 +191,19 @@ export const api = {
   setStatus: (highlightId: string, status: string) =>
     post<Highlight>(`/api/highlights/${highlightId}/status`, { status }),
 
-  createNote: (eventId: string, artifactType: string, content: Record<string, any>, draftOrigin?: 'copilot') =>
-    post<Artifact>(`/api/events/${eventId}/notes`, { artifact_type: artifactType, content, ...(draftOrigin ? { draft_origin: draftOrigin } : {}) }),
-  queryCopilot: (patientId: string, category: CopilotCategory, question = '', signal?: AbortSignal) =>
-    post<CopilotResponse>(`/api/patients/${patientId}/copilot/query`, { category, question }, signal),
+  createNote: (eventId: string, artifactType: string, content: Record<string, any>, confirmationToken?: string) =>
+    post<Artifact>(`/api/events/${eventId}/notes`, { artifact_type: artifactType, content, ...(confirmationToken ? { confirmation_token: confirmationToken } : {}) }),
+  queryCopilot: (
+    patientId: string,
+    category: CopilotCategory,
+    question = '',
+    draftType?: 'clinician_note' | 'patient_instruction' | 'task',
+    signal?: AbortSignal,
+  ) => post<CopilotResponse>(`/api/patients/${patientId}/copilot/query`, {
+    category,
+    question,
+    ...(draftType ? { draft_type: draftType } : {}),
+  }, signal),
   editArtifact: (artifactId: string, content: Record<string, any>, expectedVersion: number) =>
     patch<Artifact>(`/api/artifacts/${artifactId}`, { content, expected_version: expectedVersion }),
   revertArtifact: (artifactId: string, toVersion: number, expectedVersion: number) =>

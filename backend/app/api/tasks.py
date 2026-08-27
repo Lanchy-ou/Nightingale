@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from ..audit import add_audit
 from ..authz import authorize, authorize_scope, require_auth, resource_not_found
+from ..copilot_confirmation import audit_details, validate_confirmation_token
 from ..db import get_db
 from ..ids import new_id
 from ..models import Artifact, Event, Patient, Task, User
@@ -102,6 +103,24 @@ def create_task(
     # Scope and permission precede all request-content/assignment/provenance branches.
     authorize(ctx, "create_task", event.clinic_id, event.patient_id)
     parsed = _validate(TaskCreate, body)
+    confirmation = validate_confirmation_token(
+        parsed.confirmation_token,
+        db=db,
+        ctx=ctx,
+        event=event,
+        expected_type="task",
+        content={"title": parsed.title, "description": parsed.description},
+    )
+    if confirmation is not None:
+        source = confirmation.evidence[0]
+        if (
+            parsed.assigned_role != "clinician"
+            or parsed.assigned_user_id is not None
+            or parsed.patient_visible
+            or parsed.source_artifact_id != source.get("artifact_id")
+            or parsed.source_span != source.get("span")
+        ):
+            raise HTTPException(status_code=422, detail="Copilot task confirmation does not match server draft")
     assigned_user_id = _assignment(db, parsed, event)
     _provenance(db, parsed, event)
 
@@ -145,7 +164,7 @@ def create_task(
         clinic_id=event.clinic_id,
         patient_id=event.patient_id,
         event_id=event.event_id,
-        details={"status": "open", **({"draft_origin": parsed.draft_origin} if parsed.draft_origin else {})},
+        details=audit_details(confirmation, {"status": "open"}),
     )
     recompute_task_highlights(db, event.patient_id)
     db.commit()

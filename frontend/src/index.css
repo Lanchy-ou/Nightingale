@@ -330,6 +330,9 @@ mark { background: #fde047; padding: 0 2px; border-radius: 2px; }
 .copilot-evidence blockquote, .copilot-source-card blockquote { margin: 3px 0; padding-left: 8px; border-left: 2px solid #9bbeb1; color: #344943; font-size: 13px; }
 .copilot-evidence em { color: #9b6420; font-size: 12px; }
 .copilot-draft pre { overflow: auto; white-space: pre-wrap; background: #f5f8f7; padding: 8px; border-radius: 6px; font-size: 11px; }
+.copilot-draft-fields { display: grid; gap: 9px; margin: 10px 0; }
+.copilot-draft-fields label { display: grid; gap: 4px; color: #50645e; font-size: 12px; font-weight: 700; }
+.copilot-draft-fields textarea { resize: vertical; }
 .copilot-limitations { background: #f7faf8; }
 .timeline-single, .encounter-group { position: relative; min-width: 0; background: #fff; border: 1px solid var(--clinical-border); border-radius: 14px; overflow: visible; box-shadow: 0 5px 18px rgba(30, 74, 61, .03); }
 .timeline-single::before, .encounter-group::before { content: ''; position: absolute; z-index: 2; left: -19px; top: 20px; width: 11px; height: 11px; box-sizing: border-box; border: 3px solid var(--clinical-page); border-radius: 50%; background: var(--clinical-brand); }

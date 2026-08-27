@@ -434,7 +434,7 @@ Phase C 两张任务卡均已完成：
 
 D3 frozen evaluation 包含 40 个 synthetic cases（development 26 / frozen_holdout 14）。normalizer 在首次 holdout 前以 SHA-256 冻结；holdout outcome 14/14、speaker 12/12、ambiguous blocking 8/8，silent invention/truncation 为 0。frozen runner **不调用 provider/network**；provider 层明确 `NOT_RUN`，deterministic fallback 单独报告（development exact entity precision 0.888889 / recall 0.571429，task precision 1.0 / recall 0.5）。不得把两层合并为一个成绩。
 
-仍明确后置：独立 Nurse Workspace、Nurse input、录音/ASR、外部 dataset ingestion、Doctor AI Assistant、复杂 care-team assignment、appointment/billing/notification。Phase C、M7、D1、D2、D3 Exit Gate 已通过；D4/D5 未开始。
+仍明确后置：独立 Nurse Workspace、Nurse input、录音/ASR、外部 dataset ingestion、复杂 care-team assignment、appointment/billing/notification。Phase C、M7、D1、D2、D3、D4 Exit Gate 已通过；D5 未开始。
 
 ---
 
@@ -770,14 +770,14 @@ cd backend
 .venv/Scripts/python.exe -B scripts/evaluate_copilot.py
 ```
 
-> 当前进度：M1–M7、Phase C（C1+C2）、**D1 Identity**、**D2 Care Tasks + Patient Experience**、**D3 Transcript Reliability** 与 **D4 Evidence-Bound Clinician Copilot** 已落地。D4 新增 12 个安全/行为测试（全量 backend collection 308）；frozen Copilot mock eval 见 `backend/evals/copilot/`，并明确不计入 Glance P95。剩余 Phase D 工作：D5 TLS/at-rest 与跨角色集成。
+> 当前进度：M1–M7、Phase C（C1+C2）、**D1 Identity**、**D2 Care Tasks + Patient Experience**、**D3 Transcript Reliability** 与审查修复后的 **D4 Evidence-Bound Clinician Copilot** 已落地。全量 backend collection **316**；强化 frozen Copilot mock eval 见 `backend/evals/copilot/`，其 `COPILOT_READ_PATH` latency 与 Glance P95 分开报告。剩余 Phase D 工作：D5 TLS/at-rest 与跨角色集成。
 
 架构约定（记录确切位置，随阶段更新）：
 
 - **PHI redaction 发生位置**：`backend/app/redaction.py`（`redact_content` / `restore_placeholders`）。在 `backend/app/ai_pipeline.py` 中，所有文本在进入 provider 之前先经 `redact_content`（姓名 / IC·ID / 手机号）；`placeholder_mapping` 仅存在于单次 pipeline 内存，不进 LLM / 日志 / DB。AI summary 与 highlights 由 `persist_derived` 原子写入（raw source 先落库、永不被覆盖）。
 - **RBAC 强制点**：所有权限判断在 server-side 完成，集中在 `backend/app/authz.py`（`authorize(action, resource)` + `PERMISSIONS` 矩阵）与 `backend/app/role_context.py`（DB 为身份/角色唯一权威，`X-Role` 只能作 demo 一致性断言，不一致即拒绝，不可提权）。每个端点经 `require_auth`（401）+ `authorize`（同院无权限 403 / 跨院或非本人 404）；不存在、跨院和非本人资源使用相同 404 body，避免存在性探测。UI 只做展示裁剪，不作为安全边界，角色切换会重新挂载整个 patient workspace 以清除敏感状态。
 - **LLM 客户端出口**：`backend/app/llm_client.py`（`LLMClient` protocol）是唯一 provider 出口，只能接收 `RedactedContent`。实际仅支持 `mock`（无 key、确定性）与 `deepseek`（live adapter）两个 provider；`NANTINGALE_LLM_PROVIDER` 默认 `deepseek`。`deepseek` 缺 key / provider 出错 / schema 非法时明确降级到 deterministic fallback；key 只从环境变量读取，永不打印/入库。
-- **D4 Copilot 边界**：`POST /api/patients/{patient_id}/copilot/query` 只对同 clinic 的 clinician 开放。它仅向 LLMClient 发送脱敏、最近有限 Event 的 evidence cards；每个 source fact 由服务端重新解析为 `Event → Artifact → exact Span`，伪造/跨患者/跨 clinic 指针会被拒绝，无法验证的内容仅为 unknown。Copilot 不直接写记录；draft 仅预览，clinician 确认后才调用既有 Note/Task 写入模型并以真实 actor 记录 `draft_origin=copilot` 审计元数据。Patient View 从不加载 Copilot。
+- **D4 Copilot 边界**：`POST /api/patients/{patient_id}/copilot/query` 只对同 clinic 的 clinician 开放。Provider 只接收最多 12 个脱敏 exact-span cards，且不拥有 draft type/Event/patient/visibility/endpoint；AI Summary 必须继续解析到 raw source 才能成为 source fact。`Find evidence` 先在当前授权 patient 全历史做服务器端匹配，再限制 provider egress；`What changed` 返回两个 Event source facts + 显式 comparison inference。Copilot 不直接写记录；可编辑 Preview 由服务端签发 5 分钟 HMAC token，绑定 actor/clinic/patient/Event/type/evidence，既有 Note/Task API 验证成功后才记录 `draft_origin=copilot`。Patient instruction 必须改成有效 patient-facing 内容；Patient View 从不加载 Copilot。
 
 ### Demo auth（D1）：Invite → Register → Login → Session → Logout
 
@@ -812,6 +812,7 @@ NANTINGALE_DEMO_AUTH=true          # 显式开启 legacy X-User-Id/X-Role 头模
 NANTINGALE_SESSION_TTL_HOURS=12    # session 有效期（默认 12 小时）
 NANTINGALE_INVITE_TTL_DAYS=7       # invite 有效期（默认 7 天）
 NANTINGALE_SECURE_COOKIES=true     # HTTPS 部署后开启 cookie Secure 标志
+NANTINGALE_COPILOT_CONFIRMATION_SECRET=<shared secret>  # 多 worker 必配；单进程未配置时使用进程随机 secret
 ```
 
 前端环境变量（`frontend/.env`）：

@@ -1,6 +1,41 @@
 [
-  {"id": "changed", "category": "what_changed", "question": "What changed recently?"},
-  {"id": "matters", "category": "what_matters_now", "question": "What matters now?"},
-  {"id": "evidence", "category": "find_evidence", "question": "Find evidence about nausea"},
-  {"id": "draft", "category": "draft_action", "question": "Prepare a draft action"}
+  {
+    "id": "changed",
+    "category": "what_changed",
+    "question": "What changed recently?",
+    "expected": [
+      {"event_id": "evt_review_0826", "artifact_id": "art_review_note", "quote": "Headache severity improved from 7/10 to approximately 3/10 since the doctor consult. Current headache frequency is not established in the available notes. Morning nausea persists."},
+      {"event_id": "evt_fu_0824", "artifact_id": "art_fu_raw", "quote": "The headaches have improved - about 3 out of 10 now."}
+    ],
+    "supported_claims": 2,
+    "inference_claims": 1
+  },
+  {
+    "id": "matters",
+    "category": "what_matters_now",
+    "question": "What matters now?",
+    "expected": [
+      {"event_id": "evt_nurse_0821", "artifact_id": "art_nurse_transcript", "quote": "Your blood pressure is 158 over 96."},
+      {"event_id": "evt_doc_0821", "artifact_id": "art_doc_transcript", "quote": "I'm ordering a blood test to check for any underlying causes."}
+    ]
+  },
+  {
+    "id": "evidence",
+    "category": "find_evidence",
+    "question": "Find evidence about once weekly headaches",
+    "expected": [
+      {"event_id": "evt_hist_2025", "artifact_id": "art_hist_2025_note", "quote": "Intermittent tension-type headaches, once weekly. No red-flag features on initial evaluation. Neurological examination unremarkable."}
+    ],
+    "exclude_text": ["blood pressure", "blood test"]
+  },
+  {
+    "id": "draft",
+    "category": "draft_action",
+    "question": "Prepare a draft action",
+    "draft_type": "task",
+    "expected": [
+      {"event_id": "evt_review_0826", "artifact_id": "art_review_instruction", "quote": "Continue taking propranolol 20 mg daily. Complete your blood test and keep the follow-up appointment."}
+    ],
+    "expected_draft_type": "task"
+  }
 ]

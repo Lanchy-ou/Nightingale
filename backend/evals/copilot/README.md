@@ -7,9 +7,13 @@ Run from `backend/`:
 ```
 
 The runner seeds the canonical synthetic journey in a temporary database and
-uses `mock` only. It checks the four frozen query categories in
-`questions.json`, verifies every returned `supported` claim against its exact
-server-resolved Artifact span, and reports `glance_latency_included: false`.
+uses `mock` only. It locks all four query categories to expected
+Event/Artifact/quote/exact-span tuples, checks full-history retrieval and
+unrelated-span exclusion, rejects AI-summary self-citation and a forged draft
+confirmation token, and verifies clinician-selected draft type authority.
+
+Latency is reported separately as `COPILOT_READ_PATH` P50/P95/max with
+`glance_latency_included: false`; it must never be presented as Glance P95.
 
 Provider report:
 
