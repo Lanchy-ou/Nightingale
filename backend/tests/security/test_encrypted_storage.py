@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import sqlite3
+from datetime import datetime
 
 import pytest
 from sqlalchemy import URL, create_engine, text
 
 from app.db import Base
+from app.voice.models import VoiceCaptureRecord  # noqa: F401 - register table in Base metadata
 from app.storage_security import (
     assert_sqlcipher_file,
     create_encrypted_backup,
@@ -86,6 +88,60 @@ def test_database_backup_and_restore_are_really_encrypted(tmp_path):
             )
         }
         assert "artifact_storage_state" in tables
+        connection.execute(
+            text(
+                "INSERT INTO patients (patient_id, clinic_id, name) "
+                "VALUES (:patient_id, :clinic_id, :name)"
+            ),
+            {
+                "patient_id": "pat_voice_storage",
+                "clinic_id": "cln_storage_probe",
+                "name": "Synthetic Voice Patient",
+            },
+        )
+        connection.execute(
+            text(
+                "INSERT INTO users (user_id, clinic_id, name, role, patient_id) "
+                "VALUES (:user_id, :clinic_id, :name, :role, NULL)"
+            ),
+            {
+                "user_id": "usr_voice_storage",
+                "clinic_id": "cln_storage_probe",
+                "name": "Synthetic Voice Clinician",
+                "role": "clinician",
+            },
+        )
+        connection.execute(
+            text(
+                "INSERT INTO voice_captures "
+                "(capture_id, clinic_id, patient_id, created_by, capture_mode, "
+                "event_type, idempotency_key, status, revision, started_at, "
+                "created_at, updated_at, mime_type, byte_length, audio_sha256, "
+                "audio_bytes) VALUES "
+                "(:capture_id, :clinic_id, :patient_id, :created_by, :capture_mode, "
+                ":event_type, :idempotency_key, :status, :revision, :started_at, "
+                ":created_at, :updated_at, :mime_type, :byte_length, :audio_sha256, "
+                ":audio_bytes)"
+            ),
+            {
+                "capture_id": "vc_storage_probe",
+                "clinic_id": "cln_storage_probe",
+                "patient_id": "pat_voice_storage",
+                "created_by": "usr_voice_storage",
+                "capture_mode": "doctor_consult",
+                "event_type": "doctor_consult",
+                "idempotency_key": "storage-probe",
+                "status": "uploaded",
+                "revision": 2,
+                "started_at": datetime(2026, 8, 27, 10, 0),
+                "created_at": datetime(2026, 8, 27, 10, 0),
+                "updated_at": datetime(2026, 8, 27, 10, 1),
+                "mime_type": "audio/wav",
+                "byte_length": 22,
+                "audio_sha256": "0" * 64,
+                "audio_bytes": b"synthetic-audio-bytes",
+            },
+        )
     engine.dispose()
 
     assert_sqlcipher_file(database, DB_KEY)
@@ -118,6 +174,10 @@ def test_database_backup_and_restore_are_really_encrypted(tmp_path):
             "FROM artifact_storage_state WHERE artifact_id = ?",
             ("art_storage_probe",),
         ).fetchone()
+        voice_row = connection.execute(
+            "SELECT capture_id, audio_bytes FROM voice_captures WHERE capture_id = ?",
+            ("vc_storage_probe",),
+        ).fetchone()
     assert row == ("cln_storage_probe", "Encrypted demo clinic")
     assert "artifact_storage_state" in restored_tables
     assert storage_row == (
@@ -126,6 +186,7 @@ def test_database_backup_and_restore_are_really_encrypted(tmp_path):
         "decay-v1",
         b"shadow-proof",
     )
+    assert voice_row == ("vc_storage_probe", b"synthetic-audio-bytes")
 
 
 def test_backup_and_restore_refuse_to_overwrite_explicit_files(tmp_path):

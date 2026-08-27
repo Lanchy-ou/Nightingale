@@ -147,6 +147,140 @@ def _ingest_common(
     }
 
 
+def ingest_confirmed_voice_transcript(
+    *,
+    db: Session,
+    ctx: RoleContext,
+    capture_id: str,
+    patient_id: str,
+    event_type: str,
+    started_at: datetime,
+    ended_at: datetime | None,
+    encounter_id: str | None,
+    content: dict,
+    audio_ranges: list[dict],
+) -> dict:
+    """Persist a confirmed voice Transcript raw-first, then reuse AI pipeline.
+
+    This is the only Voice -> existing ingestion seam. Recording bytes and the
+    machine transcript never enter the Summary LLM.
+    """
+    patient = db.get(Patient, patient_id)
+    if patient is None:
+        raise resource_not_found()
+
+    role_contract = {
+        ("clinician", "doctor_consult"): (
+            "create_doctor_consult",
+            "ai_doctor_consult_summary",
+            "doctor_consult_create",
+        ),
+        ("staff", "nurse_consult"): (
+            "create_nurse_consult",
+            "ai_nurse_consult_summary",
+            "nurse_consult_create",
+        ),
+        ("patient", "patient_ai_preconsult"): (
+            "create_patient_session",
+            "ai_patient_session_summary",
+            "source_ingest",
+        ),
+        ("patient", "patient_followup"): (
+            "create_patient_session",
+            "ai_patient_session_summary",
+            "source_ingest",
+        ),
+    }
+    contract = role_contract.get((ctx.role, event_type))
+    if contract is None:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    action, summary_type, event_audit_action = contract
+    authorize(ctx, action, patient.clinic_id, patient.patient_id)
+
+    event_id = f"evt_{stable_id('voice_capture', patient.clinic_id, patient_id, capture_id)}"
+    source_id = f"art_{stable_id('voice_transcript', patient.clinic_id, patient_id, capture_id)}"
+    if event_type in {"doctor_consult", "nurse_consult"}:
+        resolved_encounter_id = encounter_id or f"enc_{stable_id(event_type, capture_id)}"
+    else:
+        resolved_encounter_id = None
+    key = _namespaced_key(patient.clinic_id, patient_id, "voice", capture_id)
+
+    raw = _existing_raw(db, key)
+    event = db.get(Event, event_id)
+    if raw is not None:
+        if raw.event_id != event_id or event is None or raw.artifact_id != source_id:
+            raise HTTPException(status_code=409, detail="Voice ingestion identity conflict")
+    else:
+        if event is not None or db.get(Artifact, source_id) is not None:
+            raise HTTPException(status_code=409, detail="Voice capture already exists")
+        now = datetime.now()
+        event = Event(
+            event_id=event_id,
+            patient_id=patient.patient_id,
+            clinic_id=patient.clinic_id,
+            event_type=event_type,
+            encounter_id=resolved_encounter_id,
+            started_at=started_at,
+            ended_at=ended_at,
+            created_at=now,
+        )
+        raw = Artifact(
+            artifact_id=source_id,
+            event_id=event_id,
+            artifact_type="transcript",
+            author_role="system",
+            author_id=None,
+            content=content,
+            created_at=now,
+            version=1,
+            provenance_pointer={
+                "recording_capture_id": capture_id,
+                "audio_ranges": audio_ranges,
+            },
+            ingestion_key=key,
+        )
+        db.add(event)
+        db.add(raw)
+        add_audit(
+            db,
+            actor_id=ctx.user_id,
+            actor_role=ctx.role,
+            action=event_audit_action,
+            target_type="event",
+            target_id=event_id,
+            clinic_id=patient.clinic_id,
+            patient_id=patient.patient_id,
+            event_id=event_id,
+        )
+        add_audit(
+            db,
+            actor_id=ctx.user_id,
+            actor_role=ctx.role,
+            action="source_ingest",
+            target_type="artifact",
+            target_id=source_id,
+            clinic_id=patient.clinic_id,
+            patient_id=patient.patient_id,
+            event_id=event_id,
+        )
+        db.commit()
+        event = db.get(Event, event_id)
+        raw = db.get(Artifact, source_id)
+
+    result = _ingest_common(
+        db,
+        event,
+        raw,
+        summary_type,
+        ctx,
+        patient_visible=False,
+    )
+    result["event_id"] = event_id
+    result["source_artifact_id"] = source_id
+    result["encounter_id"] = event.encounter_id
+    return result
+
+
 def _create_consult(
     *,
     db: Session,
