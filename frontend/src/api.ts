@@ -21,6 +21,9 @@ import type {
   CopilotCategory,
   CopilotResponse,
   PatientTask,
+  PatientCheckInIntent,
+  PatientCheckInList,
+  PatientCheckInSession,
   PatientView,
   ProvenanceResult,
   RegisterResult,
@@ -206,7 +209,34 @@ export const api = {
   getCurrentIdentity: (signal?: AbortSignal) => get<CurrentIdentity>(`/api/auth/session`, signal),
   getClinicPatients: (signal?: AbortSignal) => get<Patient[]>(`/api/patients`, signal),
   getPatient: (id: string, signal?: AbortSignal) => get<Patient>(`/api/patients/${id}`, signal),
-  getPatientView: (id: string) => get<PatientView>(`/api/patients/${id}/patient-view`),
+  getPatientView: (id: string, signal?: AbortSignal) => get<PatientView>(`/api/patients/${id}/patient-view`, signal),
+  listPatientCheckIns: (id: string, signal?: AbortSignal) =>
+    get<PatientCheckInList>(`/api/patients/${id}/check-ins`, signal),
+  getPatientCheckIn: (sessionId: string, signal?: AbortSignal) =>
+    get<PatientCheckInSession>(`/api/check-ins/${sessionId}`, signal),
+  startPatientCheckIn: (patientId: string, sessionId: string, signal?: AbortSignal) =>
+    post<PatientCheckInSession>(`/api/patients/${patientId}/check-ins`, { session_id: sessionId }, signal),
+  savePatientCheckInMessage: (
+    sessionId: string,
+    messageId: string,
+    intent: PatientCheckInIntent,
+    text: string,
+    signal?: AbortSignal,
+  ) => post<PatientCheckInSession>(`/api/check-ins/${sessionId}/messages/save`, {
+    message_id: messageId,
+    intent,
+    text,
+  }, signal),
+  processPatientCheckInMessage: (sessionId: string, messageId: string, signal?: AbortSignal) =>
+    post<PatientCheckInSession>(`/api/check-ins/${sessionId}/messages/${messageId}/process`, {}, signal),
+  finishPatientCheckIn: (sessionId: string, expectedStatus: string, signal?: AbortSignal) =>
+    post<PatientCheckInSession>(`/api/check-ins/${sessionId}/finish`, { expected_status: expectedStatus }, signal),
+  resumePatientCheckIn: (sessionId: string, expectedStatus: string, signal?: AbortSignal) =>
+    post<PatientCheckInSession>(`/api/check-ins/${sessionId}/resume`, { expected_status: expectedStatus }, signal),
+  abandonPatientCheckIn: (sessionId: string, expectedStatus: string, signal?: AbortSignal) =>
+    post<PatientCheckInSession>(`/api/check-ins/${sessionId}/abandon`, { expected_status: expectedStatus }, signal),
+  submitPatientCheckIn: (sessionId: string, expectedStatus: string, signal?: AbortSignal) =>
+    post<PatientCheckInSession>(`/api/check-ins/${sessionId}/submit`, { expected_status: expectedStatus }, signal),
   getTasks: (id: string, signal?: AbortSignal) => get<ClinicalTask[]>(`/api/patients/${id}/tasks`, signal),
   createTask: (
     eventId: string,

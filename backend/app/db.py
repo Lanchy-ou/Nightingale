@@ -181,6 +181,16 @@ def migrate_phase_e_schema(target_engine: Engine = engine) -> None:
     from .voice.models import VoiceCaptureRecord
 
     VoiceCaptureRecord.__table__.create(bind=target_engine, checkfirst=True)
+    migrate_patient_checkin_schema(target_engine)
+
+
+def migrate_patient_checkin_schema(target_engine: Engine = engine) -> None:
+    """Create the bounded Patient Check-in lifecycle tables idempotently."""
+    from . import models as _core_models  # noqa: F401
+    from .models import PatientCheckInMessage, PatientCheckInSession
+
+    PatientCheckInSession.__table__.create(bind=target_engine, checkfirst=True)
+    PatientCheckInMessage.__table__.create(bind=target_engine, checkfirst=True)
 
 
 def get_db():

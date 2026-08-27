@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from ..audit import add_audit
 from ..authz import authorize, authorize_scope, require_auth, resource_not_found
+from ..checkin_visibility import require_checkin_event_visible
 from ..copilot_confirmation import audit_details, validate_confirmation_token
 from ..db import get_db
 from ..ids import new_id
@@ -102,6 +103,7 @@ def create_task(
         raise resource_not_found()
     # Scope and permission precede all request-content/assignment/provenance branches.
     authorize(ctx, "create_task", event.clinic_id, event.patient_id)
+    require_checkin_event_visible(db, event_id)
     parsed = _validate(TaskCreate, body)
     confirmation = validate_confirmation_token(
         parsed.confirmation_token,

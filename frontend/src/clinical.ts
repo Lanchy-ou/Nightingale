@@ -1,6 +1,7 @@
 import type { Artifact, Event } from './types';
 
 export const EVENT_LABELS: Record<string, string> = {
+  patient_checkin: 'Patient Check-in',
   patient_ai_preconsult: 'Patient AI Pre-consult',
   nurse_consult: 'Nurse Consult',
   doctor_consult: 'Doctor Consult',

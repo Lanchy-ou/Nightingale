@@ -19,6 +19,7 @@ from .api import (
     audit,
     auth,
     comments,
+    checkins,
     copilot,
     events,
     highlights,
@@ -79,6 +80,7 @@ app.include_router(events.router)
 app.include_router(highlights.router)
 app.include_router(notes.router)
 app.include_router(comments.router)
+app.include_router(checkins.router)
 app.include_router(copilot.router)
 app.include_router(audit.router)
 app.include_router(sources.router)

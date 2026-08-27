@@ -1,12 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api';
 import type { PatientTask, PatientView, TaskStatus } from '../types';
-import VoiceCapture from '../components/VoiceCapture';
-
-const EVENT_TYPE_LABELS: Record<string, string> = {
-  patient_ai_preconsult: 'AI pre-consult',
-  patient_followup: 'Recovery check-in',
-};
+import PatientCheckIn from '../components/PatientCheckIn';
 
 function fmtLongDate(iso: string | null): string {
   if (!iso) return '';
@@ -43,20 +38,17 @@ export default function PatientViewPage({
   const [tab, setTab] = useState<'today' | 'care' | 'checkin' | 'summaries'>('today');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [submitSuccess, setSubmitSuccess] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [pendingTaskId, setPendingTaskId] = useState<string | null>(null);
   const [taskError, setTaskError] = useState<string | null>(null);
 
   const load = useCallback(() => {
+    const controller = new AbortController();
     let cancelled = false;
     (async () => {
       setLoading(true);
       try {
-        const v = await api.getPatientView(patientId);
+        const v = await api.getPatientView(patientId, controller.signal);
         if (!cancelled) {
           setView(v);
           setError(null);
@@ -69,6 +61,7 @@ export default function PatientViewPage({
     })();
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [patientId]);
 
@@ -79,36 +72,10 @@ export default function PatientViewPage({
   useEffect(() => {
     // patient/session identity is a hard remount boundary. Clear every draft,
     // error and pending response even if a host reuses this component.
-    setMessage('');
-    setSubmitError(null);
-    setSubmitSuccess(false);
     setTaskError(null);
     setPendingTaskId(null);
     setTab('today');
   }, [patientId, roleKey]);
-
-  async function send() {
-    if (!message.trim()) return;
-    setBusy(true);
-    setSubmitError(null);
-    setSubmitSuccess(false);
-    try {
-      await api.createSession(
-        patientId,
-        `sess-${Date.now()}`,
-        'patient_followup',
-        new Date().toISOString(),
-        { messages: [{ id: 'm1', speaker: 'patient', text: message.trim() }] },
-      );
-      setMessage('');
-      setSubmitSuccess(true);
-      setRefreshKey((k) => k + 1);
-    } catch (e: any) {
-      setSubmitError(String(e.message ?? e));
-    } finally {
-      setBusy(false);
-    }
-  }
 
   async function transition(task: PatientTask, status: TaskStatus) {
     setPendingTaskId(task.task_id);
@@ -232,43 +199,12 @@ export default function PatientViewPage({
         )}
 
         {tab === 'checkin' && (
-          <section className="patient-checkin-layout">
-            <aside className="patient-checkin-history">
-              <button className="patient-back-home" onClick={() => setTab('today')}>← Back to Today</button>
-              <h2>Check-in</h2>
-              <p>Your updates become patient conversation records for the care team. They do not change your doctor’s plan or complete a task.</p>
-              <h3>Previous Check-ins</h3>
-              {view.check_in.sessions.length === 0 ? <span className="patient-empty-compact">No previous updates</span> : view.check_in.sessions.map((session) => (
-                <div className="patient-session-row" key={session.event_id}><strong>{fmtLongDate(session.started_at)}</strong><span>{EVENT_TYPE_LABELS[session.event_type] ?? 'Patient update'}</span></div>
-              ))}
-            </aside>
-            <div className="patient-checkin-main">
-              <header><span className="patient-online-dot" aria-hidden="true" /><div><strong>Nightingale Check-in</strong><small>For non-emergency recovery updates</small></div></header>
-              <div className="patient-checkin-conversation" aria-live="polite">
-                <div className="patient-assistant-message">Hi {view.display_name}. What has changed since your last update?</div>
-                <div className="patient-quick-prompts">
-                  {['My symptoms are improving', 'I still feel nauseous', 'I have a new symptom'].map((prompt) => <button key={prompt} onClick={() => { setMessage(prompt); setSubmitSuccess(false); }}>{prompt}</button>)}
-                </div>
-                {submitSuccess && <div className="patient-success-message">Your update was saved and is available for your care team to review.</div>}
-              </div>
-              <VoiceCapture
-                boundaryKey={`${roleKey}:${patientId}:voice-checkin`}
-                patientId={patientId}
-                captureMode="patient_session"
-                patientEventType="patient_followup"
-                onProcessed={() => {
-                  setSubmitSuccess(true);
-                  setRefreshKey((key) => key + 1);
-                }}
-              />
-              <div className="patient-checkin-composer">
-                <textarea value={message} onChange={(event) => { setMessage(event.target.value); setSubmitSuccess(false); }} placeholder="Tell us how you are feeling…" rows={4} />
-                <div><span>Do not use this for emergencies.</span><button onClick={send} disabled={busy || !message.trim()}>{busy ? 'Saving…' : submitError ? 'Retry' : 'Send update'} <span aria-hidden="true">↑</span></button></div>
-                {busy && <small>Safely saving your original update…</small>}
-                {submitError && <div className="form-error">Send failed: {submitError}. Your words are still here, so you can retry.</div>}
-              </div>
-            </div>
-          </section>
+          <PatientCheckIn
+            patientId={patientId}
+            roleKey={roleKey}
+            displayName={view.display_name}
+            onBack={() => setTab('today')}
+          />
         )}
 
         {tab === 'summaries' && (

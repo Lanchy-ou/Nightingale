@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .audit import add_audit
+from .checkin_visibility import checkin_event_is_clinically_visible
 from .copilot_confirmation import issue_confirmation_token
 from .copilot_models import (
     CopilotClaimOut,
@@ -75,12 +76,37 @@ def _known_names(db: Session, patient: Patient) -> list[str]:
 
 
 def _events(db: Session, patient_id: str) -> list[Event]:
-    return list(db.scalars(
+    events = list(db.scalars(
         select(Event).where(Event.patient_id == patient_id).order_by(Event.started_at.desc(), Event.event_id.desc())
     ).all())
+    return [event for event in events if checkin_event_is_clinically_visible(db, event.event_id)]
 
 
-def _direct_quotes(artifact: Artifact) -> list[tuple[dict, str]]:
+def _direct_quotes(
+    artifact: Artifact, *, patient_messages_only: bool = False
+) -> list[tuple[dict, str]]:
+    if patient_messages_only:
+        out: list[tuple[dict, str]] = []
+        for position, item in enumerate(artifact.content.get("messages", []), start=1):
+            if (
+                not isinstance(item, dict)
+                or item.get("speaker") != "patient"
+                or not isinstance(item.get("text"), str)
+            ):
+                continue
+            quote = item["text"].strip()
+            if not quote:
+                continue
+            start = item["text"].find(quote)
+            span = {
+                "kind": "message",
+                "index": item.get("id") if isinstance(item.get("id"), str) else position,
+                "offset": [start, start + len(quote)],
+            }
+            if extract_text(artifact.content, span) == quote:
+                out.append((span, quote))
+        return out
+
     values: list[str] = []
     for item in artifact.content.get("segments", []):
         if isinstance(item, dict) and isinstance(item.get("text"), str):
@@ -103,7 +129,16 @@ def _direct_quotes(artifact: Artifact) -> list[tuple[dict, str]]:
 def _resolved_quotes(db: Session, event: Event, artifact: Artifact) -> list[tuple[Artifact, dict, str]]:
     """Resolve an AI summary through raw source, or reject self-citation."""
     if artifact.artifact_type not in AI_SUMMARY_TYPES:
-        return [(artifact, span, quote) for span, quote in _direct_quotes(artifact)]
+        return [
+            (artifact, span, quote)
+            for span, quote in _direct_quotes(
+                artifact,
+                patient_messages_only=(
+                    event.event_type == "patient_checkin"
+                    and artifact.artifact_type == "raw_conversation"
+                ),
+            )
+        ]
     pointer = artifact.provenance_pointer or {}
     source_id = pointer.get("artifact_id")
     span = pointer.get("span")

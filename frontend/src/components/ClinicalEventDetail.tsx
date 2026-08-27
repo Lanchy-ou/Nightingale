@@ -207,7 +207,7 @@ export default function ClinicalEventDetail({
                     <span className="muted">Version {selectedArtifact.version}</span>
                   </div>
                 )}
-                {selectedArtifact.artifact_type === 'transcript' && (
+                {['transcript', 'raw_conversation'].includes(selectedArtifact.artifact_type) && (
                   <p className="immutable-note">Immutable raw source · corrections belong in Comments or a {role === 'staff' ? 'Staff Note' : 'Clinician Note'}.</p>
                 )}
                 </>

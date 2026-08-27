@@ -95,14 +95,25 @@ def resolve_exact_span(content: object, span: object) -> str | None:
                 text = member_text
                 break
     elif kind == "message":
-        if not _is_int(index):
-            return None
         messages = content.get("messages")
         if not isinstance(messages, list):
             return None
-        if not (1 <= index <= len(messages)):
+        member = None
+        if _is_int(index):
+            if not (1 <= index <= len(messages)):
+                return None
+            member = messages[index - 1]
+        elif isinstance(index, str):
+            member = next(
+                (
+                    candidate
+                    for candidate in messages
+                    if isinstance(candidate, dict) and candidate.get("id") == index
+                ),
+                None,
+            )
+        else:
             return None
-        member = messages[index - 1]
         if not isinstance(member, dict):
             return None
         member_text = member.get("text")

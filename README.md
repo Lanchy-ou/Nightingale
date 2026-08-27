@@ -338,10 +338,36 @@ Patient View 不是完整医生视图的复制。
 
 1. **Today** —— 最新明确 patient instruction、next follow-up、当前未终结 Task；
 2. **Care Plan** —— `open | in_progress | reported_done | completed` 分组，患者只能 Start/Report done；`reported_done` 明确显示等待诊所确认；
-3. **Check-in** —— 提交前说明、sending/error/retry 状态，原始 patient conversation 先落库；不直接修改 note 或 Task；
+3. **Check-in** —— 受限、真实持久化的多轮信息采集；一次只问一个问题，患者可自由回答、纠正、跳过、补充或结束；不直接修改 note、instruction、Task 或医生计划；
 4. **Visit Summaries** —— 仅 patient-facing instructions，按 `Event.started_at` 倒序。
 
 服务端合同由 `tests/test_patient_view.py` 与 `tests/test_patient_task_projection.py` 锁定：response schema `extra=forbid`，Task 只返回 `task_id/title/status/due_at/updated_at/reported_done_at/completed_at/patient_visible`；不返回 description、assignee、Artifact/Span、AuditLog、importance score 或 clinical risk reason。`sessions` 仍只含本人的 patient session Event。跨 clinic/非本人使用统一 404，匿名 401，同 scope 非 patient 403。
+
+#### 4.3.1 Persistent bounded Patient Check-in
+
+新的 Check-in 使用独立 patient-safe API，但仍写入同一纵向病历：
+
+```text
+POST /api/patients/{patient_id}/check-ins          # start or resume the single active session
+GET  /api/patients/{patient_id}/check-ins          # active + patient-safe history
+POST /api/check-ins/{id}/messages/save             # commit stable patient message first
+POST /api/check-ins/{id}/messages/{message_id}/process
+POST /api/check-ins/{id}/finish|resume|abandon|submit
+```
+
+每条患者消息使用稳定 `message_id`。前端先等待 `/messages/save` 成功，再显示“原话已保存，正在整理下一问”；process 或响应丢失后的重试继续复用同一 id，服务端返回已存在的 patient/AI message，不重复落库。状态只有 `active | awaiting_confirmation | submitted | safety_escalated | abandoned`。`active/awaiting_confirmation/abandoned` Event 不进入临床 Timeline、Copilot、Comments/Audit/Note/Task Event 路径；`submitted` 与 `safety_escalated` 才能进入同 clinic 医护旅程。
+
+Provider 仍只通过现有 `LLMClient`，仅支持 `mock`、DeepSeek 与 deterministic fallback。Turn schema 限定 acknowledgement、一个 bounded next question、question type、conversation action 与 patient message references；安全升级、轮次上限、权限、session/Task 状态全部由服务端确定。发送 Provider 前递归 redaction；audit/log/error 只存 metadata。
+
+确认前只保存 Event、raw conversation 和明确标识的 patient/AI messages，不生成正式 Summary/Highlight。确认后才形成：
+
+```text
+Patient -> patient_checkin Event -> raw_conversation
+        -> ai_patient_session_summary -> candidate Highlight
+        -> {kind: message, index: stable patient message_id, exact offset}
+```
+
+候选 quote 必须在指定 patient message 中逐字解析；AI question/acknowledgement 永远不能成为事实、Highlight 或 Copilot source。Task 进展只作为待医护核实的患者陈述，不改变 Task status。确定性高风险短语规则在 raw commit 后、LLM 前运行，停止普通追问并明确提示紧急求助；系统不会声称已正式分诊或已通知诊所。
 
 ### 4.4 Care Tasks（D2）
 
@@ -526,6 +552,7 @@ cd backend
 
 # 现有 E1–E3 Demo 的显式幂等升级
 .venv/Scripts/python.exe scripts/migrate_phase_e_schema.py
+.venv/Scripts/python.exe scripts/migrate_patient_checkin_schema.py
 
 # 运行时环境；模型不会在请求期间下载
 $env:NANTINGALE_VOICE_ENABLED='true'

@@ -25,6 +25,11 @@ function matchOffset(span: Span | null, kind: string, key: number | string): [nu
   return undefined;
 }
 
+function messageOffset(span: Span | null, message: any, position: number): [number, number] | undefined {
+  return matchOffset(span, 'message', typeof message.id === 'string' ? message.id : position)
+    ?? matchOffset(span, 'message', position);
+}
+
 function sectionLabel(key: string): string {
   const labels: Record<string, string> = {
     assessment: 'Assessment',
@@ -63,12 +68,37 @@ export default function ArtifactContent({
   }
 
   if (Array.isArray(content.messages)) {
+    if (artifact.artifact_type === 'raw_conversation') {
+      const patientMessages = content.messages.filter((message: any) => message.speaker === 'patient');
+      const aiMessages = content.messages.filter((message: any) => message.speaker === 'ai');
+      return (
+        <div className="artifact-content checkin-artifact-content">
+          {content.safety_status === 'safety_escalated' && (
+            <div className="clinical-checkin-safety"><strong>Safety guidance shown</strong><p>Ordinary Check-in questions stopped. The system did not claim that the clinic was notified.</p></div>
+          )}
+          <section className="artifact-section checkin-source-section">
+            <h4>Patient original messages</h4>
+            {patientMessages.map((message: any) => {
+              const position = content.messages.indexOf(message) + 1;
+              return <div key={message.id ?? position} className="line checkin-source-line"><span className="speaker">Patient</span>{' '}<HighlightedText text={message.text} offset={messageOffset(s, message, position)} markRef={markRef} /></div>;
+            })}
+          </section>
+          <section className="artifact-section checkin-ai-section">
+            <h4>Nightingale AI questions and acknowledgements</h4>
+            {aiMessages.map((message: any) => {
+              const position = content.messages.indexOf(message) + 1;
+              return <div key={message.id ?? position} className="line checkin-ai-line"><span className="speaker">Nightingale AI{message.question_type ? ` · ${String(message.question_type).replace(/_/g, ' ')}` : ''}</span>{' '}<HighlightedText text={message.text} offset={messageOffset(s, message, position)} markRef={markRef} /></div>;
+            })}
+          </section>
+        </div>
+      );
+    }
     return (
       <div className="artifact-content">
         {content.messages.map((m: any, i: number) => (
           <div key={m.id ?? i} className="line">
             <span className="speaker">{m.speaker}</span>{' '}
-            <HighlightedText text={m.text} offset={matchOffset(s, 'message', i + 1)} markRef={markRef} />
+            <HighlightedText text={m.text} offset={messageOffset(s, m, i + 1)} markRef={markRef} />
           </div>
         ))}
       </div>
@@ -90,6 +120,13 @@ export default function ArtifactContent({
         <section className="artifact-section"><h4>Key points</h4><ul className="key-points">
           {(content.key_points as string[]).map((kp, i) => (
             <li key={i}>{kp}</li>
+          ))}
+        </ul></section>
+      )}
+      {Array.isArray(content.source_facts) && (
+        <section className="artifact-section checkin-summary-sources"><h4>Exact patient sources</h4><ul>
+          {(content.source_facts as any[]).map((fact) => (
+            <li key={`${fact.patient_message_id}:${fact.quote}`}><strong>{fact.patient_message_id}</strong><span>{fact.quote}</span></li>
           ))}
         </ul></section>
       )}

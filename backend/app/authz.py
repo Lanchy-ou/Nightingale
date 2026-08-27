@@ -23,6 +23,8 @@ PERMISSIONS: dict[str, dict[str, bool]] = {
         "read_artifacts": True,
         "read_patient_view": True,
         "create_patient_session": True,
+        "manage_patient_checkin": True,
+        "read_patient_checkin": True,
         "read_tasks": True,
         "transition_task": True,
         "create_voice_capture": True,
@@ -52,6 +54,7 @@ PERMISSIONS: dict[str, dict[str, bool]] = {
         "highlight_status": True,
         "read_tasks": True,
         "read_task_provenance": True,
+        "read_patient_checkin": True,
         "create_task": True,
         "transition_task": True,
         "create_voice_capture": True,
@@ -81,6 +84,7 @@ PERMISSIONS: dict[str, dict[str, bool]] = {
         "highlight_status": True,
         "read_tasks": True,
         "read_task_provenance": True,
+        "read_patient_checkin": True,
         "create_task": True,
         "transition_task": True,
         "query_copilot": True,
@@ -113,6 +117,7 @@ PERMISSIONS: dict[str, dict[str, bool]] = {
         "admin_read_access_audit": True,
         "read_tasks": True,
         "read_task_provenance": True,
+        "read_patient_checkin": True,
     },
 }
 

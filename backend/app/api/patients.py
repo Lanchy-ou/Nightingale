@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from ..authz import PATIENT_VISIBLE_ARTIFACT_TYPES, authorize, require_auth, resource_not_found
 from ..db import get_db
-from ..models import Artifact, Clinic, Event, Patient
+from ..models import Artifact, Clinic, Event, Patient, PatientCheckInSession
 from ..role_context import RoleContext
 from ..schemas import EventOut, PatientOut
 
@@ -68,6 +68,14 @@ def list_events(
         raise resource_not_found()
     authorize(ctx, "read_events", patient.clinic_id, patient.patient_id)
 
+    hidden_checkin_event_ids = set(
+        db.scalars(
+            select(PatientCheckInSession.event_id).where(
+                PatientCheckInSession.patient_id == patient_id,
+                PatientCheckInSession.status.in_({"active", "awaiting_confirmation", "abandoned"}),
+            )
+        ).all()
+    )
     events = db.scalars(
         select(Event)
         .where(Event.patient_id == patient_id)
@@ -76,6 +84,8 @@ def list_events(
 
     result: list[EventOut] = []
     for event in events:
+        if event.event_id in hidden_checkin_event_ids:
+            continue
         if ctx.role == "patient":
             # artifact_count must not leak the number of hidden artifacts.
             count = db.scalar(

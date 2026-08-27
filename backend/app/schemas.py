@@ -200,6 +200,136 @@ class SessionIngestRequest(BaseModel):
     content: dict
 
 
+# --- Bounded persistent Patient Check-in ----------------------------------
+CHECKIN_QUESTION_TYPES = (
+    "severity",
+    "change",
+    "associated_symptoms",
+    "task_progress",
+    "patient_concern",
+)
+
+
+class CheckInStartRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    session_id: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+
+
+class CheckInPatientMessageRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    message_id: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+    intent: Literal["answer", "supplement", "correction", "skip", "no_more"]
+    text: str = Field(default="", max_length=8000)
+
+    @model_validator(mode="after")
+    def bounded_text(self):
+        self.text = self.text.strip()
+        if self.intent not in {"skip", "no_more"} and not self.text:
+            raise ValueError("text is required for this message intent")
+        if self.intent in {"skip", "no_more"} and not self.text:
+            self.text = "I would prefer to skip this question." if self.intent == "skip" else "I have nothing else to add."
+        return self
+
+
+class CheckInStateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    expected_status: Literal[
+        "active", "awaiting_confirmation", "submitted", "safety_escalated", "abandoned"
+    ]
+
+
+class CheckInTurnResult(BaseModel):
+    """Strict provider result; state/safety/round authority stays server-side."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    acknowledgement: str = Field(min_length=1, max_length=1000)
+    next_question: str | None = Field(default=None, max_length=1000)
+    question_type: Literal[
+        "severity", "change", "associated_symptoms", "task_progress", "patient_concern"
+    ] | None = None
+    conversation_action: Literal["continue", "await_confirmation"]
+    referenced_patient_message_ids: list[str] = Field(default_factory=list, max_length=20)
+
+    @model_validator(mode="after")
+    def action_matches_question(self):
+        if self.conversation_action == "continue":
+            if not self.next_question or self.question_type is None:
+                raise ValueError("continue requires one bounded next question")
+        elif self.next_question is not None or self.question_type is not None:
+            raise ValueError("await_confirmation cannot include a next question")
+        if len(set(self.referenced_patient_message_ids)) != len(self.referenced_patient_message_ids):
+            raise ValueError("referenced message ids must be unique")
+        return self
+
+
+class CheckInSummaryCandidate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(min_length=1, max_length=512)
+    patient_message_id: str = Field(min_length=1, max_length=64)
+    quote: str = Field(min_length=1, max_length=4000)
+    risk_reason: str = Field(min_length=1, max_length=512)
+    entity_type: Literal["symptom", "medication", "allergy", "chief_complaint", "task", "risk"]
+    assertion_value: str | None = Field(default=None, max_length=255)
+    symptom_change: bool = False
+
+
+class CheckInSummaryResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    summary: str = Field(min_length=1, max_length=4000)
+    referenced_patient_message_ids: list[str] = Field(min_length=1, max_length=100)
+    candidates: list[CheckInSummaryCandidate] = Field(default_factory=list, max_length=50)
+
+
+class CheckInMessageOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
+
+    message_id: str
+    sequence: int
+    role: Literal["patient", "ai"]
+    intent: str | None
+    text: str
+    question_type: str | None
+    conversation_action: str | None
+    referenced_patient_message_ids: list[str]
+    response_to_message_id: str | None
+    processing_status: str | None
+    generation_method: str | None = None
+    degraded: bool = False
+    created_at: datetime
+
+
+class CheckInSessionOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    session_id: str
+    event_id: str
+    status: Literal["active", "awaiting_confirmation", "submitted", "safety_escalated", "abandoned"]
+    clarification_count: int
+    max_clarification_questions: int
+    safety_escalated: bool
+    safety_message: str | None
+    started_at: datetime
+    ended_at: datetime | None
+    submitted_at: datetime | None
+    messages: list[CheckInMessageOut]
+    preview_summary: list[str]
+    formal_summary_created: bool
+    resumed: bool = False
+
+
+class CheckInListOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    active_session_id: str | None
+    sessions: list[CheckInSessionOut]
+
+
 # --- C1 Doctor Consult ingestion (strict manual transcript boundary) ---
 class DoctorTranscriptSegment(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)

@@ -27,6 +27,7 @@ from .db import Base
 # Allowed values (enforced by the seed fixture + tests, not DB constraints in M1).
 ROLES = ("patient", "staff", "clinician", "admin")
 EVENT_TYPES = (
+    "patient_checkin",
     "patient_ai_preconsult",
     "nurse_consult",
     "doctor_consult",
@@ -75,6 +76,10 @@ AUDIT_ACTIONS = (
     # D2 care-task lifecycle (metadata-only status history).
     "task_create",
     "task_transition",
+    # Patient Check-in lifecycle (metadata-only; message text is never audited).
+    "checkin_start",
+    "checkin_message",
+    "checkin_state",
 )
 
 TASK_STATUSES = ("open", "in_progress", "reported_done", "completed", "cancelled")
@@ -421,3 +426,79 @@ class AuthSession(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     last_seen_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class PatientCheckInSession(Base):
+    """One bounded Check-in mapped to one longitudinal Patient Event.
+
+    Draft visibility is controlled by ``status``. ``active_key`` is populated
+    only while a session is active/awaiting confirmation, giving each patient
+    user one recoverable active session without a second chat silo.
+    """
+
+    __tablename__ = "patient_checkin_sessions"
+
+    session_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    event_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("events.event_id"), nullable=False, unique=True
+    )
+    raw_artifact_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("artifacts.artifact_id"), nullable=False, unique=True
+    )
+    patient_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("patients.patient_id"), nullable=False, index=True
+    )
+    clinic_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("clinics.clinic_id"), nullable=False, index=True
+    )
+    patient_user_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("users.user_id"), nullable=False, index=True
+    )
+    status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    active_key: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, unique=True
+    )
+    clarification_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    safety_reason_codes: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    started_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    abandoned_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class PatientCheckInMessage(Base):
+    """Stable, append-only message row for a Patient Check-in.
+
+    The raw Artifact is the longitudinal presentation; rows here enforce
+    message idempotency and one AI response per patient message.
+    """
+
+    __tablename__ = "patient_checkin_messages"
+    __table_args__ = (
+        UniqueConstraint("session_id", "sequence", name="uq_checkin_message_sequence"),
+        UniqueConstraint(
+            "response_to_message_id", name="uq_checkin_message_response_to"
+        ),
+    )
+
+    message_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    session_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("patient_checkin_sessions.session_id"), nullable=False, index=True
+    )
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    role: Mapped[str] = mapped_column(String(16), nullable=False)
+    intent: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    text: Mapped[str] = mapped_column(String(8000), nullable=False)
+    question_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    conversation_action: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    referenced_patient_message_ids: Mapped[list] = mapped_column(
+        JSON, nullable=False, default=list
+    )
+    response_to_message_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("patient_checkin_messages.message_id"), nullable=True
+    )
+    processing_status: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    generation_metadata: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
