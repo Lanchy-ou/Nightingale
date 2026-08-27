@@ -989,6 +989,58 @@ button.lifecycle-item.active { background: #eaf5f1; border-radius: 8px; }
 .patient-session-row strong { font-size: 11px; }
 .patient-session-row span { color: #71827c; font-size: 10px; }
 
+/* Persistent bounded Patient Check-in (scoped; no clinical shell restyle). */
+.patient-session-button { width: 100%; border: 1px solid transparent; text-align: left; cursor: pointer; }
+.patient-session-button.active { border-color: #67a58f; box-shadow: 0 0 0 2px rgba(62, 137, 110, .1); }
+.patient-checkin-boundary { margin: 18px 22px 0; padding: 14px 16px; display: grid; gap: 5px; border: 1px solid #e4c878; border-radius: 12px; color: #614f1d; background: #fff9e9; }
+.patient-checkin-boundary strong { font-size: 13px; }
+.patient-checkin-boundary span { font-size: 12px; line-height: 1.55; }
+.patient-checkin-start { margin: auto; padding: 42px 28px; max-width: 560px; text-align: center; }
+.patient-checkin-start h2 { margin: 0 0 10px; color: #173f35; }
+.patient-checkin-start p { color: #61766e; line-height: 1.6; }
+.patient-checkin-start button, .patient-checkin-confirmation button:last-child, .patient-checkin-submitted button, .patient-checkin-failure button { padding: 11px 18px; border: 0; border-radius: 9px; color: white; background: #216f58; cursor: pointer; }
+.patient-checkin-conversation { display: flex; flex-direction: column; gap: 12px; }
+.patient-checkin-bubble { max-width: 76%; padding: 12px 14px; border-radius: 14px; }
+.patient-checkin-bubble small { display: block; margin-bottom: 4px; font-weight: 700; font-size: 10px; letter-spacing: .04em; text-transform: uppercase; }
+.patient-checkin-bubble p { margin: 0; white-space: pre-wrap; line-height: 1.5; }
+.patient-checkin-bubble em { display: block; margin-top: 5px; color: #71827c; font-size: 10px; }
+.patient-checkin-bubble.ai { align-self: flex-start; color: #244f43; background: #e2f0ea; border-bottom-left-radius: 4px; }
+.patient-checkin-bubble.patient { align-self: flex-end; color: white; background: #2f8067; border-bottom-right-radius: 4px; }
+.patient-checkin-progress { align-self: flex-start; padding: 9px 12px; border-radius: 10px; color: #557168; background: #f0f5f3; font-size: 12px; }
+.patient-checkin-intents { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 9px; }
+.patient-checkin-intents button { padding: 6px 10px; border: 1px solid #bfd6ce; border-radius: 999px; color: #49675d; background: white; cursor: pointer; }
+.patient-checkin-intents button.active { color: white; border-color: #2f8067; background: #2f8067; }
+.patient-checkin-composer-multiturn { border-top: 1px solid #e1ebe7; }
+.patient-checkin-composer-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.patient-checkin-composer-actions .patient-checkin-send { margin-left: auto; }
+.patient-checkin-abandon { margin-top: 8px; border: 0; color: #8c5f5f; background: transparent; cursor: pointer; font-size: 11px; }
+.patient-checkin-failure, .patient-checkin-safety, .patient-checkin-confirmation, .patient-checkin-submitted { margin: 18px 22px; padding: 18px; border-radius: 12px; }
+.patient-checkin-failure { color: #6b3e32; border: 1px solid #dfb8ad; background: #fff3ef; }
+.patient-checkin-safety { position: sticky; top: 8px; z-index: 2; color: #782c2c; border: 2px solid #c94a4a; background: #fff0f0; box-shadow: 0 5px 20px rgba(120, 44, 44, .15); }
+.patient-checkin-safety strong { font-size: 17px; }
+.patient-checkin-safety p { margin-bottom: 0; line-height: 1.55; }
+.patient-checkin-confirmation { color: #294b41; border: 1px solid #bed7ce; background: #f5faf8; }
+.patient-checkin-confirmation ul { padding-left: 22px; }
+.patient-checkin-confirmation li { margin: 8px 0; }
+.patient-checkin-confirmation details { margin: 14px 0; padding: 10px 12px; border-radius: 8px; background: white; }
+.patient-checkin-confirmation > div { display: flex; justify-content: flex-end; gap: 10px; }
+.patient-checkin-submitted { color: #245040; border: 1px solid #a8d0c1; background: #edf8f4; }
+.checkin-artifact-content { display: grid; gap: 16px; }
+.checkin-source-section, .checkin-ai-section { padding: 14px; border: 1px solid #dde8e4; border-radius: 10px; }
+.checkin-source-line, .checkin-ai-line { margin: 9px 0; padding: 9px 10px; border-radius: 8px; }
+.checkin-source-line { background: #f5f8f7; }
+.checkin-ai-line { background: #edf4ff; }
+.clinical-checkin-safety { padding: 12px; color: #762e2e; border: 1px solid #d99b9b; border-radius: 8px; background: #fff1f1; }
+.clinical-checkin-safety p { margin: 5px 0 0; }
+.checkin-summary-sources li { display: grid; gap: 4px; margin: 8px 0; }
+.checkin-summary-sources li strong { color: #60766f; font-family: ui-monospace, monospace; font-size: 10px; }
+
+@media (max-width: 760px) {
+  .patient-checkin-bubble { max-width: 90%; }
+  .patient-checkin-confirmation > div { align-items: stretch; flex-direction: column; }
+  .patient-checkin-composer-actions .patient-checkin-send { width: 100%; margin-left: 0; }
+}
+
 /* E4 local voice adapter */
 .consult-input-stack { display: grid; gap: 18px; }
 .consult-input-divider { display: flex; align-items: center; gap: 12px; color: #71827c; font-size: 12px; }

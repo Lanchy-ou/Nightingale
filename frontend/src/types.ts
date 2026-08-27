@@ -361,6 +361,53 @@ export interface PatientViewSession {
   ended_at: string | null;
 }
 
+export type PatientCheckInStatus =
+  | 'active'
+  | 'awaiting_confirmation'
+  | 'submitted'
+  | 'safety_escalated'
+  | 'abandoned';
+
+export type PatientCheckInIntent = 'answer' | 'supplement' | 'correction' | 'skip' | 'no_more';
+
+export interface PatientCheckInMessage {
+  message_id: string;
+  sequence: number;
+  role: 'patient' | 'ai';
+  intent: string | null;
+  text: string;
+  question_type: string | null;
+  conversation_action: string | null;
+  referenced_patient_message_ids: string[];
+  response_to_message_id: string | null;
+  processing_status: string | null;
+  generation_method: string | null;
+  degraded: boolean;
+  created_at: string;
+}
+
+export interface PatientCheckInSession {
+  session_id: string;
+  event_id: string;
+  status: PatientCheckInStatus;
+  clarification_count: number;
+  max_clarification_questions: number;
+  safety_escalated: boolean;
+  safety_message: string | null;
+  started_at: string;
+  ended_at: string | null;
+  submitted_at: string | null;
+  messages: PatientCheckInMessage[];
+  preview_summary: string[];
+  formal_summary_created: boolean;
+  resumed: boolean;
+}
+
+export interface PatientCheckInList {
+  active_session_id: string | null;
+  sessions: PatientCheckInSession[];
+}
+
 export type TaskStatus = 'open' | 'in_progress' | 'reported_done' | 'completed' | 'cancelled';
 
 export interface PatientTask {

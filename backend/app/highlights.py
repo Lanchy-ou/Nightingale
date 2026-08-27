@@ -49,7 +49,11 @@ def locate_span(content: dict, quote: str) -> dict | None:
     for i, msg in enumerate(content.get("messages", []), start=1):
         idx = msg.get("text", "").find(quote)
         if idx != -1:
-            return {"kind": "message", "index": i, "offset": [idx, idx + len(quote)]}
+            # Persistent Check-in messages use their stable message id as the
+            # exact source identity. Legacy conversations keep the 1-based
+            # positional index for backwards compatibility.
+            message_index = msg.get("id") if isinstance(msg.get("id"), str) else i
+            return {"kind": "message", "index": message_index, "offset": [idx, idx + len(quote)]}
 
     for key, val in content.items():
         if isinstance(val, str):
@@ -72,8 +76,13 @@ def extract_text(content: dict, span: dict) -> str | None:
     elif kind == "message":
         msgs = content.get("messages", [])
         idx = span.get("index", 0)
-        if 1 <= idx <= len(msgs):
-            text = msgs[idx - 1].get("text", "")
+        member = None
+        if isinstance(idx, int) and 1 <= idx <= len(msgs):
+            member = msgs[idx - 1]
+        elif isinstance(idx, str):
+            member = next((msg for msg in msgs if msg.get("id") == idx), None)
+        if isinstance(member, dict):
+            text = member.get("text", "")
             start, end = _offset(span, text)
             return text[start:end]
     elif kind == "section":

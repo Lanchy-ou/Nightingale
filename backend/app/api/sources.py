@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from ..ai_pipeline import persist_derived, run_pipeline
 from ..audit import add_audit
 from ..authz import authorize, authorize_scope, require_auth, resource_not_found
+from ..checkin_visibility import require_checkin_event_visible
 from ..db import get_db
 from ..ids import new_id, stable_id
 from ..llm_client import build_client
@@ -473,6 +474,7 @@ def ingest_source(
     # Scope BEFORE any role/type branching: cross-clinic and not-own-patient are
     # always a uniform 404, never a type/role hint.
     authorize_scope(ctx, event.clinic_id, event.patient_id)
+    require_checkin_event_visible(db, event_id)
 
     if ctx.role == "staff":
         if event.event_type != "nurse_consult":

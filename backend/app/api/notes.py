@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from ..audit import add_audit
 from ..authz import authorize, note_edit_action, require_auth, resource_not_found
+from ..checkin_visibility import require_checkin_event_visible
 from ..copilot_confirmation import audit_details, validate_confirmation_token
 from ..db import get_db
 from ..ids import new_id
@@ -53,6 +54,7 @@ def _event(db: Session, event_id: str) -> Event:
     event = db.get(Event, event_id)
     if event is None:
         raise resource_not_found()
+    require_checkin_event_visible(db, event_id)
     return event
 
 

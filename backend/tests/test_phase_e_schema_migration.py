@@ -28,6 +28,12 @@ def test_phase_e_migration_upgrades_legacy_columns_and_tables_idempotently(tmp_p
         "decay_adjustment",
         "learning_metadata",
     }.issubset({column["name"] for column in schema.get_columns("highlights")})
-    assert {"importance_feedback", "artifact_storage_state", "voice_captures"}.issubset(
+    assert {
+        "importance_feedback",
+        "artifact_storage_state",
+        "voice_captures",
+        "patient_checkin_sessions",
+        "patient_checkin_messages",
+    }.issubset(
         set(schema.get_table_names())
     )

@@ -69,10 +69,13 @@ def test_patient_aggregate_never_infers_action_from_clinician_note(patient_clien
 def test_patient_frontend_uses_safe_aggregate_and_resets_drafts_on_identity_boundary():
     root = Path(__file__).parents[2] / "frontend" / "src"
     patient_page = (root / "pages" / "PatientViewPage.tsx").read_text(encoding="utf-8")
+    checkin = (root / "components" / "PatientCheckIn.tsx").read_text(encoding="utf-8")
     api_source = (root / "api.ts").read_text(encoding="utf-8")
     assert "getPatientView" in patient_page
     for clinical_call in ("getComments", "getAudit", "getArtifacts", "getGlance", "getTasks"):
         assert f"api.{clinical_call}" not in patient_page
     assert "key={productKey}" in (root / "App.tsx").read_text(encoding="utf-8")
-    assert "roleKey" in patient_page and "setMessage('')" in patient_page
+    assert "roleKey" in patient_page and "roleKey" in checkin
+    assert "setDraft('')" in checkin and "setPending(null)" in checkin
+    assert "releasePatientCheckInRequest" in checkin and "controller.abort" not in checkin
     assert "/patient-view" in api_source

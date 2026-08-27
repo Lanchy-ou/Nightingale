@@ -1079,3 +1079,17 @@ E3 and E4 are complete on the Phase E integration branch. E5 is explicitly exclu
 - **Migration**: `migrate_phase_e_schema()` idempotently adds E1 `professional_title`, E2 score/feedback schema, E3 storage state and E4 voice table for SQLite/SQLCipher Demo databases. `create_all` is not treated as an old-database migration.
 - **Verification**: backend **482 passed** with real local-ASR tests enabled; security/integration **20 passed**; D3 corpus/runtime and D4 frozen eval PASS; frontend Node 2 passed and production build PASS; pip/dependency, secret, Caddy and diff checks PASS. Browser QA observed all three role entries, state reset and zero warning/error logs.
 - **Permanent non-claims**: no production medical capture, real-clinician usability, diarization, noisy/code-switching accuracy, external ASR privacy or production throughput claim. See `docs/e4_voice_capture_evidence.md` and `Task_Card/E4_Voice_Capture_Adapter_Task_Card.md`.
+
+---
+
+## 32. Patient Multi-turn Check-in Status (2026-08-28)
+
+The bounded Patient Multi-turn Check-in is complete after an independent adversarial review. E5 remains a separate submission-packaging phase.
+
+- **Longitudinal model**: one Check-in session owns one `patient_checkin` Event and one immutable `raw_conversation`; formal `ai_patient_session_summary` and candidate Highlights are created only after patient confirmation. Every candidate resolves through a stable patient `message_id` plus exact quote and offset.
+- **Raw-first and idempotency**: each patient message is committed before safety, redaction or Provider work. Start, save, process and submit retries are concurrency-tested; one stable message id never creates a second patient message or AI result.
+- **Bounded AI**: at most four clarification questions, one at a time, using only severity, change, associated symptoms, Task progress and patient concern. The server rejects stale Provider references and repeated question types. Diagnosis, medication start/stop/dose and test-interpretation requests use a deterministic refusal.
+- **Safety and authority**: transparent high-risk phrases run without an LLM after raw persistence. Narrow explicit negations do not false-escalate; clear high-risk phrases stop ordinary questions and never claim formal triage or clinic notification. Check-in cannot edit clinician/staff artifacts, complete a Task or change a care plan.
+- **Visibility/RBAC**: active, awaiting-confirmation and abandoned drafts are patient-only and hidden from every generic Event read/write path. Submitted and safety-escalated Events are readable only within clinic scope. Admin receives no clinical authoring capability.
+- **Frontend**: Patient View supports start/resume, free answer/supplement/correction/skip/no-more, finish, abandon, confirmation, history and persistent safety guidance. Synchronous in-flight and request-generation guards prevent rapid double actions and stale identity-boundary updates. Clinical Event Detail separates patient originals, AI messages, AI Summary, safety state and exact sources.
+- **Verification**: backend 509 passed / 2 explicit local-ASR-input skips; 29 Check-in tests; security/integration 22 passed; frontend three Node checks and 59-module production build passed; D3/D4, SQLCipher init/backup/restore, Caddy validation, dependencies, secret scan and diff check passed. Current DeepSeek smoke verified the live turn only; strict Summary validation fell back, so the complete live journey is `LIVE_NOT_VERIFIED_CURRENT`.

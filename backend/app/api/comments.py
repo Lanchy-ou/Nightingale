@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from ..audit import add_audit
 from ..authz import authorize, require_auth, resource_not_found
+from ..checkin_visibility import require_checkin_event_visible
 from ..db import get_db
 from ..ids import new_id
 from ..models import Artifact, Comment, Event, User
@@ -48,6 +49,7 @@ def create_comment(
 ):
     event = _resolve_anchor(db, body.anchor_type, body.anchor_id)
     authorize(ctx, "comment", event.clinic_id, event.patient_id)
+    require_checkin_event_visible(db, event.event_id)
 
     if body.parent_comment_id:
         parent = db.get(Comment, body.parent_comment_id)
@@ -106,6 +108,7 @@ def resolve_comment(
         raise resource_not_found()
     event = _resolve_anchor(db, comment.anchor_type, comment.anchor_id)
     authorize(ctx, "comment", event.clinic_id, event.patient_id)
+    require_checkin_event_visible(db, event.event_id)
 
     if not comment.resolved:
         comment.resolved = True
@@ -138,6 +141,7 @@ def unresolve_comment(
         raise resource_not_found()
     event = _resolve_anchor(db, comment.anchor_type, comment.anchor_id)
     authorize(ctx, "comment", event.clinic_id, event.patient_id)
+    require_checkin_event_visible(db, event.event_id)
 
     if comment.resolved:
         comment.resolved = False
@@ -169,6 +173,7 @@ def list_comments(
     if event is None:
         raise resource_not_found()
     authorize(ctx, "read_comments", event.clinic_id, event.patient_id)
+    require_checkin_event_visible(db, event_id)
 
     artifact_ids = db.scalars(
         select(Artifact.artifact_id).where(Artifact.event_id == event_id)
