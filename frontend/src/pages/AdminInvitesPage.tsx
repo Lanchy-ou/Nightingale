@@ -20,10 +20,12 @@ export default function AdminInvitesPage({
   clinicName,
   onLogout,
   onBack,
+  embedded = false,
 }: {
   clinicName: string | null;
   onLogout: () => void;
-  onBack: () => void;
+  onBack?: () => void;
+  embedded?: boolean;
 }) {
   const [invites, setInvites] = useState<InviteInfo[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -91,8 +93,8 @@ export default function AdminInvitesPage({
   }
 
   return (
-    <div className="admin-invites">
-      <header className="admin-invites-head">
+    <div className={`admin-invites ${embedded ? 'embedded' : ''}`}>
+      {!embedded && <header className="admin-invites-head">
         <div>
           <p className="eyebrow">{clinicName ?? 'Clinic'}</p>
           <h1>Invite management</h1>
@@ -101,10 +103,10 @@ export default function AdminInvitesPage({
           </p>
         </div>
         <div className="admin-invites-actions">
-          <button className="secondary-button" onClick={onBack}>Back to patient record</button>
+          {onBack && <button className="secondary-button" onClick={onBack}>Back to Admin Overview</button>}
           <button className="secondary-button" onClick={onLogout}>Logout</button>
         </div>
-      </header>
+      </header>}
 
       <section className="auth-card admin-invite-card">
         <h2>New invite</h2>

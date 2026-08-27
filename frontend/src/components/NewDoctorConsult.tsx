@@ -4,16 +4,21 @@ import { codePointLength, splitSegmentAtCodePoint } from '../transcriptRange.js'
 import type {
   DoctorConsultResult,
   DoctorTranscriptSegment,
+  NurseTranscriptSegment,
   Patient,
   TranscriptNormalizeResult,
   TranscriptPreviewSegment,
 } from '../types';
 
-const DEMO_TRANSCRIPT = `DOCTOR: How has your headache changed?
+const DOCTOR_DEMO_TRANSCRIPT = `DOCTOR: How has your headache changed?
 PATIENT: It is better, about 3 out of 10, but I still feel nauseous in the morning.
 DOCTOR: Have you completed the blood test?
 PATIENT: Not yet.
 DOCTOR: Please continue propranolol 20 mg daily while we chase the result.`;
+
+const NURSE_DEMO_TRANSCRIPT = `NURSE: Your blood pressure is elevated at 158 over 96.
+PATIENT: My headache has been happening almost every day.
+NURSE: I will document this for the doctor and help coordinate the next step.`;
 
 function localDateTimeValue(): string {
   const now = new Date();
@@ -55,19 +60,28 @@ function issueLabel(issue: string): string {
 
 export default function NewDoctorConsult({
   patient,
+  consultKind = 'doctor',
+  encounterOptions = [],
   onCancel,
   onCompleted,
 }: {
   patient: Patient;
+  consultKind?: 'doctor' | 'nurse';
+  encounterOptions?: { encounterId: string; label: string }[];
   onCancel: () => void;
   onCompleted: (result: DoctorConsultResult) => void;
 }) {
+  const isNurse = consultKind === 'nurse';
+  const professionalLabel = isNurse ? 'Nurse' : 'Doctor';
+  const professionalSpeaker = isNurse ? 'nurse' : 'doctor';
+  const demoTranscript = isNurse ? NURSE_DEMO_TRANSCRIPT : DOCTOR_DEMO_TRANSCRIPT;
   const operation = useRef(newOperation());
   const abortRef = useRef<AbortController | null>(null);
   const mountedRef = useRef(true);
   const cursorByIndex = useRef<Record<number, number>>({});
   const [text, setText] = useState('');
   const [startedAt, setStartedAt] = useState(localDateTimeValue);
+  const [encounterId, setEncounterId] = useState('');
   const [stage, setStage] = useState<'paste' | 'review'>('paste');
   const [normalization, setNormalization] = useState<TranscriptNormalizeResult | null>(null);
   const [segments, setSegments] = useState<TranscriptPreviewSegment[]>([]);
@@ -90,6 +104,7 @@ export default function NewDoctorConsult({
     operation.current = newOperation();
     setText('');
     setStartedAt(localDateTimeValue());
+    setEncounterId('');
     setStage('paste');
     setNormalization(null);
     setSegments([]);
@@ -97,7 +112,7 @@ export default function NewDoctorConsult({
     setBusy(null);
     setSubmissionAttempted(false);
     cursorByIndex.current = {};
-  }, [patient.patient_id]);
+  }, [consultKind, patient.patient_id]);
 
   const draftDirty = text.trim().length > 0;
   const wordCount = useMemo(
@@ -112,12 +127,12 @@ export default function NewDoctorConsult({
     if (segments.length === 0) issues.push('At least one canonical segment is required');
     if (segments.length > 500) issues.push('Canonical segment limit exceeded');
     segments.forEach((segment, index) => {
-      if (segment.speaker_candidate === null) issues.push(`Segment ${index}: choose doctor or patient`);
+      if (segment.speaker_candidate === null) issues.push(`Segment ${index}: choose ${professionalSpeaker} or patient`);
       if (!segment.text.trim()) issues.push(`Segment ${index}: text cannot be empty`);
       if (codePointLength(segment.text) > 4000) issues.push(`Segment ${index}: text exceeds 4000 characters`);
     });
     return issues;
-  }, [normalization, segments]);
+  }, [normalization, professionalSpeaker, segments]);
   const canConfirm = stage === 'review'
     && normalization?.outcome !== 'REJECT'
     && blockingIssues.length === 0
@@ -151,7 +166,9 @@ export default function NewDoctorConsult({
     const controller = new AbortController();
     abortRef.current = controller;
     try {
-      const result = await api.normalizeTranscript(text, controller.signal);
+      const result = isNurse
+        ? await api.normalizeNurseTranscript(text, controller.signal)
+        : await api.normalizeTranscript(text, controller.signal);
       if (!mountedRef.current) return;
       setNormalization(result);
       setSegments(reindex(result.segments));
@@ -255,26 +272,41 @@ export default function NewDoctorConsult({
 
   async function submit() {
     if (!canConfirm) return;
-    const canonical: DoctorTranscriptSegment[] = segments.map((segment, index) => ({
-      index,
-      speaker: segment.speaker_candidate as 'doctor' | 'patient',
-      text: segment.text.trim(),
-    }));
     setBusy('submitting');
     setSubmissionAttempted(true);
     setError(null);
     const controller = new AbortController();
     abortRef.current = controller;
     try {
-      const result = await api.createDoctorConsult(
-        patient.patient_id,
-        operation.current.consultId,
-        operation.current.ingestionKey,
-        startedAt.length === 16 ? `${startedAt}:00` : startedAt,
-        null,
-        canonical,
-        controller.signal,
-      );
+      const normalizedStartedAt = startedAt.length === 16 ? `${startedAt}:00` : startedAt;
+      const result = isNurse
+        ? await api.createNurseConsult(
+          patient.patient_id,
+          operation.current.consultId,
+          operation.current.ingestionKey,
+          normalizedStartedAt,
+          null,
+          encounterId || null,
+          segments.map((segment, index): NurseTranscriptSegment => ({
+            index,
+            speaker: segment.speaker_candidate as 'nurse' | 'patient',
+            text: segment.text.trim(),
+          })),
+          controller.signal,
+        )
+        : await api.createDoctorConsult(
+          patient.patient_id,
+          operation.current.consultId,
+          operation.current.ingestionKey,
+          normalizedStartedAt,
+          null,
+          segments.map((segment, index): DoctorTranscriptSegment => ({
+            index,
+            speaker: segment.speaker_candidate as 'doctor' | 'patient',
+            text: segment.text.trim(),
+          })),
+          controller.signal,
+        );
       if (mountedRef.current) onCompleted(result);
     } catch (caught: any) {
       if (!mountedRef.current || caught?.name === 'AbortError') return;
@@ -293,12 +325,12 @@ export default function NewDoctorConsult({
   }
 
   return (
-    <section className="new-consult clinical-view" aria-labelledby="new-consult-title">
+    <section className={`new-consult clinical-view ${isNurse ? 'nurse-consult' : 'doctor-consult'}`} aria-labelledby="new-consult-title">
       <button className="back-button" onClick={cancel}>← Back to patient</button>
       <div className="view-title-row">
         <div>
           <p className="eyebrow">Record a real-world clinical event</p>
-          <h2 id="new-consult-title">Record Doctor Consultation</h2>
+          <h2 id="new-consult-title">Record {professionalLabel} Consultation</h2>
           <p className="view-subtitle">Paste a manually speaker-labelled transcript, review every segment, then confirm processing for {patient.name}.</p>
         </div>
       </div>
@@ -320,9 +352,21 @@ export default function NewDoctorConsult({
               disabled={busy !== null}
             />
           </label>
+          {isNurse && (
+            <label>
+              Clinic Visit grouping (optional)
+              <select value={encounterId} onChange={(event) => setEncounterId(event.target.value)} disabled={busy !== null}>
+                <option value="">Create as a separate visit</option>
+                {encounterOptions.map((option) => (
+                  <option key={option.encounterId} value={option.encounterId}>{option.label}</option>
+                ))}
+              </select>
+              <small>Only this explicit selection groups Nurse and Doctor Events. Their records and authority remain separate.</small>
+            </label>
+          )}
           <div className="format-help">
             <strong>Manual text only · no audio, ASR, OCR, or timestamp inference</strong>
-            <span>Supported labels include DOCTOR/PATIENT, case variants, and Dr/Pt. Unknown speakers remain unresolved for review.</span>
+            <span>{isNurse ? 'Supported labels include NURSE/PATIENT, case variants, and RN/Pt.' : 'Supported labels include DOCTOR/PATIENT, case variants, and Dr/Pt.'} Unknown speakers remain unresolved for review.</span>
           </div>
           <label>
             Raw transcript
@@ -330,12 +374,12 @@ export default function NewDoctorConsult({
               value={text}
               onChange={(event) => changeRawText(event.target.value)}
               rows={12}
-              placeholder={'DOCTOR: How have your symptoms changed?\nPATIENT: The headache is better.'}
+              placeholder={`${professionalLabel.toUpperCase()}: How have your symptoms changed?\nPATIENT: The headache is better.`}
               disabled={busy !== null}
             />
           </label>
           <div className="consult-form-actions">
-            <button className="secondary-button" onClick={() => changeRawText(DEMO_TRANSCRIPT)} disabled={busy !== null}>
+            <button className="secondary-button" onClick={() => changeRawText(demoTranscript)} disabled={busy !== null}>
               Use synthetic demo
             </button>
             <span className="muted">{wordCount} words · raw preview is not persisted</span>
@@ -375,12 +419,12 @@ export default function NewDoctorConsult({
                       onChange={(event) => updateSegment(segment.index, {
                         speaker_candidate: event.target.value === ''
                           ? null
-                          : event.target.value as 'doctor' | 'patient',
+                          : event.target.value as 'doctor' | 'nurse' | 'patient',
                       })}
                       disabled={busy !== null || normalization.outcome === 'REJECT'}
                     >
                       <option value="">Needs review</option>
-                      <option value="doctor">Doctor</option>
+                      <option value={professionalSpeaker}>{professionalLabel}</option>
                       <option value="patient">Patient</option>
                     </select>
                   </label>
@@ -436,7 +480,7 @@ export default function NewDoctorConsult({
               Back to raw text
             </button>
             <button className="primary-button" onClick={submit} disabled={!canConfirm}>
-              {busy === 'submitting' ? 'Saving raw source and processing…' : 'Confirm and create Doctor Consult'}
+              {busy === 'submitting' ? 'Saving raw source and processing…' : `Confirm and create ${professionalLabel} Consult`}
             </button>
           </div>
         </>

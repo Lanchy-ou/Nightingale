@@ -15,6 +15,7 @@ from fastapi.exceptions import HTTPException, RequestValidationError
 from sqlalchemy.orm import Session
 
 from .api import (
+    admin,
     audit,
     auth,
     comments,
@@ -27,6 +28,7 @@ from .api import (
     sources,
     tasks,
     transcripts,
+    voice,
 )
 from .db import get_db
 from .errors import error_response
@@ -70,6 +72,7 @@ app = FastAPI(
 app.add_middleware(SecurityMiddleware)
 
 app.include_router(auth.router)
+app.include_router(admin.router)
 app.include_router(patients.router)
 app.include_router(patient_view.router)
 app.include_router(events.router)
@@ -81,6 +84,7 @@ app.include_router(audit.router)
 app.include_router(sources.router)
 app.include_router(tasks.router)
 app.include_router(transcripts.router)
+app.include_router(voice.router)
 
 
 @app.exception_handler(HTTPException)
@@ -132,6 +136,7 @@ def read_me(
         clinic_id=ctx.clinic_id,
         patient_id=ctx.patient_id,
         display_name=user.name if user else None,
+        professional_title=user.professional_title if user else None,
         clinic_name=clinic.name if clinic else None,
         authenticated=ctx.authenticated,
     )

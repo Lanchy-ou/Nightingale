@@ -15,6 +15,7 @@ from app.db import Base, SessionLocal, engine
 from app.ids import new_id
 from app.models import (
     Artifact,
+    ArtifactStorageState,
     ArtifactVersion,
     AuditLog,
     AuthSession,
@@ -22,12 +23,14 @@ from app.models import (
     Comment,
     Event,
     Highlight,
+    ImportanceFeedback,
     Invite,
     Patient,
     Task,
     User,
     UserCredential,
 )
+from app.voice.models import VoiceCaptureRecord
 
 from . import fixture
 from .highlights import generate_highlights
@@ -62,12 +65,15 @@ def _backfill_versions(db: Session) -> None:
 def seed(db: Session) -> None:
     # Clear in FK-safe order (children first). D1 identity tables reference
     # users/patients/clinics and are cleared before them.
+    db.execute(delete(VoiceCaptureRecord))
     db.execute(delete(AuditLog))
+    db.execute(delete(ImportanceFeedback))
     db.execute(delete(AuthSession))
     db.execute(delete(UserCredential))
     db.execute(delete(Invite))
     db.execute(delete(Comment))
     db.execute(delete(ArtifactVersion))
+    db.execute(delete(ArtifactStorageState))
     db.execute(delete(Highlight))
     db.execute(delete(Task))
     db.execute(delete(Artifact))

@@ -1,6 +1,6 @@
 # Glance warm-path performance baseline
 
-> Generated 2026-08-26T20:45:42 by `backend/scripts/measure_glance.py`.
+> Generated 2026-08-28T00:21:06 by `backend/scripts/measure_glance.py`.
 
 ## Environment
 
@@ -24,25 +24,39 @@
 
 | Endpoint | P50 | P95 | Mean | Max |
 |---|---|---|---|---|
-| glance | 3.233 | 3.926 | 3.288 | 6.126 |
-| events | 5.67 | 6.269 | 5.624 | 7.124 |
-| patient-view | 3.585 | 4.273 | 3.619 | 5.04 |
+| glance | 3.814 | 4.429 | 3.868 | 4.668 |
+| events | 6.374 | 7.096 | 6.416 | 7.523 |
+| patient-view | 5.284 | 6.078 | 5.32 | 6.672 |
 
 ### Layer B — HTTP round trip (local)
 
 | Endpoint | P50 | P95 | Mean | Max |
 |---|---|---|---|---|
-| glance | 3.312 | 3.797 | 3.311 | 4.336 |
-| events | 4.739 | 5.512 | 4.83 | 5.894 |
-| patient-view | 3.501 | 4.36 | 3.599 | 4.586 |
+| glance | 3.872 | 4.447 | 3.877 | 4.994 |
+| events | 6.335 | 7.025 | 6.386 | 7.335 |
+| patient-view | 5.394 | 6.094 | 5.392 | 6.324 |
 
-## Read-path LLM-free guard
+## E2 / E3 Glance comparison
+
+| Run | Layer A Glance P50 | Layer A Glance P95 |
+|---|---:|---:|
+| E2 baseline (2026-08-27) | 3.978 | 4.515 |
+| E3 (current run) | 3.814 | 4.429 |
+
+These are separate local runs. The difference is reported, not
+attributed to E3 as a causal performance effect. Both remain far
+below the 300 ms prototype gate. E3 maintenance timing is measured
+separately by `scripts/measure_storage_policy.py`.
+
+## Read-path dependency and query guard
 
 `tests/test_read_path_no_llm.py` imports each read module in a clean
 interpreter and asserts its transitive import graph contains none of
 `ai_pipeline`, `llm_client`, `extraction`, `redaction`,
-`deterministic_pipeline` or `conflicts`. Glance/patient-view/events do
-zero LLM calls and zero extraction at read time.
+`deterministic_pipeline`, `conflicts`, `importance_learning` or
+`data_decay`. E3 tests also reject Glance queries of storage state,
+Artifact or Event history. Glance/patient-view/events do zero LLM
+calls and zero extraction at read time.
 
 ## Honesty clause
 

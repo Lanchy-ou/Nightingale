@@ -129,7 +129,7 @@ export default function ClinicalEventDetail({
     for (const log of audit) {
       // Artifact and Comment rows already represent their creation once; keep
       // later collaboration/revision actions without duplicating creation.
-      if (['source_ingest', 'ai_generate', 'ai_fallback', 'doctor_consult_create', 'comment', 'create_note'].includes(log.action)) continue;
+      if (['source_ingest', 'ai_generate', 'ai_fallback', 'doctor_consult_create', 'nurse_consult_create', 'comment', 'create_note'].includes(log.action)) continue;
       rows.push({
         key: `audit:${log.audit_id}`,
         at: log.created_at,
@@ -208,7 +208,7 @@ export default function ClinicalEventDetail({
                   </div>
                 )}
                 {selectedArtifact.artifact_type === 'transcript' && (
-                  <p className="immutable-note">Immutable raw source · corrections belong in Comments or a Clinician Note.</p>
+                  <p className="immutable-note">Immutable raw source · corrections belong in Comments or a {role === 'staff' ? 'Staff Note' : 'Clinician Note'}.</p>
                 )}
                 </>
               ) : (

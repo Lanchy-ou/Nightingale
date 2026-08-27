@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, DEMO_AUTH, ROLE_USERS, setRole, setSessionIdentity, setUnauthorizedHandler } from './api';
 import type { CurrentIdentity } from './types';
-import AdminInvitesPage from './pages/AdminInvitesPage';
+import AdminWorkspacePage from './pages/AdminWorkspacePage';
 import ClinicianWorkspacePage from './pages/ClinicianWorkspacePage';
 import LoginPage from './pages/LoginPage';
-import PatientPage from './pages/PatientPage';
 import PatientViewPage from './pages/PatientViewPage';
 import RegisterPage from './pages/RegisterPage';
 
@@ -49,7 +48,10 @@ function DemoApp() {
         ) : selected.role === 'clinician' || selected.role === 'staff' ? (
           <ClinicianWorkspacePage roleKey={roleKey} />
         ) : (
-          <PatientPage patientId={PATIENT_ID} roleKey={roleKey} role={selected.role} />
+          <AdminWorkspacePage
+            identity={{ user_id: selected.userId, role: 'admin', clinic_id: 'clinic_001', patient_id: null, display_name: 'Nightingale Admin', professional_title: null, clinic_name: 'Nightingale Demo Clinic', authenticated: true }}
+            onLogout={() => undefined}
+          />
         )}
       </div>
     </div>
@@ -165,15 +167,16 @@ function SessionApp() {
     );
   }
 
-  // Admin retains the clinic-scoped oversight/invite path.
-  if (role === 'admin' && path.startsWith('/admin/invites')) {
+  if (role === 'admin') {
+    const initialTab = path.startsWith('/admin/invites') ? 'invites' : path.startsWith('/admin/audit') ? 'audit' : 'overview';
     return (
       <div className="app" key={productKey}>
         <div className="product-root">
-          <AdminInvitesPage
-            clinicName={identity.clinic_name}
+          <AdminWorkspacePage
+            identity={identity}
+            initialTab={initialTab}
             onLogout={logout}
-            onBack={() => navigate('/')}
+            onNavigate={(tab) => navigate(tab === 'overview' ? '/admin' : `/admin/${tab}`)}
           />
         </div>
       </div>
@@ -181,16 +184,6 @@ function SessionApp() {
   }
 
   return (
-    <div className="app" key={productKey}>
-      <div className="product-root">
-        <PatientPage
-          patientId={PATIENT_ID}
-          roleKey={productKey}
-          role={role}
-          onLogout={logout}
-          onOpenInvites={role === 'admin' ? () => navigate('/admin/invites') : undefined}
-        />
-      </div>
-    </div>
+    <div className="auth-page"><div className="form-error">This account role has no workspace.</div></div>
   );
 }

@@ -11,7 +11,15 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    DateTime,
+    ForeignKey,
+    Integer,
+    LargeBinary,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .db import Base
@@ -51,6 +59,7 @@ AUDIT_ACTIONS = (
     "highlight_status",
     "conflict",
     "doctor_consult_create",
+    "nurse_consult_create",
     "source_ingest",
     "ai_generate",
     "ai_fallback",
@@ -61,6 +70,8 @@ AUDIT_ACTIONS = (
     "login_failure",
     "logout",
     "session_revoked",
+    "account_disabled",
+    "account_reactivated",
     # D2 care-task lifecycle (metadata-only status history).
     "task_create",
     "task_transition",
@@ -86,6 +97,8 @@ class User(Base):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(String(32), nullable=False)
+    # Professional identity is presentation metadata, never an RBAC authority.
+    professional_title: Mapped[str | None] = mapped_column(String(128), nullable=True)
     # Maps a patient-role user to their own Patient record (M3).
     patient_id: Mapped[str | None] = mapped_column(
         String(64), ForeignKey("patients.patient_id"), nullable=True
@@ -148,6 +161,33 @@ class Artifact(Base):
     generation_metadata: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
 
+class ArtifactStorageState(Base):
+    """E3 maintenance metadata for a reversible shadow archive.
+
+    ``Artifact.content`` remains authoritative.  The optional payload is only a
+    verified compressed copy and is never read by the normal clinical paths.
+    """
+
+    __tablename__ = "artifact_storage_state"
+
+    artifact_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("artifacts.artifact_id"), primary_key=True
+    )
+    tier: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    reason_codes: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    policy_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    evaluated_as_of: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    evaluated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    source_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    codec: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    compressed_payload: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    original_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    compressed_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    roundtrip_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True
+    )
+
+
 class Highlight(Base):
     __tablename__ = "highlights"
     __table_args__ = (UniqueConstraint("task_id", name="uq_highlight_task"),)
@@ -170,7 +210,15 @@ class Highlight(Base):
     text: Mapped[str] = mapped_column(String(512), nullable=False)
     risk_reason: Mapped[str] = mapped_column(String(512), nullable=False)
     feature_flags: Mapped[dict] = mapped_column(JSON, nullable=False)
+    # E2 separates the transparent deterministic score from bounded adaptive
+    # learning and the E3-reserved decay component. ``importance_score`` stays
+    # the stored final score used by the Glance read path.
+    base_importance_score: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    adaptive_adjustment: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    decay_adjustment: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     importance_score: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Counts/reason only. Never stores Highlight/source/comment/note text.
+    learning_metadata: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="suggested")
     # Temporary audit field; folds into AuditLog in Phase 3.
     status_history: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
@@ -182,6 +230,28 @@ class Highlight(Base):
     assertion_value: Mapped[str | None] = mapped_column(String(255), nullable=True)
     conflict_with_artifact_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     review_status: Mapped[str | None] = mapped_column(String(16), nullable=True)
+
+
+class ImportanceFeedback(Base):
+    """Append-only, clinic-scoped E2 ranking feedback metadata."""
+
+    __tablename__ = "importance_feedback"
+
+    feedback_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    highlight_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("highlights.highlight_id"), nullable=False, index=True
+    )
+    clinic_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("clinics.clinic_id"), nullable=False, index=True
+    )
+    actor_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("users.user_id"), nullable=False, index=True
+    )
+    actor_role: Mapped[str] = mapped_column(String(32), nullable=False)
+    feedback_key: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    signal_value: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
 
 class Comment(Base):

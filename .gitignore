@@ -45,3 +45,4 @@ backups/
 restores/
 deploy/caddy-data/
 deploy/caddy-config/
+.models/

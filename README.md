@@ -356,7 +356,7 @@ GET  /api/tasks/{task_id}/provenance
 
 Task 必须有 origin Event；Artifact/Span provenance 可选但必须成对并精确解析。transition 接收 `expected_status`，以原子条件更新实现 deterministic 409。患者只能推进本人、patient-visible、assigned-patient Task 到 `in_progress|reported_done`；只有 staff/clinician 可将 `reported_done` 确认为 `completed` 或取消未终结 Task。终态不可恢复。create/transition/conflict 进入 metadata-only AuditLog。
 
-`unresolved_task` 不再是 seed 常量。Task↔Glance 映射是**显式的一对一关系**：`Highlight.task_id` 使用 Task FK + unique constraint；Task 创建时仅以条件 UPDATE/CAS 采纳 patient/event/source_artifact/source_span 完全匹配、未占用且非 rejected 的 task Highlight，竞争失败或不匹配则创建专属行。Event-only Task 不误伤同 Event 无关 Highlight；`recompute_task_highlights` 只更新对应 `task_id`，completed/cancelled 清除 unresolved 权重并为专属行写入准确终态文案。精确 provenance 只有用户**明确选择 quote 并确认**后才保存，否则为 Event-level；Glance 的 Open Task 定位到具体 Task。`resolve_exact_span` 对任意异常结构 fail closed（422/404，绝不 500）。clinician/staff 共用 clinic shell 的 `Tasks` tab；没有 Nurse Workspace、假 appointment 或 assignment 状态。
+`unresolved_task` 不再是 seed 常量。Task↔Glance 映射是**显式的一对一关系**：`Highlight.task_id` 使用 Task FK + unique constraint；Task 创建时仅以条件 UPDATE/CAS 采纳 patient/event/source_artifact/source_span 完全匹配、未占用且非 rejected 的 task Highlight，竞争失败或不匹配则创建专属行。Event-only Task 不误伤同 Event 无关 Highlight；`recompute_task_highlights` 只更新对应 `task_id`，completed/cancelled 清除 unresolved 权重并为专属行写入准确终态文案。精确 provenance 只有用户**明确选择 quote 并确认**后才保存，否则为 Event-level；Glance 的 Open Task 定位到具体 Task。`resolve_exact_span` 对任意异常结构 fail closed（422/404，绝不 500）。clinician/staff 共用 clinic shell 的 `Tasks` tab；E1 只增加同 shell 的 Nurse/Staff 角色呈现，不创建平行 Nurse App、假 appointment 或 assignment 状态。
 
 ---
 
@@ -428,13 +428,114 @@ Phase C 两张任务卡均已完成：
 1. `Task_Card/C1_Task_Card.md`：Encounter/Transcript schema、clinician-only Doctor Consult endpoint、raw-first/AI/provenance/RBAC 测试；
 2. `Task_Card/C2_Task_Card.md`：三栏 Clinician Shell、New Consult UI、Clinic Visit/Timeline master-detail、Source Viewer、Comment/Revision/Audit 集成。
 
-**C2 + D2 实现**：clinician/staff 登录后进入同一 factual Clinic dashboard，可从左栏 `Clinic Patients` 搜索/切换患者；产品 shell 为左侧 identity/directory、中间 `Glance | Timeline | Notes | Tasks`、右侧 Source/Comments/Versions/Audit。staff 权限由 backend RBAC 裁剪且不能 New Consult。patientId、role 与 session 都是 remount boundary；patient 仍只挂载独立 `PatientViewPage`。
+**C2 + D2 + E1 实现**：clinician/staff 登录后进入同一 factual Clinic dashboard，可从左栏 `Clinic Patients` 搜索/切换患者；产品 shell 为左侧 identity/directory、中间 `Glance | Timeline | Notes | Tasks`、右侧 Source/Comments/Versions/Audit。E1 让 staff 以 `Registered Nurse` professional title 进入轻度差异化的 Nurse workspace，可创建 Nurse Consult；其权限仍由 backend RBAC 裁剪，不能创建 Doctor Consult、Clinician Note、clinician confirmation 或使用 clinician-only Copilot。patientId、role 与 session 都是 remount boundary；patient 仍只挂载独立 `PatientViewPage`。
 
 `New Consult` 已是 `Paste transcript → Review segments → Confirm and process` 三步流程。原文与 preview 并排；unknown 明显阻断；speaker/text 可修正，segment 可拆分/合并且 index 自动重排。patient/session change 清除 raw draft、preview、operation identity 和 pending response。提交保留 stable consult/ingestion identity，成功后进入新 Event Detail，并明确显示 raw saved、AI generated 或 deterministic fallback。Timeline 只按非空相同 `encounter_id` 组成 `Clinic Visit`；Event Detail 将 Transcript/AI Summary/Clinician Note 与 Comment/Revision/Audit 保持为 Event 内 lifecycle，不制造新医疗 Event。
 
 D3 frozen evaluation 包含 40 个 synthetic cases（development 26 / frozen_holdout 14）。normalizer 在首次 holdout 前以 SHA-256 冻结；holdout outcome 14/14、speaker 12/12、ambiguous blocking 8/8，silent invention/truncation 为 0。frozen runner **不调用 provider/network**；provider 层明确 `NOT_RUN`，deterministic fallback 单独报告（development exact entity precision 0.888889 / recall 0.571429，task precision 1.0 / recall 0.5）。不得把两层合并为一个成绩。
 
-仍明确后置：独立 Nurse Workspace、Nurse input、录音/ASR、外部 dataset ingestion、复杂 care-team assignment、appointment/billing/notification。Phase C、M7、D1–D4 Exit Gate 与 D5 自动化安全/集成门已通过；5-8 位独立观察者要求由 owner 取消，不作真人 usability claim。
+仍明确后置：平行 Nurse App、录音/ASR、外部 dataset ingestion、复杂 care-team assignment、appointment/billing/notification。Phase C、M7、D1–D5 与 E1 Exit Gate 已通过；5-8 位独立观察者要求由 owner 取消，不作真人 usability claim。
+
+### 4.6 E1 Role Workspaces（2026-08-27）
+
+> 状态：**E1 COMPLETE。** Phase E 后续 E2–E5 未因本节自动开始。
+
+Nurse/Staff 继续使用 `staff` RBAC role；`professional_title=Registered Nurse` 只负责真实身份呈现，不参与授权。Doctor 与 Staff 使用同一三栏 clinical shell，但 Staff 采用相关的 teal accent、Nurse identity、`Record nurse consultation` 主操作和 Staff authority 文案。Nurse transcript 使用独立 `/api/transcripts/nurse-normalize`，只接受 `nurse|patient`；冻结的 Doctor normalizer 文件及 SHA-256 `1ac0e01e92401b1728e7b938541e71f8d95e81cca137376004953eb2cd371476` 未改变。确认后：
+
+```text
+POST /api/patients/{patient_id}/nurse-consults
+  -> new nurse_consult Event
+  -> immutable system Transcript committed first
+  -> existing redaction / LLMClient / fallback pipeline
+  -> independent ai_nurse_consult_summary
+  -> exact-span-resolving Highlights only
+```
+
+Clinic Visit 只能由用户显式选择既有非空 `encounter_id` 组成；Nurse/Doctor Event、Artifact 与 authority 始终分离。相同 consult/ingestion replay 幂等，不同 identity 返回 409；provider failure 保留 raw source。
+
+Admin 登录后进入独立 `AdminWorkspacePage`，沿用现有字体、间距、卡片、按钮、状态标签与品牌色，只提供 Users/Invites/Sessions/Access Audit。Admin API 为 `GET /api/admin/users`、`PATCH /api/admin/users/{user_id}/status`、`POST /api/admin/users/{user_id}/revoke-sessions`、`GET /api/admin/access-audit`；全部 clinic-scoped、strict response、metadata-only，并使用 compare-and-set。禁止 self-disable 和 last-active-admin disable；disable 会在同一 transaction 撤销 active sessions。Admin 页面没有 Note、Copilot、Glance confirmation 或 clinical Task controls。
+
+E1 增加 `User.professional_title` nullable column。合并后的 E1–E4 可使用 `scripts/migrate_phase_e_schema.py` 对现有 synthetic SQLite/SQLCipher Demo 做显式幂等升级；新 Demo 仍由 seed 直接创建完整 schema。E1 本身没有新增 dependency、provider、外部数据或需追加的 attribution。
+
+### 4.7 E2 Self-Learning Importance（2026-08-27）
+
+> 状态：**E2 COMPLETE（synthetic evaluation）**。这不是模型训练、真实医生偏好验证或 learned clinical correctness 证明；E3/E4 的实现见后续小节，E5 不在本次范围。
+
+E2 只学习未来相似 AI-derived Glance candidate 的软排序：成功的 clinician/staff Highlight status compare-and-set 才能在 append-only `importance_feedback` 中留下 metadata-only 反馈；no-op、409、patient/admin action、非 AI Summary 或缺少 strict exact source 的 row 都不训练。反馈资格使用非空、结构严格、带显式 in-bounds offset 的 Span，并拒绝 AI Summary 自我引用或与 Summary provenance pointer 不一致的 source。学习键由服务端把 `entity_type` 映射到 `symptom|medication|task|risk|allergy|follow_up|other`，不保存或使用 raw text、姓名、quote、risk reason、Comment、Note 或 embedding；`other` 只记录，不跨不相关概念泛化。
+
+```text
+clinician: accepted +1 / pinned +2 / rejected -1
+staff:     accepted +1 / pinned +1 / rejected -1
+
+final importance
+  = base_importance_score
+  + adaptive_adjustment  # same clinic, latest actor/highlight only, cap [-2,+3]
+  + decay_adjustment     # E2 基线为 0；E3 maintenance write path 写入 0/-1/-2
+```
+
+每个 `(actor_id, highlight_id)` 只取最新有效反馈，防止 toggle inflation。`explicit_risk`、`unresolved_task`、`clinician_confirmed`、`pinned`、`needs_review` 遇到负向 adaptive 值时强制归零；staff review 永不成为 clinician confirmation。新候选在 AI persistence write path 聚合并写入 base/adaptive/final 与 counts-only explanation，GET Glance 仍只读取预计算 Highlight，不查询 feedback、不扫描 Artifact/全历史、不调用 LLM。UI 仅在非零调整时显示 `Learned priority`、base/adaptive/final 与同院 review count，不暴露 actor 或其他患者内容。
+
+现有 SQLite/SQLCipher synthetic Demo 可用显式、幂等的 E2 migration 升级；它把旧 `importance_score` 回填为 base 并添加 feedback table，而不是假设 `create_all` 会修改旧表：
+
+```powershell
+cd backend
+.venv/Scripts/python.exe -c "from app.db import migrate_e2_schema; migrate_e2_schema()"
+```
+
+新 Demo 仍由 seed / SQLCipher init 直接创建完整 schema。E2 没有新增 dependency、provider、dataset 或 attribution 条目。
+
+### 4.8 E3 Hybrid Storage / Data Decay（2026-08-28）
+
+> 状态：**E3 COMPLETE（synthetic shadow-archive proof）**。没有删除、覆盖或外置任何 authoritative clinical record；E4 已在下一节完成，E5 不在本次范围。
+
+E3 的 `decay-v1` 只在显式 maintenance/write path 上运行。`--as-of 2026-08-26` 被解析为当日 `23:59:59`，避免依赖机器当前日期：0–30 天为 Hot，超过 30 天至 365 天为 Warm，超过 365 天才可成为 Cold；普通 tier 对应 `decay_adjustment = 0/-1/-2`。保护事实先于 age rule：explicit risk、真实 `Task.status in open|in_progress|reported_done`、clinician-confirmed、pinned、needs-review、当前有效 patient instruction、provenance 未验证或 archive integrity 失败全部强制 Hot / decay 0。Task 保护只读取 Task row，不从自由文本或孤立 `feature_flags.unresolved_task` 猜测。
+
+新增 `artifact_storage_state` 保存 `tier`、受控 `reason_codes`、policy/as-of/evaluation metadata、canonical SHA-256、`zlib-json-v1` payload、size 与 round-trip timestamp。canonical JSON 固定 UTF-8、sorted keys 与 compact separators。Cold payload 必须解压、canonicalize 并 hash-equivalent 后才写入；损坏 payload 下一次 apply 会 fail closed 为 Hot 并清除不可用 shadow payload。`Artifact.content` 始终是 authoritative copy，Artifact/Version/Comment/AuditLog/Task/Highlight/Span 均不删除或覆盖。
+
+```bash
+cd backend
+
+# 只读；不会自动 migration 或写 policy state/score
+.venv/Scripts/python.exe scripts/apply_storage_policy.py --as-of 2026-08-26 --dry-run
+
+# 显式、幂等迁移 E2 SQLite/SQLCipher schema，并在一个 DB transaction 内写 state/final score
+.venv/Scripts/python.exe scripts/apply_storage_policy.py --as-of 2026-08-26 --apply
+```
+
+也可只执行 schema migration：
+
+```bash
+.venv/Scripts/python.exe -c "from app.db import migrate_e3_schema; migrate_e3_schema()"
+```
+
+canonical fixture 的观察结果为 Hot 12 / Warm 1 / Cold 1 / protected 7；唯一 Cold candidate 的 canonical JSON 为 235 bytes，shadow payload 为 180 bytes（ratio 0.766），round-trip 通过。该数字只描述一个 synthetic Artifact 的压缩副本；authoritative content 仍在同一数据库，因此**不是数据库总字节节省，更不是生产对象存储或长期 retention 验证**。Glance GET 仍只读预计算 Highlight final score，不查询 storage state、不执行 policy/decompression、不扫描 Artifact/全历史、不调用 LLM。Patient View schema 没有 tier/hash/codec/payload/reason/size 字段。
+
+实现与证据说明见 `docs/e3_data_decay_evidence.md`。E3 没有新增 dependency、provider、dataset 或 attribution 条目。
+
+### 4.9 E4 Ambient Voice Capture（local ASR，2026-08-28）
+
+> 状态：**E4 COMPLETE — local synthetic vertical slice**。这不是生产医疗录音、说话人分离、真人 usability 或真实临床准确率证明；E5 不在本次范围。
+
+E4 使用一个共享 Voice Adapter 完成 `Recording → local ASR → visible human review → confirmed Transcript → existing AI/provenance pipeline`。功能默认关闭；只有 `NANTINGALE_VOICE_ENABLED=true`、provider 为 `faster_whisper` 且固定模型目录就绪时，Clinician、Staff/Nurse 与 Patient Check-in 才显示各自允许的入口。角色与 Event 归属始终由服务器 Session/DB User 决定。
+
+```powershell
+cd backend
+
+# 一次性下载固定 revision 到 gitignored 私有目录
+.venv/Scripts/python.exe scripts/prepare_local_asr.py
+
+# 现有 E1–E3 Demo 的显式幂等升级
+.venv/Scripts/python.exe scripts/migrate_phase_e_schema.py
+
+# 运行时环境；模型不会在请求期间下载
+$env:NANTINGALE_VOICE_ENABLED='true'
+$env:NANTINGALE_ASR_PROVIDER='faster_whisper'
+$env:NANTINGALE_ASR_MODEL_PATH='E:\private\models\faster-whisper-base'
+```
+
+后端接受经过真实容器检查的 WAV/WebM/Ogg，限制为 8 MiB、120 秒、单音轨、1–2 声道；原始字节作为 immutable SQLCipher BLOB 保存并进入加密 backup/restore。PyAV 在内存中解码，不创建原始音频临时文件。`faster-whisper==1.2.1` 使用 multilingual Base、CPU int8 与 `local_files_only=True`；它不进行 diarization，所以 speaker 永远先为 unknown，用户必须在允许的角色集合中明确分配并解决问题后才能确认。Patient 不能把本地录音标记成 AI/system speaker。
+
+已观察的固定 synthetic WAV 为 14.470 秒，项目正式环境离线转录耗时 1.565 秒，输出 2 个非空时间片段；speaker/confidence 分别保持 unknown/null。完整证据、哈希和限制见 `docs/e4_voice_capture_evidence.md`。
 
 ---
 
@@ -604,7 +705,7 @@ Consult Glance View：
 
 `backend/scripts/measure_glance.py` 在一次性 reseed 的 SQLite 上，对 glance / events / patient-view 三个读端点分别采样 100 次（前 10 次 warm-up 丢弃），输出 Layer A（TestClient in-process，应用逻辑 + SQLite 查询）与 Layer B（真实 uvicorn + 本地 HTTP 往返）两层 P50/P95/Mean/Max。
 
-最新一轮：Layer A Glance P95 ≈ **3.8 ms**（远低于 300 ms），events ≈ 6.7 ms，patient-view ≈ 5.0 ms；Layer B 各端点仅增加 ~1 ms 本地往返/序列化开销。排序确定性（`highlight_id` tiebreak）、写后读一致与 highlight 状态并发乐观锁均由 `tests/test_glance_ordering.py` 锁定；读路径零-LLM 由 `tests/test_read_path_no_llm.py`（transitive import 守卫）证明。
+E1 基线 Layer A Glance P50/P95 为 **3.233/3.926 ms**；E2 后同方法重测为 **3.978/4.515 ms**（远低于 300 ms）。E2 Layer B P50/P95 为 **3.998/4.613 ms**。这是两次独立本地运行，不把差异解释为因果性能结论。排序确定性（`highlight_id` tiebreak）、写后读一致与 highlight 状态并发乐观锁由 `tests/test_glance_ordering.py` 锁定；读路径零-LLM、零 feedback aggregation 由 `tests/test_read_path_no_llm.py` 与 E2 SQL capture probe 证明。
 
 > 诚实条款：单用户本地 SQLite 数字只证明 warm read path 不含同步 LLM / 全量历史扫描，不代表分布式或生产级容量。
 
@@ -771,7 +872,7 @@ cd backend
 .venv/Scripts/python.exe -B scripts/evaluate_copilot.py
 ```
 
-> 当前进度：M1–M7、Phase C、D1–D4 已完成；D5 达到 **D5_AUTOMATED_SECURITY_COMPLETE**。SQLCipher database/backup/restore、Caddy TLS、CSRF/CORS/headers/rate/body/error hardening、body-only invite preview、offline-Caddy token log probe 与三角色 real-session integration tests 已通过。Owner 已取消 5-8 位独立观察者要求，原空白协议已删除且没有生成模拟结果。项目可称为“Phase D 工程实现与自动化验收完成的 synthetic-data product Demo”，但不得声称经过真人 usability research、production deployment certification 或可用于真实医疗。详见 `docs/d5_deployment_security_decisions.md` 与 `docs/d5_automated_evidence_2026-08-27.md`。
+> 当前进度：M1–M7、Phase C、D1–D5 与 Phase E 的 E1–E4 已完成；E5 未开始且不在本次范围。D5 达到 **D5_AUTOMATED_SECURITY_COMPLETE**。E2/E3/E4 分别只证明受控 synthetic learning、shadow archive 和 local synthetic voice vertical slice，不代表真实医生偏好、生产存储节省、真人 usability、生产 ASR 容量或临床准确率。详见各 E1–E4 Task Card、`docs/e3_data_decay_evidence.md`、`docs/e4_voice_capture_evidence.md` 与 D5 evidence。
 
 架构约定（记录确切位置，随阶段更新）：
 
@@ -779,6 +880,9 @@ cd backend
 - **RBAC 强制点**：所有权限判断在 server-side 完成，集中在 `backend/app/authz.py`（`authorize(action, resource)` + `PERMISSIONS` 矩阵）与 `backend/app/role_context.py`（DB 为身份/角色唯一权威，`X-Role` 只能作 demo 一致性断言，不一致即拒绝，不可提权）。每个端点经 `require_auth`（401）+ `authorize`（同院无权限 403 / 跨院或非本人 404）；不存在、跨院和非本人资源使用相同 404 body，避免存在性探测。UI 只做展示裁剪，不作为安全边界，角色切换会重新挂载整个 patient workspace 以清除敏感状态。
 - **LLM 客户端出口**：`backend/app/llm_client.py`（`LLMClient` protocol）是唯一 provider 出口，只能接收 `RedactedContent`。实际仅支持 `mock`（无 key、确定性）与 `deepseek`（live adapter）两个 provider；`NANTINGALE_LLM_PROVIDER` 默认 `deepseek`。`deepseek` 缺 key / provider 出错 / schema 非法时明确降级到 deterministic fallback；key 只从环境变量读取，永不打印/入库。
 - **D4 Copilot 边界**：`POST /api/patients/{patient_id}/copilot/query` 只对同 clinic 的 clinician 开放。Provider 只接收最多 12 个脱敏 exact-span cards，且不拥有 draft type/Event/patient/visibility/endpoint；AI Summary 必须继续解析到 raw source 才能成为 source fact。`Find evidence` 先在当前授权 patient 全历史做服务器端匹配，再限制 provider egress；`What changed` 返回两个 Event source facts + 显式 comparison inference。Copilot 不直接写记录；可编辑 Preview 由服务端签发 5 分钟 HMAC token，绑定 actor/clinic/patient/Event/type/evidence，既有 Note/Task API 验证成功后才记录 `draft_origin=copilot`。Patient instruction 必须改成有效 patient-facing 内容；Patient View 从不加载 Copilot。
+- **E2 importance learning 边界**：`backend/app/importance_learning.py` 只在成功 status CAS 与候选 persistence write path 工作。受控 entity type、server-derived role/status signal、同院 latest-only aggregation 和 `[-2,+3]` cap 共同产生 adaptive adjustment；raw clinical text/PHI 不进入 key/table/metadata。GET Glance 继续只按已存 final score 排序，hard-risk/Task/clinician-confirmed/pinned/needs-review 不受负向学习削弱。
+- **E3 storage/decay 边界**：`backend/app/data_decay.py` 只由显式 maintenance runner 使用，基于注入 `as_of`、Event time、真实 Task 与 server-side protection facts 写入 Hot/Warm/Cold 和 bounded `0/-1/-2` decay。Cold 只是 canonical hash + `zlib-json-v1` shadow payload；`Artifact.content` 始终 authoritative。Glance GET 不 import/query policy 或 storage table，Patient View 不投影 tier/hash/codec/payload/reason/size。
+- **E4 voice 边界**：`backend/app/voice/` + `/api/voice/*` 是唯一 Recording/ASR 生命周期；raw audio 不进入 `LLMClient`。功能默认关闭，本地模型必须预先准备。machine Transcript 保留 provider/model/version/time observations，speaker/confidence 不存在时保持 null；人工 review 通过后才把 immutable canonical Transcript 交给既有 ingestion pipeline。Recording BLOB 独立于 E3 Artifact shadow archive，并由 SQLCipher backup/restore 覆盖。
 
 ### Demo auth（D1）：Invite → Register → Login → Session → Logout
 
@@ -802,9 +906,9 @@ Admin 创建 clinic invite（一次性链接，不发送真实邮件）
 | 角色 | 邮箱 | 登录后进入 |
 |---|---|---|
 | Clinician | doctor@demo.clinic | 三栏 Clinician Workspace |
-| Staff | staff@demo.clinic | 共用 clinic shell（RBAC 裁剪，含 Care Tasks） |
+| Staff / Nurse | staff@demo.clinic | 同一 clinical shell 的 Nurse workspace（Nurse Consult、Staff Note、Care Tasks、Comments） |
 | Patient | alice@demo.clinic | 独立四区 Patient View（pat_001） |
-| Admin | admin@demo.clinic | PatientPage + Invite 管理页（`/admin/invites`） |
+| Admin | admin@demo.clinic | 独立 Admin Workspace（Users、Invites、Sessions、Access Audit；无 clinical authoring） |
 
 相关环境变量（后端）：
 
@@ -912,7 +1016,7 @@ cd backend
 
 ## 17. Bonus: Ambient Voice Capture
 
-> 明确标记为 Bonus，不要求当前优先实现。
+> 已实现 E4 local synthetic vertical slice；仍明确标记为 Bonus，不构成生产医疗或真人准确率证明。
 
 边界约束：
 
@@ -929,3 +1033,5 @@ cd backend
 - provenance back to source segments。
 
 Extra bonus（加分项，非当前优先级）：noisy environment、diarization、overlap handling、multilingual medical terminology、multi-device capture。
+
+当前实现使用固定 multilingual Base local ASR，支持浏览器 WAV/WebM/Ogg、可见时间范围、unknown-speaker 阻断、split/merge/reindex 和角色限定确认。自动 diarization、真实 noisy/code-switching accuracy、物理麦克风真人录音与生产容量均未评估。

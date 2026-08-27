@@ -200,7 +200,21 @@ def link_task_highlight(db: Session, task: Task) -> Highlight:
         text=task.title,
         risk_reason=f"Unresolved care task ({task.assigned_role})",
         feature_flags=dict(TASK_HIGHLIGHT_FLAGS),
+        base_importance_score=compute_score(TASK_HIGHLIGHT_FLAGS),
+        adaptive_adjustment=0,
+        decay_adjustment=0,
         importance_score=compute_score(TASK_HIGHLIGHT_FLAGS),
+        learning_metadata={
+            "feedback_key": "task",
+            "review_count": 0,
+            "positive_count": 0,
+            "negative_count": 0,
+            "raw_adjustment": 0,
+            "cap_min": -2,
+            "cap_max": 3,
+            "reason": "non_ai_task_no_learning",
+            "protection_applied": False,
+        },
         status="suggested",
         status_history=[],
         created_at=now,
@@ -243,8 +257,25 @@ def recompute_task_highlights(db: Session, patient_id: str) -> None:
         ):
             continue
         flags = {**highlight.feature_flags, "unresolved_task": unresolved}
+        from .importance_learning import compose_score, requested_adaptive_adjustment
+
+        rescored = compose_score(
+            base_importance_score=compute_score(flags),
+            adaptive_adjustment=requested_adaptive_adjustment(
+                highlight.adaptive_adjustment, highlight.learning_metadata
+            ),
+            decay_adjustment=highlight.decay_adjustment,
+            feature_flags=flags,
+            status=highlight.status,
+            review_status=highlight.review_status,
+            learning_metadata=highlight.learning_metadata,
+        )
         highlight.feature_flags = flags
-        highlight.importance_score = compute_score(flags)
+        highlight.base_importance_score = rescored.base_importance_score
+        highlight.adaptive_adjustment = rescored.adaptive_adjustment
+        highlight.decay_adjustment = rescored.decay_adjustment
+        highlight.importance_score = rescored.importance_score
+        highlight.learning_metadata = rescored.learning_metadata
         if dedicated:
             highlight.risk_reason = desired_reason
             highlight.assertion_value = task.status

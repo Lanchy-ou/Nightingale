@@ -148,11 +148,15 @@ export default function CopilotPanel({
         </div>}
       </div>
       <div className="copilot-composer">
+        <div className="copilot-composer-head">
+          <strong>{category === 'draft_action' ? 'Draft with evidence' : 'Ask Copilot'}</strong>
+          <span>{category === 'draft_action' ? 'Nothing saves until you confirm' : 'Choose a prompt or add a focused question'}</span>
+        </div>
         <div className="copilot-quick-actions" aria-label="Suggested Copilot questions">
           {QUICK.map((item) => <button key={item.category} className={category === item.category ? 'active' : ''} disabled={busy} onClick={() => chooseQuick(item.category)}>{item.label}</button>)}
         </div>
-        {category === 'draft_action' && <label className="copilot-question">Draft type — selected by clinician<select value={draftType} onChange={(event) => { setDraftType(event.target.value as DraftType); setResponse(null); setDraftContent({}); }}><option value="clinician_note">Clinician note</option><option value="task">Care Task</option><option value="patient_instruction">Patient instruction</option></select></label>}
-        <div className="copilot-input-row"><label className="copilot-question"><span className="sr-only">Ask Copilot</span><textarea value={question} maxLength={300} rows={2} onChange={(event) => setQuestion(event.target.value)} placeholder="Ask about this patient's record" /></label>
+        {category === 'draft_action' && <label className="copilot-draft-config"><span>Draft type <small>Selected by clinician</small></span><select value={draftType} onChange={(event) => { setDraftType(event.target.value as DraftType); setResponse(null); setDraftContent({}); }}><option value="clinician_note">Clinician note</option><option value="task">Care Task</option><option value="patient_instruction">Patient instruction</option></select></label>}
+        <div className="copilot-input-row"><label className="copilot-question"><span>{category === 'draft_action' ? 'Optional drafting guidance' : 'Focused question (optional)'}</span><textarea value={question} maxLength={300} rows={2} onChange={(event) => setQuestion(event.target.value)} placeholder={category === 'draft_action' ? 'Add emphasis or constraints for the preview' : "Ask about this patient's record"} /></label>
         <button className="primary-button copilot-ask" disabled={busy} onClick={() => ask()}>{busy ? 'Checking…' : category === 'draft_action' ? `Generate ${draftLabel(draftType)} preview` : 'Ask'}</button></div>
       </div>
     </section>

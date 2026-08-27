@@ -75,3 +75,16 @@ def test_staff_task_verification_affordance_is_explicit():
     assert "Clinic verification required" in tasks
     assert "task.status === 'reported_done'" in tasks
     assert ">Verify complete</button>" in tasks
+
+
+def test_workspace_tabs_and_copilot_composer_use_stable_equal_width_layouts():
+    workspace = _read("frontend/src/pages/ClinicianWorkspacePage.tsx")
+    copilot = _read("frontend/src/components/CopilotPanel.tsx")
+    styles = _read("frontend/src/index.css")
+    assert "workspace-tabs ${route.mode === 'event' ? 'with-event-detail' : ''}" in workspace
+    assert "grid-template-columns: repeat(4, minmax(0, 1fr))" in styles
+    assert ".workspace-tabs.with-event-detail { grid-template-columns: repeat(5" in styles
+    assert "copilot-composer-head" in copilot
+    assert "copilot-draft-config" in copilot
+    assert ".copilot-quick-actions { display: grid; grid-template-columns: repeat(2" in styles
+    assert ".copilot-input-row { display: grid" in styles

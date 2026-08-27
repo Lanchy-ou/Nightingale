@@ -17,6 +17,7 @@ from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 
 from app.highlights import compute_score, locate_span
+from app.importance_learning import score_new_candidate
 from app.models import Artifact, Event, Highlight
 from app.tasks import unresolved_task_exists
 
@@ -79,6 +80,13 @@ def generate_highlights(db: Session) -> list[str]:
             "symptom_change": bool(cand["feature_flags"].get("symptom_change")),
             "repeated_mentions": repeated,
         }
+        learned = score_new_candidate(
+            db,
+            clinic_id=event.clinic_id,
+            entity_type=cand.get("entity_type"),
+            base_importance_score=compute_score(flags),
+            feature_flags=flags,
+        )
         db.add(
             Highlight(
                 highlight_id=cand["highlight_id"],
@@ -91,7 +99,11 @@ def generate_highlights(db: Session) -> list[str]:
                 text=cand["text"],
                 risk_reason=cand["risk_reason"],
                 feature_flags=flags,
-                importance_score=compute_score(flags),
+                base_importance_score=learned.base_importance_score,
+                adaptive_adjustment=learned.adaptive_adjustment,
+                decay_adjustment=learned.decay_adjustment,
+                importance_score=learned.importance_score,
+                learning_metadata=learned.learning_metadata,
                 status="suggested",
                 status_history=[],
                 created_at=_GENERATED_AT,

@@ -1034,3 +1034,48 @@ Status: `D5_AUTOMATED_SECURITY_COMPLETE`. Owner cancelled the 5-8 independent-ob
 - **Automated regression**: backend 342 passed; security/integration 17 passed; D3 corpus/runtime, D4 frozen eval, pip check, secret scan, Caddy validation, frontend production build and `git diff --check` passed after D5 changes.
 - **CA boundary**: Caddy sets `skip_install_trust`. No local CA was installed or bypassed; TLS verifier uses the explicit local CA file.
 - **Permanent honesty boundary**: the owner cancelled the 5-8 independent-observer requirement; the blank protocol was deleted and no observer result was simulated. `D5_AUTOMATED_SECURITY_COMPLETE` supports only the claim that Phase D engineering implementation and automated acceptance are complete. Never convert it into a human-usability, public-host certification, production-capacity or production-medical claim.
+
+---
+
+## 29. Phase E / E1 Role Workspaces Status（2026-08-27）
+
+E1 is complete. This section neither authorizes nor classifies E2–E5; use each task card/branch Exit Gate for their status.
+
+- **Nurse identity**: Nurse remains RBAC role `staff`; optional `User.professional_title` is presentation metadata only. Canonical seed staff user is `Registered Nurse`. Existing Demo databases require an explicit reseed/schema rebuild after this nullable-column addition.
+- **Nurse normalizer**: `backend/app/nurse_transcript_normalizer.py` owns the separate `nurse|patient` mapping and reuses stable range/issue primitives. The frozen Doctor normalizer file is byte-identical to D3 and retains SHA-256 `1ac0e01e92401b1728e7b938541e71f8d95e81cca137376004953eb2cd371476`; no frozen label/outcome was changed.
+- **Nurse Consult**: staff-only `POST /api/patients/{patient_id}/nurse-consults` creates a new `nurse_consult` Event and immutable system Transcript, commits raw first, then reuses the sole redaction/`LLMClient`/fallback/provenance pipeline for `ai_nurse_consult_summary`. Replay is idempotent; conflicting consult identity is 409; only exact-anchor candidates persist.
+- **Encounter grouping**: Nurse UI may explicitly select an existing non-empty encounter id. Absence creates a distinct encounter identity. Date alone never groups Events; Nurse/Doctor authorship and authority remain separate.
+- **Shared role shell**: clinician and staff still use `ClinicianWorkspacePage`. Doctor retains Doctor Consult/Copilot/Clinician Note/confirmation; Staff receives a related teal accent, Nurse identity, Nurse Consult/Staff Note/Tasks/Comments/acknowledgement and never sees Doctor-only controls. Patient/role/session changes clear draft, preview, encounter selection, Event/source/comment context and pending responses.
+- **Admin backend**: `/api/admin/users`, account status, per-user session revoke and access-audit endpoints are strict, clinic-scoped and metadata-only. Account/session mutations use compare-and-set; self-disable and last-active-admin disable fail closed; disabling atomically revokes active sessions and writes audits.
+- **Admin frontend**: session-role routing sends Admin directly to `AdminWorkspacePage`, not a patient clinical page. It reuses the Nightingale typography/cards/buttons/status system and exposes Overview, Users/Sessions, Invites and Access Audit only; no Note, Copilot, Glance confirmation or clinical Task controls exist.
+- **Verification**: 35 E1 tests added; E1 branch backend **377 passed** (the E4 voice foundation tests live on `codex/e4-voice-adapter-foundation` and are not counted here); D3 corpus/runtime and frozen hash, D4 eval, pip check, secret scan, frontend build and diff check passed. Acceptance repairs lock role-specific default encounter identity, database-atomic mutual-admin protection, and clean task-card EOFs. Local synthetic browser QA covered Nurse preview/confirm/Event Detail and Admin Overview/Invites/Audit with zero console warnings/errors. No dependency/provider/dataset/attribution addition was made by E1.
+
+---
+
+## 30. Phase E / E2 Self-Learning Importance Status（2026-08-27）
+
+E2 is complete on `codex/e2-self-learning-importance`. E3–E5 remain unstarted by this branch.
+
+- **Learning scope/key**: `backend/app/importance_learning.py` aggregates only same-clinic feedback by controlled `entity_type`; `other` is metadata-only and never generalized. Raw text, PHI, names, quotes, comments, notes and embeddings are forbidden as learning keys.
+- **Signals/cap**: clinician `accepted +1 / pinned +2 / rejected -1`; staff `+1 / +1 / -1`; each `(actor_id, highlight_id)` contributes only its latest valid event; adaptive adjustment is capped to `[-2,+3]`.
+- **CAS/eligibility**: only a successful status conditional UPDATE on a system-authored AI Summary Highlight with a strict explicit-offset raw/transcript source appends `ImportanceFeedback`. Missing/malformed/out-of-bounds spans, AI Summary self-citation and Summary-pointer/source mismatch fail closed. No-op, conflict, patient/admin and non-AI rows produce no feedback. Feedback and highlight-status AuditLog remain metadata-only.
+- **Score fields**: Highlight stores base/adaptive/E3-reserved decay/final plus counts-only learning metadata. Candidate write computes learning once; Glance GET reads only precomputed final score and never queries feedback/full history or calls a provider.
+- **Authority/protection**: staff feedback never sets clinician confirmation. Negative learning is blocked for explicit risk, unresolved Task, clinician-confirmed, pinned and needs-review rows; facts, Tasks, Artifacts and provenance are never changed.
+- **Schema**: `migrate_e2_schema()` explicitly and idempotently upgrades existing SQLite/SQLCipher Demo schemas; `create_all` is not treated as an old-DB migration. The local gitignored synthetic Demo was migrated.
+- **Evidence**: required E2 synthetic evaluation 18/18; full backend 395 passed; frontend build, D3 corpus/runtime, D4 frozen eval, security/integration 17, SQLCipher, secret/dependency checks, Caddy validation and diff check passed. Glance Layer A P50/P95 is 3.978/4.515 ms versus E1 3.233/3.926 ms. These are local synthetic results, not production capacity, real clinician preference, learned clinical correctness or human usability evidence.
+
+---
+
+## 31. Phase E / E3–E4 Integration Status（2026-08-28）
+
+E3 and E4 are complete on the Phase E integration branch. E5 is explicitly excluded and remains unstarted.
+
+- **E3 Data Decay**: `decay-v1` remains protection-first and maintenance-only. Authoritative Artifact content is never removed or overwritten; Cold is a verified `zlib-json-v1` shadow payload. Final Highlight score remains `base + adaptive + decay`. Voice Transcript provenance is verified against the owning `VoiceCaptureRecord`, so an old voice Transcript may archive/restore while its exact Transcript Span and audio-range pointer remain valid; the recording BLOB itself stays separate and is never E3-compressed.
+- **E4 provider**: real local `faster-whisper==1.2.1`, multilingual Base revision `a80717a3a48b1b28aa687bca146cb7301feae1b1`, CPU int8, pre-downloaded private model directory and `local_files_only=True`. `NANTINGALE_VOICE_ENABLED=false` is the default. Mock is test-only and never exposes product UI.
+- **Audio boundary**: PyAV performs in-memory actual-container validation for WAV/WebM/Ogg; one audio stream, 8 MiB, 120 seconds, 1–2 channels and sane sample rate are hard limits. Original bytes are immutable SQLCipher BLOBs included in backup/restore. Audio never enters `LLMClient`, logs or E3 shadow compression.
+- **ASR/review authority**: local ASR records provider/model/revision/language and observed time ranges. It performs no diarization and never fabricates confidence; every segment starts with null speaker/confidence plus `unknown_speaker`. Role-specific human review, explicit issue resolution and continuous canonical indexes are required before confirmation. Patient review cannot invent AI/system speakers.
+- **Shared UI/API**: authenticated `GET /api/voice/capabilities` returns only flag/readiness, role-derived modes and media limits, never a model path. One shared component serves Doctor Consult, Nurse Consult and Patient Check-in. Patient/role/session changes stop streams, abort requests, revoke object URLs and clear consent/audio/review drafts.
+- **Observed local slice**: 14.470-second synthetic WAV SHA-256 `b999bd2e8daaca659b975ea5fa2044e9280fe0c03443710a2d712bd65313d9fc` produced 2 non-empty timestamped segments in 1.565 seconds in the project venv with offline mode. This is not an accuracy or capacity benchmark. Physical-microphone browser capture was not exercised because the contract permits synthetic data only.
+- **Migration**: `migrate_phase_e_schema()` idempotently adds E1 `professional_title`, E2 score/feedback schema, E3 storage state and E4 voice table for SQLite/SQLCipher Demo databases. `create_all` is not treated as an old-database migration.
+- **Verification**: backend **482 passed** with real local-ASR tests enabled; security/integration **20 passed**; D3 corpus/runtime and D4 frozen eval PASS; frontend Node 2 passed and production build PASS; pip/dependency, secret, Caddy and diff checks PASS. Browser QA observed all three role entries, state reset and zero warning/error logs.
+- **Permanent non-claims**: no production medical capture, real-clinician usability, diarization, noisy/code-switching accuracy, external ASR privacy or production throughput claim. See `docs/e4_voice_capture_evidence.md` and `Task_Card/E4_Voice_Capture_Adapter_Task_Card.md`.

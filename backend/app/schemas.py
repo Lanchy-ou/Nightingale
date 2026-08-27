@@ -63,7 +63,11 @@ class HighlightOut(BaseModel):
     text: str
     risk_reason: str
     feature_flags: dict
+    base_importance_score: int
+    adaptive_adjustment: int
+    decay_adjustment: int
     importance_score: int
+    learning_metadata: dict
     status: str
     status_history: list = []
     created_at: datetime
@@ -266,6 +270,77 @@ class DoctorConsultOut(BaseModel):
     idempotent_replay: bool
 
 
+# --- E1 Nurse Consult ingestion (separate authority and speaker contract) ---
+class NurseTranscriptSegment(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    index: int = Field(ge=0)
+    speaker: Literal["nurse", "patient"]
+    text: str = Field(min_length=1, max_length=4000)
+
+    @field_validator("text")
+    @classmethod
+    def trim_non_empty_text(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("segment text must not be empty")
+        return value
+
+
+class NurseTranscriptContent(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    segments: list[NurseTranscriptSegment] = Field(min_length=1, max_length=500)
+
+    @model_validator(mode="after")
+    def continuous_indexes(self):
+        indexes = [segment.index for segment in self.segments]
+        if indexes != list(range(len(indexes))):
+            raise ValueError("segment indexes must start at 0 and be continuous")
+        return self
+
+
+class NurseConsultCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    consult_id: str = Field(min_length=1, max_length=64)
+    ingestion_key: str = Field(min_length=1, max_length=64)
+    started_at: datetime = Field(strict=False)
+    ended_at: datetime | None = Field(default=None, strict=False)
+    encounter_id: str | None = Field(default=None, min_length=1, max_length=64)
+    content: NurseTranscriptContent
+
+    @field_validator("consult_id", "ingestion_key", "encounter_id")
+    @classmethod
+    def trim_non_empty_id(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        if not value:
+            raise ValueError("identifier must not be empty")
+        return value
+
+    @model_validator(mode="after")
+    def valid_time_range(self):
+        if self.ended_at is not None and self.ended_at < self.started_at:
+            raise ValueError("ended_at must be >= started_at")
+        return self
+
+
+class NurseConsultOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    event: EventOut
+    encounter_id: str
+    source_artifact_id: str
+    ai_summary_artifact_id: str
+    highlight_ids: list[str]
+    generation_method: str
+    degraded: bool
+    fallback_reason: str | None
+    idempotent_replay: bool
+
+
 # --- D3 raw transcript normalization preview (no persistence / no LLM) ---
 class TranscriptNormalizeRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
@@ -285,6 +360,18 @@ class TranscriptPreviewSegmentOut(BaseModel):
     issues: list[str]
 
 
+class NurseTranscriptPreviewSegmentOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    index: int
+    speaker_candidate: Literal["nurse", "patient"] | None
+    text: str
+    source_start: int
+    source_end: int
+    confidence_marker: Literal["exact_label", "mapped_label", "inferred_boundary", "unknown"]
+    issues: list[str]
+
+
 class TranscriptNormalizeOut(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -292,6 +379,16 @@ class TranscriptNormalizeOut(BaseModel):
     normalize_reason: str | None
     raw_byte_length: int
     segments: list[TranscriptPreviewSegmentOut]
+    issues: list[str]
+
+
+class NurseTranscriptNormalizeOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    outcome: Literal["ACCEPT", "NEEDS_REVIEW", "REJECT"]
+    normalize_reason: str | None
+    raw_byte_length: int
+    segments: list[NurseTranscriptPreviewSegmentOut]
     issues: list[str]
 
 
@@ -303,8 +400,64 @@ class CurrentIdentityOut(BaseModel):
     clinic_id: str | None
     patient_id: str | None
     display_name: str | None
+    professional_title: str | None
     clinic_name: str | None
     authenticated: bool
+
+
+# --- E1 Admin oversight: explicit metadata-only projections ----------------
+class AdminUserOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user_id: str
+    display_name: str
+    email: str | None
+    role: Literal["patient", "staff", "clinician", "admin"]
+    professional_title: str | None
+    patient_id: str | None
+    account_status: Literal["active", "disabled"]
+    disabled_at: datetime | None
+    active_session_count: int
+    last_seen_at: datetime | None
+
+
+class AdminAccountStatusUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    expected_status: Literal["active", "disabled"]
+    status: Literal["active", "disabled"]
+
+    @model_validator(mode="after")
+    def status_must_change(self):
+        if self.status == self.expected_status:
+            raise ValueError("status must change")
+        return self
+
+
+class AdminSessionRevokeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    expected_active_session_count: int = Field(ge=0)
+
+
+class AdminSessionRevokeOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user_id: str
+    revoked_count: int
+
+
+class AdminAccessAuditOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    audit_id: str
+    actor_id: str | None
+    actor_role: str | None
+    action: str
+    target_type: str
+    target_id: str
+    details: dict | None
+    created_at: datetime
 
 
 # --- M6 Patient View (explicit field projection; extra keys are forbidden) ---

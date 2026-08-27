@@ -61,7 +61,21 @@ export interface Highlight {
   text: string;
   risk_reason: string;
   feature_flags: FeatureFlags;
+  base_importance_score: number;
+  adaptive_adjustment: number;
+  decay_adjustment: number;
   importance_score: number;
+  learning_metadata: {
+    feedback_key?: string;
+    review_count?: number;
+    positive_count?: number;
+    negative_count?: number;
+    raw_adjustment?: number;
+    cap_min?: number;
+    cap_max?: number;
+    reason?: string;
+    protection_applied?: boolean;
+  };
   status: string;
   status_history: { from: string; to: string; at: string }[];
   created_at: string;
@@ -143,6 +157,7 @@ export interface CurrentIdentity {
   clinic_id: string | null;
   patient_id: string | null;
   display_name: string | null;
+  professional_title: string | null;
   clinic_name: string | null;
   authenticated: boolean;
 }
@@ -153,11 +168,17 @@ export interface DoctorTranscriptSegment {
   text: string;
 }
 
+export interface NurseTranscriptSegment {
+  index: number;
+  speaker: 'nurse' | 'patient';
+  text: string;
+}
+
 export type TranscriptNormalizeOutcome = 'ACCEPT' | 'NEEDS_REVIEW' | 'REJECT';
 
 export interface TranscriptPreviewSegment {
   index: number;
-  speaker_candidate: 'doctor' | 'patient' | null;
+  speaker_candidate: 'doctor' | 'nurse' | 'patient' | null;
   text: string;
   // Nullable: after a user edit/split/merge that cannot be mapped back to the
   // raw text exactly, the source range is cleared (never a pseudo-precise span).
@@ -185,6 +206,105 @@ export interface DoctorConsultResult {
   degraded: boolean;
   fallback_reason: string | null;
   idempotent_replay: boolean;
+}
+
+export type NurseConsultResult = DoctorConsultResult;
+
+// --- E4 local voice adapter ----------------------------------------------
+export type VoiceCaptureMode = 'doctor_consult' | 'nurse_consult' | 'patient_session';
+
+export interface VoiceCapabilities {
+  enabled: boolean;
+  provider: string;
+  asr_ready: boolean;
+  allowed_modes: VoiceCaptureMode[];
+  accepted_mime_types: string[];
+  max_bytes: number;
+  max_duration_ms: number;
+}
+
+export interface VoiceMachineSegment {
+  machine_segment_id: string;
+  source_start_ms: number | null;
+  source_end_ms: number | null;
+  speaker_candidate: string | null;
+  text: string;
+  confidence: number | null;
+  issues: string[];
+}
+
+export interface VoiceReviewedSegment {
+  index: number;
+  source_machine_segment_ids: string[];
+  speaker: string | null;
+  text: string;
+  source_start_ms: number | null;
+  source_end_ms: number | null;
+  confidence: number | null;
+  issues: string[];
+  audio_range_exact: boolean;
+  speaker_source_verified: boolean;
+}
+
+export interface VoiceCaptureRecord {
+  capture_id: string;
+  patient_id: string;
+  capture_mode: VoiceCaptureMode;
+  event_type: string;
+  encounter_id: string | null;
+  status: string;
+  revision: number;
+  failure_reason: string | null;
+  started_at: string;
+  ended_at: string | null;
+  created_at: string;
+  updated_at: string;
+  audio: {
+    mime_type: string;
+    byte_length: number;
+    sha256: string;
+    duration_ms: number | null;
+    sample_rate_hz: number | null;
+    channels: number | null;
+  } | null;
+  machine_transcript: {
+    provider: string;
+    method: string;
+    model: string | null;
+    version: string | null;
+    language: string | null;
+    segments: VoiceMachineSegment[];
+    degraded: boolean;
+    failure_reason: string | null;
+  } | null;
+  reviewed_segments: VoiceReviewedSegment[] | null;
+  event_id: string | null;
+  processing: { method: string; degraded: boolean; fallback_reason: string | null } | null;
+}
+
+// --- E1 Admin oversight ---------------------------------------------------
+export interface AdminUser {
+  user_id: string;
+  display_name: string;
+  email: string | null;
+  role: 'patient' | 'staff' | 'clinician' | 'admin';
+  professional_title: string | null;
+  patient_id: string | null;
+  account_status: 'active' | 'disabled';
+  disabled_at: string | null;
+  active_session_count: number;
+  last_seen_at: string | null;
+}
+
+export interface AdminAccessAudit {
+  audit_id: string;
+  actor_id: string | null;
+  actor_role: string | null;
+  action: string;
+  target_type: string;
+  target_id: string;
+  details: Record<string, string> | null;
+  created_at: string;
 }
 
 // --- D1 Identity, Invite, Login and Session ---

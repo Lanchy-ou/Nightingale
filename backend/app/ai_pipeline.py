@@ -17,6 +17,11 @@ from .conflicts import find_conflict
 from .deterministic_pipeline import build_fallback, extract_text_leaves
 from .extraction import validate_candidate
 from .highlights import compute_score, extract_text, locate_span
+from .importance_learning import (
+    compose_score,
+    requested_adaptive_adjustment,
+    score_new_candidate,
+)
 from .llm_client import (
     InvalidOutputError,
     LLMClient,
@@ -293,6 +298,14 @@ def persist_derived(
     for ac in output.candidates:
         quote = extract_text(source_artifact.content, ac.span)
         hid = f"hl_{stable_id(source_artifact.artifact_id, quote, ac.entity_key)}"
+        learned = score_new_candidate(
+            db,
+            clinic_id=event.clinic_id,
+            entity_type=ac.entity_type,
+            base_importance_score=ac.score,
+            feature_flags=ac.feature_flags,
+            review_status=ac.review_status,
+        )
         db.add(
             Highlight(
                 highlight_id=hid,
@@ -304,7 +317,11 @@ def persist_derived(
                 text=ac.text,
                 risk_reason=ac.risk_reason,
                 feature_flags=ac.feature_flags,
-                importance_score=ac.score,
+                base_importance_score=learned.base_importance_score,
+                adaptive_adjustment=learned.adaptive_adjustment,
+                decay_adjustment=learned.decay_adjustment,
+                importance_score=learned.importance_score,
+                learning_metadata=learned.learning_metadata,
                 status="suggested",
                 status_history=[],
                 created_at=now,
@@ -321,8 +338,24 @@ def persist_derived(
     for hid in output.recompute_existing:
         h = db.get(Highlight, hid)
         if h is not None and not h.feature_flags.get("repeated_mentions"):
-            h.feature_flags = {**h.feature_flags, "repeated_mentions": True}
-            h.importance_score = compute_score(h.feature_flags)
+            flags = {**h.feature_flags, "repeated_mentions": True}
+            rescored = compose_score(
+                base_importance_score=compute_score(flags),
+                adaptive_adjustment=requested_adaptive_adjustment(
+                    h.adaptive_adjustment, h.learning_metadata
+                ),
+                decay_adjustment=h.decay_adjustment,
+                feature_flags=flags,
+                status=h.status,
+                review_status=h.review_status,
+                learning_metadata=h.learning_metadata,
+            )
+            h.feature_flags = flags
+            h.base_importance_score = rescored.base_importance_score
+            h.adaptive_adjustment = rescored.adaptive_adjustment
+            h.decay_adjustment = rescored.decay_adjustment
+            h.importance_score = rescored.importance_score
+            h.learning_metadata = rescored.learning_metadata
             h.updated_at = now
 
     add_audit(
