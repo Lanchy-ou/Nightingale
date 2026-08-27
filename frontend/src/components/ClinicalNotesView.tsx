@@ -67,9 +67,11 @@ export default function ClinicalNotesView({
     <section className="clinical-view" aria-labelledby="notes-heading">
       <div className="view-title-row">
         <div>
-          <p className="eyebrow">Canonical items remain on their Events</p>
-          <h2 id="notes-heading">Notes</h2>
+          <p className="eyebrow">Clinician and staff-authored record</p>
+          <h2 id="notes-heading">Clinical Notes</h2>
+          <p className="view-subtitle">A readable index of authored notes. Each note remains attached to its original Event and version history.</p>
         </div>
+        <span className="record-count">{notes.length} notes</span>
       </div>
       {loading && <div className="loading-card">Loading patient notes and discussions…</div>}
       {error && <div className="form-error">Could not load Notes: {error}</div>}
@@ -79,20 +81,17 @@ export default function ClinicalNotesView({
 
       {notes.length > 0 && (
         <div className="notes-section">
-          <h3>Clinical notes</h3>
-          <div className="notes-grid">
+          <h3>Latest first</h3>
+          <div className="clinical-notes-list">
             {notes.map(({ event, artifact }) => (
               <button
-                className="note-projection-card"
+                className="clinical-note-row"
                 key={artifact.artifact_id}
                 onClick={() => onOpenArtifact(event, artifact.artifact_id)}
               >
-                <span className={`badge ${artifact.artifact_type === 'staff_note' ? 'staff' : 'clinician'}`}>
-                  {artifact.artifact_type === 'staff_note' ? 'STAFF' : 'CLINICIAN'}
-                </span>
-                <strong>{artifactLabel(artifact)}</strong>
-                <p>{excerpt(artifact.content)}</p>
-                <small>{eventLabel(event)} · {formatDateTime(artifact.created_at)} · v{artifact.version}</small>
+                <span className="clinical-note-date"><strong>{formatDateTime(artifact.created_at)}</strong><small>{eventLabel(event)}</small></span>
+                <span className="clinical-note-copy"><span className={`badge ${artifact.artifact_type === 'staff_note' ? 'staff' : 'clinician'}`}>{artifact.artifact_type === 'staff_note' ? 'STAFF' : 'CLINICIAN'}</span><strong>{artifactLabel(artifact)}</strong><p>{excerpt(artifact.content)}</p></span>
+                <span className="clinical-note-version">v{artifact.version}<i aria-hidden="true">→</i></span>
               </button>
             ))}
           </div>

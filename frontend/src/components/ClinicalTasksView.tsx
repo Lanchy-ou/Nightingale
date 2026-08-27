@@ -218,6 +218,7 @@ export default function ClinicalTasksView({
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [provenance, setProvenance] = useState<TaskProvenance | null>(null);
   const [focusedTaskId, setFocusedTaskId] = useState<string | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
 
   const load = useCallback(async (signal?: AbortSignal) => {
     try {
@@ -285,39 +286,36 @@ export default function ClinicalTasksView({
 
   return (
     <section className="clinical-view tasks-view" aria-labelledby="tasks-heading">
-      <div className="view-title-row"><div><p className="eyebrow">Who must do what next</p><h2 id="tasks-heading">Care Tasks</h2></div><span className="record-count">{tasks.length} tasks</span></div>
+      <div className="view-title-row"><div><p className="eyebrow">Who must do what next</p><h2 id="tasks-heading">Care Tasks</h2><p className="view-subtitle">Review active work first; create a new task only when needed.</p></div><div className="view-title-actions"><span className="record-count">{tasks.length} tasks</span><button className="primary-button" onClick={() => setShowCreate((current) => !current)}>{showCreate ? 'Close form' : 'New task'}</button></div></div>
       {error && <div className="form-error">{error}</div>}
-      <div className="task-create-card">
-        <h3>Create from Event</h3>
-        <select value={selectedEvent?.event_id ?? ''} onChange={(event) => setSelectedEventId(event.target.value)}>
+      {showCreate && <div className="task-create-card">
+        <div className="task-create-head"><div><p className="eyebrow">New follow-up action</p><h3>New task</h3><p>Choose the clinical Event this task belongs to.</p></div><button className="link-btn" onClick={() => setShowCreate(false)}>Close</button></div>
+        <label className="task-event-picker">Linked clinical Event<select value={selectedEvent?.event_id ?? ''} onChange={(event) => setSelectedEventId(event.target.value)}>
           {events.map((event) => <option key={event.event_id} value={event.event_id}>{formatDateTime(event.started_at)} · {eventLabel(event)}</option>)}
-        </select>
-        {selectedEvent && <TaskCreateForm event={selectedEvent} onCreated={() => { load(); onChanged(); }} />}
-      </div>
+        </select></label>
+        {selectedEvent && <TaskCreateForm event={selectedEvent} onCreated={() => { load(); onChanged(); setShowCreate(false); }} />}
+      </div>}
       {loading && <div className="loading-card">Loading care tasks…</div>}
       {!loading && tasks.length === 0 && <div className="empty-state"><h3>No care tasks</h3><p>Create an evidence-linked action from a real Event.</p></div>}
-      <div className="clinical-task-list">
-        {tasks.map((task) => (
-          <article
-            key={task.task_id}
-            id={`task-card-${task.task_id}`}
-            className={`clinical-task task-${task.status}${focusedTaskId === task.task_id ? ' task-focused' : ''}`}
-          >
-            <header><div><span className="task-status">{task.status.replace('_', ' ')}</span><h3>{task.title}</h3></div>{task.due_at && <small>Due {formatDateTime(task.due_at)}</small>}</header>
-            {task.description && <p>{task.description}</p>}
-            <div className="task-meta">Assigned: {task.assigned_role}{task.patient_visible ? ' · patient visible' : ' · internal'} · Origin {task.event_id}{task.source_artifact_id ? ` / ${task.source_artifact_id}` : ' · event-level provenance'}</div>
-            {task.status === 'reported_done' && <div className="verification-callout">Patient/clinic reported done · clinic verification required</div>}
-            <div className="task-actions">
+      {!loading && tasks.length > 0 && <div className="clinical-task-table-wrap"><table className="clinical-task-table">
+        <thead><tr><th>Task</th><th>Status</th><th>Owner</th><th>Due</th><th><span className="sr-only">Actions</span></th></tr></thead>
+        <tbody>{tasks.map((task) => (
+          <tr key={task.task_id} id={`task-card-${task.task_id}`} className={`task-${task.status}${focusedTaskId === task.task_id ? ' task-focused' : ''}`}>
+            <td><strong>{task.title}</strong>{task.description && <span>{task.description}</span>}<small>Source: {eventLabel(events.find((event) => event.event_id === task.event_id) ?? selectedEvent!)}{task.source_artifact_id ? ' · exact source linked' : ' · Event-level source'}</small>{task.status === 'reported_done' && <em>Clinic verification required</em>}</td>
+            <td><span className="task-status">{task.status.replace('_', ' ')}</span></td>
+            <td>{task.assigned_role}<small>{task.patient_visible ? 'Patient visible' : 'Internal'}</small></td>
+            <td>{task.due_at ? formatDateTime(task.due_at) : 'No due date'}</td>
+            <td><details className="task-actions-menu"><summary>Actions</summary><div>
               {task.status === 'open' && task.assigned_role === identity.role && (!task.assigned_user_id || task.assigned_user_id === identity.user_id) && <button disabled={pendingId === task.task_id} onClick={() => transition(task, 'in_progress')}>Start</button>}
               {(task.status === 'open' || task.status === 'in_progress') && <button disabled={pendingId === task.task_id} onClick={() => transition(task, 'reported_done')}>Report done</button>}
               {task.status === 'reported_done' && <button disabled={pendingId === task.task_id} onClick={() => transition(task, 'completed')}>Verify complete</button>}
               {['open', 'in_progress', 'reported_done'].includes(task.status) && <button disabled={pendingId === task.task_id} onClick={() => transition(task, 'cancelled')}>Cancel</button>}
               <button onClick={() => onOpenEvent(events.find((event) => event.event_id === task.event_id) ?? selectedEvent!)}>Open Event</button>
               <button onClick={() => viewSource(task)}>View source</button>
-            </div>
-          </article>
-        ))}
-      </div>
+            </div></details></td>
+          </tr>
+        ))}</tbody>
+      </table></div>}
       {provenance && <div className="task-provenance"><button className="link-btn" onClick={() => setProvenance(null)}>Close</button><strong>Task source</strong><span>{provenance.event.event_type} · {provenance.event.event_id}</span>{provenance.source_artifact && <span>{provenance.source_artifact.artifact_type} · {provenance.source_artifact.artifact_id}</span>}{provenance.quote ? <blockquote>{provenance.quote}</blockquote> : <span className="muted">Event-level provenance (no exact source selected)</span>}</div>}
     </section>
   );

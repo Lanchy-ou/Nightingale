@@ -101,6 +101,25 @@ def test_patient_cannot_complete_or_cancel(clinician_client, patient_client):
     ).status_code == 403
 
 
+def test_staff_can_verify_patient_reported_task(clinician_client, patient_client, staff_client):
+    created = clinician_client.post(
+        f"/api/events/{fixture.EVT_DOC_0821}/tasks",
+        json=_payload(title="Staff verification path"),
+    ).json()
+    reported = patient_client.post(
+        f"/api/tasks/{created['task_id']}/transition",
+        json={"expected_status": "open", "status": "reported_done"},
+    )
+    assert reported.status_code == 200
+
+    completed = staff_client.post(
+        f"/api/tasks/{created['task_id']}/transition",
+        json={"expected_status": "reported_done", "status": "completed"},
+    )
+    assert completed.status_code == 200
+    assert completed.json()["completed_by"] == fixture.USER_STAFF_ID
+
+
 def test_patient_list_filters_internal_and_unassigned_tasks(patient_client):
     response = patient_client.get(f"/api/patients/{fixture.PATIENT_ID}/tasks")
     assert response.status_code == 200

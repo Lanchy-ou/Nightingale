@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ApiError, api } from '../api';
 import type { Artifact } from '../types';
 
@@ -10,23 +10,29 @@ export default function ArtifactEdit({
   onSaved: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [text, setText] = useState(JSON.stringify(artifact.content, null, 2));
+  const [fields, setFields] = useState<Record<string, string>>(() => Object.fromEntries(
+    Object.entries(artifact.content).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+  ));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    setOpen(false);
+    setFields(Object.fromEntries(
+      Object.entries(artifact.content).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+    ));
+    setError(null);
+  }, [artifact.artifact_id, artifact.version]);
+
+  function fieldLabel(key: string): string {
+    return key.replace(/_/g, ' ').replace(/^./, (letter) => letter.toUpperCase());
+  }
 
   async function save() {
     setBusy(true);
     setError(null);
-    let content: any;
     try {
-      content = JSON.parse(text);
-    } catch {
-      setError('Invalid JSON');
-      setBusy(false);
-      return;
-    }
-    try {
-      await api.editArtifact(artifact.artifact_id, content, artifact.version);
+      await api.editArtifact(artifact.artifact_id, { ...artifact.content, ...fields }, artifact.version);
       setOpen(false);
       onSaved();
     } catch (e: any) {
@@ -50,14 +56,19 @@ export default function ArtifactEdit({
   }
   return (
     <div className="editor">
-      <textarea value={text} onChange={(e) => setText(e.target.value)} rows={6} />
+      <div className="structured-note-editor">
+        {Object.entries(fields).map(([key, value]) => (
+          <label key={key}>{fieldLabel(key)}<textarea value={value} onChange={(event) => setFields((current) => ({ ...current, [key]: event.target.value }))} rows={key === 'assessment' ? 4 : 3} /></label>
+        ))}
+      </div>
       <div className="inline-actions">
-        <button onClick={save} disabled={busy}>
-          Save (v{artifact.version} → v{artifact.version + 1})
+        <button className="primary-button" onClick={save} disabled={busy || Object.keys(fields).length === 0}>
+          {busy ? 'Saving…' : 'Save new version'}
         </button>
-        <button className="link-btn" onClick={() => setOpen(false)}>
+        <button className="secondary-button" onClick={() => setOpen(false)}>
           Cancel
         </button>
+        <span className="editor-version">v{artifact.version} → v{artifact.version + 1}</span>
         {error && <span className="error-inline">{error}</span>}
       </div>
     </div>

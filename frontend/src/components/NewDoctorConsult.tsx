@@ -297,9 +297,9 @@ export default function NewDoctorConsult({
       <button className="back-button" onClick={cancel}>← Back to patient</button>
       <div className="view-title-row">
         <div>
-          <p className="eyebrow">New real-world event</p>
-          <h2 id="new-consult-title">New Doctor Consult</h2>
-          <p className="view-subtitle">{patient.name} · {patient.clinic_name}</p>
+          <p className="eyebrow">Record a real-world clinical event</p>
+          <h2 id="new-consult-title">Record Doctor Consultation</h2>
+          <p className="view-subtitle">Paste a manually speaker-labelled transcript, review every segment, then confirm processing for {patient.name}.</p>
         </div>
       </div>
 

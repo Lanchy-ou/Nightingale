@@ -64,6 +64,7 @@ export default function ClinicalTimeline({
         <div>
           <p className="eyebrow">Longitudinal record</p>
           <h2 id="timeline-heading">Timeline</h2>
+          <p className="view-subtitle">Real-world clinical Events, ordered by when they happened.</p>
         </div>
         <span className="record-count">{events.length} events</span>
       </div>
@@ -91,8 +92,8 @@ export default function ClinicalTimeline({
                   <span className="encounter-kicker">Clinic Visit</span>
                   <h3>{formatDate(item.events[0].started_at)}</h3>
                 </div>
-                <span className="encounter-id" title={item.encounterId}>
-                  Explicit encounter · {item.events.length} event{item.events.length === 1 ? '' : 's'}
+                <span className="encounter-id" title={`Encounter ${item.encounterId}`}>
+                  One encounter · {item.events.length} event{item.events.length === 1 ? '' : 's'}
                 </span>
               </header>
               <div className="encounter-events">

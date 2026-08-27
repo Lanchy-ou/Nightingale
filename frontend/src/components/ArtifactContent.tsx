@@ -25,6 +25,18 @@ function matchOffset(span: Span | null, kind: string, key: number | string): [nu
   return undefined;
 }
 
+function sectionLabel(key: string): string {
+  const labels: Record<string, string> = {
+    assessment: 'Assessment',
+    chief_complaint: 'Chief complaint',
+    follow_up: 'Follow-up',
+    instruction: 'Patient instruction',
+    plan: 'Plan',
+    summary: 'Summary',
+  };
+  return labels[key] ?? key.replace(/_/g, ' ').replace(/^./, (letter) => letter.toUpperCase());
+}
+
 export default function ArtifactContent({
   artifact,
   span,
@@ -69,17 +81,17 @@ export default function ArtifactContent({
       {Object.entries(content)
         .filter(([, v]) => typeof v === 'string')
         .map(([k, v]) => (
-          <div key={k} className="line">
-            <span className="speaker">{k}</span>{' '}
-            <HighlightedText text={v as string} offset={matchOffset(s, 'section', k)} markRef={markRef} />
-          </div>
+          <section key={k} className="artifact-section">
+            <h4>{sectionLabel(k)}</h4>
+            <p><HighlightedText text={v as string} offset={matchOffset(s, 'section', k)} markRef={markRef} /></p>
+          </section>
         ))}
       {Array.isArray(content.key_points) && (
-        <ul className="key-points">
+        <section className="artifact-section"><h4>Key points</h4><ul className="key-points">
           {(content.key_points as string[]).map((kp, i) => (
             <li key={i}>{kp}</li>
           ))}
-        </ul>
+        </ul></section>
       )}
     </div>
   );

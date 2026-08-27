@@ -109,10 +109,12 @@ export default function CommentThread({
 
   return (
     <div className="comment-thread">
-      <h4>Comments</h4>
+      <div className="comment-thread-head"><p className="eyebrow">Event collaboration</p><h4>Comments</h4><span>{comments.length}</span></div>
       {error && <div className="error-inline">{error}</div>}
-      {comments.length === 0 && <div className="muted">No comments yet.</div>}
-      {roots.map((c) => renderComment(c))}
+      <div className="comment-list">
+        {comments.length === 0 && <div className="comment-empty"><strong>No discussion yet</strong><span>Comments remain attached to this Event or a selected clinical document.</span></div>}
+        {roots.map((c) => renderComment(c))}
+      </div>
       {canWrite && (
         <div className="comment-composer">
           {replyTo ? (
@@ -123,8 +125,8 @@ export default function CommentThread({
               </button>
             </div>
           ) : (
-            <label>
-              Attach to{' '}
+            <label className="comment-anchor">
+              Comment on
               <select value={anchorKey} onChange={(e) => setAnchorKey(e.target.value)}>
                 <option value={`event:${eventId}`}>Event</option>
                 {artifacts.map((artifact) => (

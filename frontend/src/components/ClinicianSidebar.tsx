@@ -24,28 +24,20 @@ export default function ClinicianSidebar({
       `${patient.name} ${patient.patient_id}`.toLowerCase().includes(token),
     );
   }, [patients, query]);
-  const initials = (identity.display_name ?? 'Clinician')
-    .split(/\s+/)
-    .map((word) => word[0])
-    .join('')
-    .slice(0, 2)
-    .toUpperCase();
-
   return (
     <aside className="clinician-sidebar" aria-label="Clinician navigation">
       <div className="sidebar-brand" aria-label="Nightingale clinician workspace">
         <span className="sidebar-brand-mark" aria-hidden="true">N</span>
         <span>
           <strong>Nightingale</strong>
-          <small>Clinical workspace</small>
+          <small>{identity.role === 'staff' ? 'Clinical support workspace' : 'Clinical workspace'}</small>
         </span>
       </div>
       <div className="identity-card">
-        <div className="avatar avatar-small">{initials}</div>
         <div className="identity-copy">
           <small>Signed in as</small>
           <strong>{identity.display_name ?? 'Clinician'}</strong>
-          <span>{identity.role} · {identity.clinic_name}</span>
+          <span>{identity.role === 'staff' ? 'Clinical support' : identity.role}</span>
         </div>
       </div>
 
@@ -85,7 +77,7 @@ export default function ClinicianSidebar({
           </button>
         ))}
       </nav>
-      <p className="scope-note">Clinic-scoped access · server enforced</p>
+      <p className="scope-note">{identity.clinic_name}<br />Clinic-scoped access · server enforced</p>
       {onLogout && (
         <button className="sidebar-logout" onClick={onLogout}>
           Logout

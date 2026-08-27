@@ -133,22 +133,28 @@ export default function CopilotPanel({
       : Boolean(draftContent.assessment?.trim() || draftContent.plan?.trim());
 
   return (
-    <section className="copilot-panel" aria-labelledby="copilot-heading">
-      <header><p className="eyebrow">Evidence-bound assistant</p><h2 id="copilot-heading">Copilot</h2><span>Clinical review only — never diagnoses or acts automatically.</span></header>
-      <div className="copilot-quick-actions">
-        {QUICK.map((item) => <button key={item.category} className={category === item.category ? 'active' : ''} disabled={busy} onClick={() => chooseQuick(item.category)}>{item.label}</button>)}
+    <section className="copilot-panel" aria-label="Copilot">
+      <div className="copilot-conversation" aria-live="polite">
+        {!response && !busy && !error && <div className="copilot-welcome"><p className="eyebrow">Current review</p><h3>Ask about this patient record</h3><p>Answers separate source facts, comparison inferences and unknowns. Open any citation to inspect its exact source span.</p></div>}
+        {busy && <div className="copilot-thinking">Checking bounded evidence…</div>}
+        {error && <div className="form-error">Copilot request failed: {error}</div>}
+        {response && <div className="copilot-result">
+          <div className="copilot-answer-head"><div><p className="eyebrow">Copilot · current review</p><h3>Evidence-bound answer</h3></div><span>{response.claims.length} claim{response.claims.length === 1 ? '' : 's'}</span></div>
+          {response.status === 'unavailable' && <div className="copilot-unavailable">Unavailable — no clinical answer was generated.</div>}
+          {response.claims.map((claim, index) => <article className={`copilot-claim ${claim.status}`} key={`${claim.status}:${index}`}><strong>{claim.status === 'supported' ? 'Source fact' : claim.status === 'inference' ? 'Comparison inference' : 'Unknown'}</strong><p>{claim.text}</p>{claim.evidence_ids.map((id) => <button key={id} className="link-btn" onClick={() => { const item = evidence.get(id); if (item) onOpenEvidence(item); }}>Open source {id}</button>)}</article>)}
+          {response.draft && <div className="copilot-draft"><h3>AI-generated editable preview</h3><p><strong>{draftLabel(response.draft.artifact_type)}</strong> · Server-selected Event {response.draft.event_id} · {response.draft.patient_visible ? 'patient visible if confirmed' : 'internal'}</p><DraftEditor type={response.draft.artifact_type} content={draftContent} onChange={editDraft} /><p className="muted">Nothing has been saved. The signed confirmation is actor/patient/Event/type/evidence-bound and expires shortly.</p>{response.draft.artifact_type === 'patient_instruction' && !patientInstructionEdited && <p className="verification-callout">Edit the patient-facing instruction before it can be confirmed.</p>}<button className="primary-button" disabled={confirming || !draftComplete} onClick={confirmDraft}>{confirming ? 'Confirming…' : 'Confirm and create'}</button></div>}
+          {response.evidence.length > 0 && <details className="copilot-evidence"><summary>{response.evidence.length} verified source{response.evidence.length === 1 ? '' : 's'}</summary>{response.evidence.map((item) => <article key={item.evidence_id}><button className="link-btn" onClick={() => onOpenEvidence(item)}>{item.event_type.replace(/_/g, ' ')} · {item.artifact_type}</button><small>Event {new Date(item.event_time).toLocaleString()} · Recorded {new Date(item.record_time).toLocaleString()} · {item.author_role} · {item.span.kind}</small><blockquote>{item.quote}</blockquote>{item.review_required && <em>Review flag on this source.</em>}</article>)}</details>}
+          <details className="copilot-limitations"><summary>Limits</summary>{response.limitations.map((item) => <p key={item}>{item}</p>)}</details>
+        </div>}
       </div>
-      {category === 'draft_action' && <label className="copilot-question">Draft type — selected by clinician<select value={draftType} onChange={(event) => { setDraftType(event.target.value as DraftType); setResponse(null); setDraftContent({}); }}><option value="clinician_note">Clinician note</option><option value="task">Care Task</option><option value="patient_instruction">Patient instruction</option></select></label>}
-      <label className="copilot-question">Refine this question (optional)<textarea value={question} maxLength={300} rows={2} onChange={(event) => setQuestion(event.target.value)} placeholder="Find a symptom, medication, task, or statement" /></label>
-      <button className="primary-button copilot-ask" disabled={busy} onClick={() => ask()}>{busy ? 'Checking bounded evidence…' : category === 'draft_action' ? `Generate ${draftLabel(draftType)} preview` : 'Ask Copilot'}</button>
-      {error && <div className="form-error">Copilot request failed: {error}</div>}
-      {response && <div className="copilot-result" aria-live="polite">
-        {response.status === 'unavailable' && <div className="copilot-unavailable">Unavailable — no clinical answer was generated.</div>}
-        {response.claims.map((claim, index) => <article className={`copilot-claim ${claim.status}`} key={`${claim.status}:${index}`}><strong>{claim.status === 'supported' ? 'Source fact' : claim.status === 'inference' ? 'Comparison inference' : 'Unknown'}</strong><p>{claim.text}</p>{claim.evidence_ids.map((id) => <button key={id} className="link-btn" onClick={() => { const item = evidence.get(id); if (item) onOpenEvidence(item); }}>Open evidence {id}</button>)}</article>)}
-        {response.evidence.length > 0 && <div className="copilot-evidence"><h3>Verified evidence</h3>{response.evidence.map((item) => <article key={item.evidence_id}><button className="link-btn" onClick={() => onOpenEvidence(item)}>{item.event_type.replace(/_/g, ' ')} · {item.artifact_type}</button><small>Event {new Date(item.event_time).toLocaleString()} · Recorded {new Date(item.record_time).toLocaleString()} · {item.author_role} · {item.span.kind}</small><blockquote>{item.quote}</blockquote>{item.review_required && <em>Review flag on this source.</em>}</article>)}</div>}
-        {response.draft && <div className="copilot-draft"><h3>AI-generated editable preview</h3><p><strong>{draftLabel(response.draft.artifact_type)}</strong> · Server-selected Event {response.draft.event_id} · {response.draft.patient_visible ? 'patient visible if confirmed' : 'internal'}</p><DraftEditor type={response.draft.artifact_type} content={draftContent} onChange={editDraft} /><p className="muted">Nothing has been saved. The signed confirmation is actor/patient/Event/type/evidence-bound and expires shortly.</p>{response.draft.artifact_type === 'patient_instruction' && !patientInstructionEdited && <p className="verification-callout">Edit the patient-facing instruction before it can be confirmed.</p>}<button className="primary-button" disabled={confirming || !draftComplete} onClick={confirmDraft}>{confirming ? 'Confirming…' : 'Confirm and create'}</button></div>}
-        <div className="copilot-limitations"><h3>Limits</h3>{response.limitations.map((item) => <p key={item}>{item}</p>)}</div>
-      </div>}
+      <div className="copilot-composer">
+        <div className="copilot-quick-actions" aria-label="Suggested Copilot questions">
+          {QUICK.map((item) => <button key={item.category} className={category === item.category ? 'active' : ''} disabled={busy} onClick={() => chooseQuick(item.category)}>{item.label}</button>)}
+        </div>
+        {category === 'draft_action' && <label className="copilot-question">Draft type — selected by clinician<select value={draftType} onChange={(event) => { setDraftType(event.target.value as DraftType); setResponse(null); setDraftContent({}); }}><option value="clinician_note">Clinician note</option><option value="task">Care Task</option><option value="patient_instruction">Patient instruction</option></select></label>}
+        <div className="copilot-input-row"><label className="copilot-question"><span className="sr-only">Ask Copilot</span><textarea value={question} maxLength={300} rows={2} onChange={(event) => setQuestion(event.target.value)} placeholder="Ask about this patient's record" /></label>
+        <button className="primary-button copilot-ask" disabled={busy} onClick={() => ask()}>{busy ? 'Checking…' : category === 'draft_action' ? `Generate ${draftLabel(draftType)} preview` : 'Ask'}</button></div>
+      </div>
     </section>
   );
 }

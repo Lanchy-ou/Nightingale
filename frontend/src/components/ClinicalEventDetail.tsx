@@ -21,6 +21,17 @@ type LifecycleItem = {
   artifact?: Artifact;
 };
 
+const AUDIT_LABELS: Record<string, string> = {
+  conflict: 'Edit conflict recorded',
+  edit_note: 'Note updated',
+  highlight_status: 'Priority status changed',
+  resolve: 'Comment resolved',
+  revert: 'Earlier version restored',
+  task_create: 'Task created',
+  task_transition: 'Task status changed',
+  unresolve: 'Comment reopened',
+};
+
 export default function ClinicalEventDetail({
   event,
   initialArtifactId,
@@ -42,6 +53,7 @@ export default function ClinicalEventDetail({
   const [comments, setComments] = useState<Comment[]>([]);
   const [audit, setAudit] = useState<AuditLog[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(initialArtifactId);
+  const [composerMode, setComposerMode] = useState<'note' | 'task' | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -122,7 +134,7 @@ export default function ClinicalEventDetail({
         key: `audit:${log.audit_id}`,
         at: log.created_at,
         kind: 'audit',
-        title: log.action.replace(/_/g, ' '),
+        title: AUDIT_LABELS[log.action] ?? log.action.replace(/_/g, ' '),
         detail: `${log.actor_role}${log.to_version ? ` · v${log.to_version}` : ''}`,
       });
     }
@@ -138,7 +150,10 @@ export default function ClinicalEventDetail({
           <h2 id="event-detail-heading">{eventLabel(event)}</h2>
           <p className="view-subtitle">Occurred {formatDateTime(event.started_at)}</p>
         </div>
-        <span className="record-count">{artifacts.length} artifacts</span>
+        <div className="event-detail-actions">
+          <button className="secondary-button" onClick={() => setComposerMode((current) => current === 'note' ? null : 'note')}>{role === 'clinician' ? 'Add clinician note' : 'Add staff note'}</button>
+          <button className="secondary-button" onClick={() => setComposerMode((current) => current === 'task' ? null : 'task')}>Create task</button>
+        </div>
       </div>
 
       {loading && <div className="loading-card">Loading Event lifecycle…</div>}
@@ -146,31 +161,32 @@ export default function ClinicalEventDetail({
 
       {!loading && !error && (
         <div className="event-detail-columns">
-          <div className="lifecycle-panel">
-            <h3>Event lifecycle</h3>
-            <p className="panel-help">Clinical time starts the Event; record activity stays inside it.</p>
-            <div className="lifecycle-list">
-              {lifecycle.map((item) => (
-                <button
-                  key={item.key}
-                  className={`${item.kind} ${item.artifact?.artifact_id === selectedId ? 'active' : ''}`}
-                  onClick={() => item.artifact && setSelectedId(item.artifact.artifact_id)}
-                  disabled={!item.artifact}
-                >
+          <div className="event-material-panel">
+            <h3>Event timeline</h3>
+            <p className="panel-help">Clinical documents are selectable. Event and activity markers are read-only.</p>
+            <div className="lifecycle-list event-lifecycle-list">
+              {lifecycle.map((item) => {
+                const content = <>
                   <span className="lifecycle-dot" aria-hidden="true" />
                   <span>
                     <small>{formatDateTime(item.at)}</small>
                     <strong>{item.title}</strong>
                     <em>{item.detail}</em>
                   </span>
-                </button>
-              ))}
+                </>;
+                return item.artifact ? (
+                  <button key={item.key} className={`lifecycle-item ${item.kind} ${item.artifact.artifact_id === selectedId ? 'active' : ''}`} onClick={() => setSelectedId(item.artifact!.artifact_id)} aria-pressed={item.artifact.artifact_id === selectedId}>{content}</button>
+                ) : (
+                  <div key={item.key} className={`lifecycle-item ${item.kind}`}>{content}</div>
+                );
+              })}
             </div>
           </div>
 
-          <div className="artifact-reader">
-            {selectedArtifact ? (
-              <>
+          <div className="event-reading-column">
+            <div className="artifact-reader">
+              {selectedArtifact ? (
+                <>
                 <header className="artifact-reader-head">
                   <div>
                     <span className={`badge ${artifactBadge(selectedArtifact.artifact_type).cls}`}>
@@ -194,20 +210,21 @@ export default function ClinicalEventDetail({
                 {selectedArtifact.artifact_type === 'transcript' && (
                   <p className="immutable-note">Immutable raw source · corrections belong in Comments or a Clinician Note.</p>
                 )}
-              </>
-            ) : (
-              <div className="empty-state"><h3>No artifacts</h3><p>Add a clinician note or ingest a source for this Event.</p></div>
-            )}
-            <div className="event-note-composer">
-              <h3>{role === 'clinician' ? 'Formal assessment / plan' : 'Staff supplement'}</h3>
+                </>
+              ) : (
+                <div className="empty-state"><h3>No clinical material</h3><p>Add a role-owned note or ingest a source for this Event.</p></div>
+              )}
+            </div>
+            {composerMode === 'note' && <section className="event-action-panel">
+              <header><div><p className="eyebrow">New role-owned record</p><h3>{role === 'clinician' ? 'Clinician assessment / plan' : 'Staff supplement'}</h3></div><button className="link-btn" onClick={() => setComposerMode(null)}>Close</button></header>
               <p className="panel-help">Creates a separate role-owned note; it never overwrites AI or raw source.</p>
-              <NoteComposer eventId={event.event_id} artifactType={role === 'clinician' ? 'clinician_note' : 'staff_note'} onSaved={onChanged} />
-            </div>
-            <div className="event-task-composer">
-              <h3>Create care Task</h3>
-              <p className="panel-help">Creates a Task on this Event. You may optionally choose and confirm an exact source quote below; otherwise the Task uses Event-level provenance.</p>
-              <TaskCreateForm event={event} sourceArtifact={selectedArtifact} onCreated={onChanged} />
-            </div>
+              <NoteComposer eventId={event.event_id} artifactType={role === 'clinician' ? 'clinician_note' : 'staff_note'} onSaved={() => { onChanged(); setComposerMode(null); }} />
+            </section>}
+            {composerMode === 'task' && <section className="event-action-panel">
+              <header><div><p className="eyebrow">New follow-up action</p><h3>Create care task</h3></div><button className="link-btn" onClick={() => setComposerMode(null)}>Close</button></header>
+              <p className="panel-help">The current Event is the origin. An exact quote is optional and must be explicitly confirmed.</p>
+              <TaskCreateForm event={event} sourceArtifact={selectedArtifact} onCreated={() => { onChanged(); setComposerMode(null); }} />
+            </section>}
           </div>
         </div>
       )}

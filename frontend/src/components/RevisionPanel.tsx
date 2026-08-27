@@ -59,26 +59,23 @@ export default function RevisionPanel({
   }
   return (
     <div className="revision-panel">
-      <button className="link-btn" onClick={() => setOpen(false)}>
-        Close versions
-      </button>
+      <header className="history-section-head"><div><p className="eyebrow">Authored record</p><h3>Version history</h3></div><button className="link-btn" onClick={() => setOpen(false)}>Collapse</button></header>
       {error && <div className="error-inline">{error}</div>}
       <ul className="version-list">
         {versions.map((v) => (
           <li key={v.version_id}>
-            <span>
-              v{v.version} · {v.actor_role} · {new Date(v.created_at).toLocaleString()}
-            </span>
+            <span><strong>Version {v.version}</strong><small>{v.actor_role} · {new Date(v.created_at).toLocaleString()}</small></span>
+            {v.version === artifact.version && <span className="current-version-tag">Current</span>}
             {canRevert && (
               <button onClick={() => revert(v.version)} disabled={v.version === artifact.version}>
-                Revert
+                Restore
               </button>
             )}
           </li>
         ))}
       </ul>
       <div className="diff-controls">
-        <label>Diff since</label>
+        <label>Compare with</label>
         <select value={since} onChange={(e) => setSince(Number(e.target.value))}>
           {versions.map((v) => (
             <option key={v.version} value={v.version}>
@@ -86,7 +83,7 @@ export default function RevisionPanel({
             </option>
           ))}
         </select>
-        <button onClick={showDiff}>Show diff</button>
+        <button onClick={showDiff}>View changes</button>
       </div>
       {diff !== null && <pre className="diff-view">{diff || '(no changes)'}</pre>}
     </div>
