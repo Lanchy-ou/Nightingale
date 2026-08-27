@@ -11,9 +11,9 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .highlights import extract_text
 from .ids import new_id
 from .models import Artifact, Event, Highlight, ImportanceFeedback
+from .tasks import resolve_exact_span
 
 FEEDBACK_KEYS = frozenset(
     {"symptom", "medication", "task", "risk", "allergy", "follow_up", "other"}
@@ -73,15 +73,21 @@ def record_feedback(
 
     summary = db.get(Artifact, highlight.artifact_id)
     source = db.get(Artifact, highlight.source_artifact_id)
+    pointer = summary.provenance_pointer if summary is not None else None
     if (
         summary is None
         or summary.event_id != event.event_id
         or summary.author_role != "system"
         or summary.artifact_type not in AI_SUMMARY_TYPES
         or source is None
+        or source.artifact_id == summary.artifact_id
         or source.event_id != event.event_id
+        or source.artifact_type not in {"raw_conversation", "transcript"}
+        or not isinstance(pointer, dict)
+        or pointer.get("event_id") != event.event_id
+        or pointer.get("artifact_id") != source.artifact_id
         or highlight.source_span is None
-        or not extract_text(source.content, highlight.source_span)
+        or resolve_exact_span(source.content, highlight.source_span) is None
     ):
         return None
 

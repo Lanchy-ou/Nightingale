@@ -235,6 +235,43 @@ def test_patient_admin_and_non_ai_rows_do_not_train(
     assert _feedback_rows(db_session) == []
 
 
+def test_successful_status_cas_with_missing_offset_does_not_train(
+    clinician_client, db_session
+):
+    highlight = db_session.get(Highlight, "hl_headache_worsening")
+    highlight.source_span = {"kind": "message", "index": 1}
+    db_session.commit()
+
+    response = clinician_client.post(
+        "/api/highlights/hl_headache_worsening/status", json={"status": "accepted"}
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "accepted"
+    db_session.expire_all()
+    assert _feedback_rows(db_session) == []
+
+
+def test_successful_status_cas_with_ai_summary_self_citation_does_not_train(
+    clinician_client, db_session
+):
+    highlight = db_session.get(Highlight, "hl_headache_worsening")
+    summary = db_session.get(Artifact, highlight.artifact_id)
+    quote = summary.content["summary"]
+    self_span = locate_span(summary.content, quote)
+    assert self_span is not None
+    highlight.source_artifact_id = summary.artifact_id
+    highlight.source_span = self_span
+    db_session.commit()
+
+    response = clinician_client.post(
+        "/api/highlights/hl_headache_worsening/status", json={"status": "accepted"}
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "accepted"
+    db_session.expire_all()
+    assert _feedback_rows(db_session) == []
+
+
 def test_latest_feedback_per_actor_highlight_prevents_toggle_inflation(
     clinician_client, db_session
 ):

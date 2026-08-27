@@ -461,7 +461,7 @@ E1 增加 `User.professional_title` nullable column。现有本地 synthetic SQL
 
 > 状态：**E2 COMPLETE（synthetic evaluation）**。这不是模型训练、真实医生偏好验证或 learned clinical correctness 证明；E3–E5 未开始。
 
-E2 只学习未来相似 AI-derived Glance candidate 的软排序：成功的 clinician/staff Highlight status compare-and-set 才能在 append-only `importance_feedback` 中留下 metadata-only 反馈；no-op、409、patient/admin action、非 AI Summary 或缺少 exact source 的 row 都不训练。学习键由服务端把 `entity_type` 映射到 `symptom|medication|task|risk|allergy|follow_up|other`，不保存或使用 raw text、姓名、quote、risk reason、Comment、Note 或 embedding；`other` 只记录，不跨不相关概念泛化。
+E2 只学习未来相似 AI-derived Glance candidate 的软排序：成功的 clinician/staff Highlight status compare-and-set 才能在 append-only `importance_feedback` 中留下 metadata-only 反馈；no-op、409、patient/admin action、非 AI Summary 或缺少 strict exact source 的 row 都不训练。反馈资格使用非空、结构严格、带显式 in-bounds offset 的 Span，并拒绝 AI Summary 自我引用或与 Summary provenance pointer 不一致的 source。学习键由服务端把 `entity_type` 映射到 `symptom|medication|task|risk|allergy|follow_up|other`，不保存或使用 raw text、姓名、quote、risk reason、Comment、Note 或 embedding；`other` 只记录，不跨不相关概念泛化。
 
 ```text
 clinician: accepted +1 / pinned +2 / rejected -1
