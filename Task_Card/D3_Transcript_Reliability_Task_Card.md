@@ -205,7 +205,7 @@ tests/test_transcript_eval_manifest.py
 - confirm 继续使用 C1 `POST /api/patients/{patient_id}/doctor-consults`；只保存 continuous canonical segments，Event + immutable Transcript raw-first，AI Summary/Highlights 独立，derived failure 不删除 raw。
 - frozen corpus 为 40 cases（development 26 / holdout 14），40/40 hashes 与 holdout composite digest 验证通过；normalizer 在首次 holdout 前按 SHA-256 冻结，未针对 holdout 调规则。
 - holdout normalize 14/14、speaker 12/12、ambiguous block 8/8；silent invention/truncation/redaction miss/fallback unanchored candidate 均 0。Provider 仅 mock/deepseek，deepseek 缺 key 时 deterministic fallback；frozen runner provider 层明确 NOT_RUN，deterministic fallback 单独报告，未混报。
-- backend **296 passed**，corpus validator/runtime runner exit 0，frontend production build 通过；本地 browser QA 覆盖 ACCEPT/NEEDS_REVIEW/REJECT、人工修正、split/merge、confirm/fallback/exact source、patient-switch isolation，console 0 warnings/errors。审查修复后重验：source-range remap/unmapped（含 emoji/非 BMP 的 code-point-aware 拆分）、`CORPUS_VALIDATION_PASS`、provider 配置统一均锁定（`tests/test_transcript_preview_contract.py` 新增 canonical 边界断言，`tests/test_transcript_non_bmp.py` 运行 Node `frontend/tests/transcriptRange.test.ts`）。
+- backend **296 passed**，corpus validator/runtime runner exit 0，frontend production build 通过；本地 browser QA 覆盖 ACCEPT/NEEDS_REVIEW/REJECT、人工修正、split/merge、confirm/fallback/exact source、patient-switch isolation，console 0 warnings/errors。审查修复后重验：source-range remap/unmapped（含 emoji/非 BMP 的 code-point-aware 拆分）、`CORPUS_VALIDATION_PASS`、provider 配置统一均锁定（`tests/test_transcript_preview_contract.py` 新增 canonical 边界断言，`tests/test_transcript_non_bmp.py` 运行 Node `frontend/tests/transcriptRange.test.mjs`）。
 
 ---
 
