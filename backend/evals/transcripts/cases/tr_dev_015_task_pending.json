@@ -1,0 +1,96 @@
+{
+  "schema_version": 1,
+  "case_id": "tr_dev_015_task_pending",
+  "split": "development",
+  "data_classification": "SYNTHETIC_ONLY",
+  "description": "Pending blood-test status is explicitly annotated.",
+  "category": "task_status",
+  "coverage_tags": [
+    "task_status",
+    "negation",
+    "anchorable_quote"
+  ],
+  "raw_text": "DOCTOR: Have you completed the blood test?\nPATIENT: Not yet; it is still pending.",
+  "expected_normalize_outcome": "ACCEPT",
+  "expected_canonical_segments": [
+    {
+      "index": 0,
+      "speaker": "doctor",
+      "text": "Have you completed the blood test?",
+      "source_start": 8,
+      "source_end": 42
+    },
+    {
+      "index": 1,
+      "speaker": "patient",
+      "text": "Not yet; it is still pending.",
+      "source_start": 52,
+      "source_end": 81
+    }
+  ],
+  "expected_source_ranges": [
+    {
+      "segment_index": 0,
+      "source_start": 8,
+      "source_end": 42
+    },
+    {
+      "segment_index": 1,
+      "source_start": 52,
+      "source_end": 81
+    }
+  ],
+  "normalize_reason": null,
+  "extraction_expectations": {
+    "annotation_status": "ANNOTATED",
+    "entities": [
+      {
+        "entity_type": "task",
+        "text": "blood test",
+        "assertion_value": "pending",
+        "polarity": "positive",
+        "source_range": {
+          "source_start": 52,
+          "source_end": 81
+        }
+      }
+    ],
+    "task_status": "pending",
+    "conflict_expected": false
+  },
+  "redaction_expectations": {
+    "annotation_status": "ANNOTATED",
+    "known_names": [],
+    "expected_redactions": [],
+    "unclassified_suspected_phi": null
+  },
+  "anchor_expectations": {
+    "annotation_status": "ANNOTATED",
+    "quotes": [
+      {
+        "quote": "Not yet; it is still pending.",
+        "expected_outcome": "ANCHORABLE",
+        "source_range": {
+          "source_start": 52,
+          "source_end": 81
+        }
+      }
+    ]
+  },
+  "provider_expectations": {
+    "scenario": "not_applicable",
+    "primary_result": null,
+    "fallback_expected": null,
+    "expected_generation_method": null,
+    "fallback_reason": null,
+    "metrics_status": "NOT_EVALUATED"
+  },
+  "hard_gate_annotations": {
+    "silent_speaker_invention_allowed": false,
+    "unknown_to_default_allowed": false,
+    "silent_truncation_allowed": false,
+    "raw_source_overwrite_allowed": false,
+    "unanchored_highlight_persistence_allowed": false,
+    "known_phi_unredacted_egress_allowed": false
+  }
+}

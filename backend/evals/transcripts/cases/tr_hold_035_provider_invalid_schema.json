@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "case_id": "tr_hold_035_provider_invalid_schema",
+  "split": "frozen_holdout",
+  "data_classification": "SYNTHETIC_ONLY",
+  "description": "Future provider invalid schema must be classified separately and fall back.",
+  "category": "provider_behavior",
+  "coverage_tags": [
+    "provider_invalid_schema",
+    "deterministic_fallback"
+  ],
+  "raw_text": "DOCTOR: Any headache?\nPATIENT: Yes, it is worse.",
+  "expected_normalize_outcome": "ACCEPT",
+  "expected_canonical_segments": [
+    {
+      "index": 0,
+      "speaker": "doctor",
+      "text": "Any headache?",
+      "source_start": 8,
+      "source_end": 21
+    },
+    {
+      "index": 1,
+      "speaker": "patient",
+      "text": "Yes, it is worse.",
+      "source_start": 31,
+      "source_end": 48
+    }
+  ],
+  "expected_source_ranges": [
+    {
+      "segment_index": 0,
+      "source_start": 8,
+      "source_end": 21
+    },
+    {
+      "segment_index": 1,
+      "source_start": 31,
+      "source_end": 48
+    }
+  ],
+  "normalize_reason": null,
+  "extraction_expectations": {
+    "annotation_status": "UNKNOWN",
+    "entities": null,
+    "task_status": "unknown",
+    "conflict_expected": null
+  },
+  "redaction_expectations": {
+    "annotation_status": "ANNOTATED",
+    "known_names": [],
+    "expected_redactions": [],
+    "unclassified_suspected_phi": null
+  },
+  "anchor_expectations": {
+    "annotation_status": "NOT_APPLICABLE",
+    "quotes": null
+  },
+  "provider_expectations": {
+    "scenario": "invalid_schema",
+    "primary_result": "invalid_output",
+    "fallback_expected": true,
+    "expected_generation_method": "deterministic_fallback",
+    "fallback_reason": "invalid_output",
+    "metrics_status": "NOT_EVALUATED"
+  },
+  "hard_gate_annotations": {
+    "silent_speaker_invention_allowed": false,
+    "unknown_to_default_allowed": false,
+    "silent_truncation_allowed": false,
+    "raw_source_overwrite_allowed": false,
+    "unanchored_highlight_persistence_allowed": false,
+    "known_phi_unredacted_egress_allowed": false
+  }
+}

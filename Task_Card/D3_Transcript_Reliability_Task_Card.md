@@ -1,8 +1,10 @@
 # D3 任务卡 - Transcript Import, Normalization and Reliability Evaluation
 
-> 状态：**BLOCKED BY D1**
+> 状态：**COMPLETE（2026-08-27，审查修复后重验）**
 >
 > 对应总计划：`docs/phase_d_product_completion_plan.md`
+>
+> 审查修复：① NewDoctorConsult split/merge/edit 后 source_start/source_end 不再失真——能精确映射则重算，否则显式标记 user-modified/unmapped，不显示伪精确范围；② corpus validator 不再自报/强制 `D3_COMPLETE`，改为层级准确的 `CORPUS_VALIDATION_PASS`（完整完成状态仅由 D3 Exit Gate 给出）；③ 统一 AGENTS/README provider 配置——仅 mock/deepseek，deepseek 缺 key 时 deterministic fallback，消除 LIVE_VERIFIED 冲突。frozen cases、holdout hashes、normalizer 规则未改动。
 >
 > 复用：C1 immutable Transcript、M4 redaction/LLM/extraction/provenance pipeline；不得创建第二条 AI/provider 出口。
 
@@ -195,7 +197,19 @@ tests/test_transcript_eval_manifest.py
 
 ---
 
-## 9. 非目标与停止条件
+## 9. 完成记录（2026-08-27）
+
+- `POST /api/transcripts/normalize` 已实现 clinician-only、strict request、无 patient DB read、无持久化、无 LLM/provider 的 deterministic preview；支持冻结 label mapping、continuation、source range 与 `ACCEPT|NEEDS_REVIEW|REJECT`。
+- UNKNOWN/第三人/无 label/空 segment/4096-byte/500-segment/4000-character 边界均 fail closed；UNKNOWN 永不默认 doctor/patient，prompt injection/JSON/Markdown 只作文本。
+- New Consult 已改为 `Paste → Review → Confirm`；原文/preview 并排，支持 speaker/text 修正与 split/merge；REJECT 不可 confirm，NEEDS_REVIEW 必须清除 null speaker/empty；patient switch 清空 draft/preview/operation/pending state。
+- confirm 继续使用 C1 `POST /api/patients/{patient_id}/doctor-consults`；只保存 continuous canonical segments，Event + immutable Transcript raw-first，AI Summary/Highlights 独立，derived failure 不删除 raw。
+- frozen corpus 为 40 cases（development 26 / holdout 14），40/40 hashes 与 holdout composite digest 验证通过；normalizer 在首次 holdout 前按 SHA-256 冻结，未针对 holdout 调规则。
+- holdout normalize 14/14、speaker 12/12、ambiguous block 8/8；silent invention/truncation/redaction miss/fallback unanchored candidate 均 0。Provider 仅 mock/deepseek，deepseek 缺 key 时 deterministic fallback；frozen runner provider 层明确 NOT_RUN，deterministic fallback 单独报告，未混报。
+- backend **294 passed**，corpus validator/runtime runner exit 0，frontend production build 通过；本地 browser QA 覆盖 ACCEPT/NEEDS_REVIEW/REJECT、人工修正、split/merge、confirm/fallback/exact source、patient-switch isolation，console 0 warnings/errors。审查修复后重验：source-range remap/unmapped、`CORPUS_VALIDATION_PASS`、provider 配置统一均锁定（见 `tests/test_transcript_preview_contract.py` 新增 canonical 边界断言）。
+
+---
+
+## 10. 非目标与停止条件
 
 非目标：audio/ASR、diarization、OCR、实时 streaming、多人 overlap、外部数据集自动导入、LLM speaker guessing。
 

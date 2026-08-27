@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "case_id": "tr_dev_016_task_reported_done",
+  "split": "development",
+  "data_classification": "SYNTHETIC_ONLY",
+  "description": "Patient-reported completion remains a report, not clinician confirmation.",
+  "category": "task_status",
+  "coverage_tags": [
+    "task_status",
+    "time_expression"
+  ],
+  "raw_text": "DOCTOR: Did you attend the blood test?\nPATIENT: I completed it yesterday.",
+  "expected_normalize_outcome": "ACCEPT",
+  "expected_canonical_segments": [
+    {
+      "index": 0,
+      "speaker": "doctor",
+      "text": "Did you attend the blood test?",
+      "source_start": 8,
+      "source_end": 38
+    },
+    {
+      "index": 1,
+      "speaker": "patient",
+      "text": "I completed it yesterday.",
+      "source_start": 48,
+      "source_end": 73
+    }
+  ],
+  "expected_source_ranges": [
+    {
+      "segment_index": 0,
+      "source_start": 8,
+      "source_end": 38
+    },
+    {
+      "segment_index": 1,
+      "source_start": 48,
+      "source_end": 73
+    }
+  ],
+  "normalize_reason": null,
+  "extraction_expectations": {
+    "annotation_status": "ANNOTATED",
+    "entities": [
+      {
+        "entity_type": "task",
+        "text": "blood test",
+        "assertion_value": "patient_reported_done",
+        "polarity": "positive",
+        "source_range": {
+          "source_start": 48,
+          "source_end": 73
+        }
+      }
+    ],
+    "task_status": "patient_reported_done",
+    "conflict_expected": false
+  },
+  "redaction_expectations": {
+    "annotation_status": "ANNOTATED",
+    "known_names": [],
+    "expected_redactions": [],
+    "unclassified_suspected_phi": null
+  },
+  "anchor_expectations": {
+    "annotation_status": "NOT_APPLICABLE",
+    "quotes": null
+  },
+  "provider_expectations": {
+    "scenario": "not_applicable",
+    "primary_result": null,
+    "fallback_expected": null,
+    "expected_generation_method": null,
+    "fallback_reason": null,
+    "metrics_status": "NOT_EVALUATED"
+  },
+  "hard_gate_annotations": {
+    "silent_speaker_invention_allowed": false,
+    "unknown_to_default_allowed": false,
+    "silent_truncation_allowed": false,
+    "raw_source_overwrite_allowed": false,
+    "unanchored_highlight_persistence_allowed": false,
+    "known_phi_unredacted_egress_allowed": false
+  }
+}

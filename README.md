@@ -360,17 +360,20 @@ Task 必须有 origin Event；Artifact/Span provenance 可选但必须成对并�
 
 ---
 
-### 4.5 Clinician New Consult（Phase C）
+### 4.5 Clinician New Consult + Transcript Reliability（Phase C + D3）
 
-> 状态：**Phase C Complete（C1 Backend + C2 Clinician Workspace），M7 Performance + Core Hardening 亦已完成。** 当前进入 Phase D Product Completion，详见 `docs/phase_d_product_completion_plan.md`。
+> 状态：**Phase C、M7 与 D3 Complete。** D3 frozen corpus、runtime baseline 与复现命令见 `backend/docs/transcript_reliability_baseline.md`。
 
-当前前端仍是用于验证功能链路的单患者 Demo。下一阶段不另建 transcript 子系统，而是在现有 Event / Artifact / AI / provenance / comment 能力上完成医生端真实工作流：
+系统没有另建 transcript 数据孤岛，而是在现有 Event / Artifact / AI / provenance / comment 能力上完成医生端真实工作流：
 
 ```text
 Clinician Workspace
 → New Consult
 → new Doctor Consult Event
-→ Manual speaker-labelled Transcript
+→ Paste raw transcript
+→ deterministic normalization preview（不持久化、不调用 LLM）
+→ Review / resolve unknown / split / merge
+→ Confirm canonical Transcript
 → AI Doctor Summary + Highlights
 → Event Detail / exact source
 → Clinician Note / Comment
@@ -389,16 +392,19 @@ Clinic Visit（相同且非空 encounter_id）
 
 Nurse/Doctor Event、Artifact、作者和权限始终独立。系统不得因为两个 Event 发生在同一天就自动合并。C1 只增加 optional `Event.encounter_id` 字符串，不新增 Encounter 表。
 
-当前新增输入严格限定为：
+输入严格限定为 manual text；不接受 audio、ASR、OCR 或 EHR import：
 
 ```text
 DOCTOR: How has your headache changed?
 PATIENT: It is better, but I still feel nauseous in the morning.
 ```
 
-- speaker 仅允许 `doctor|patient`；
-- 提交前解析为连续 `segments[]` 并预览；
-- unknown speaker、空内容或不连续 index fail closed；
+- normalize 支持冻结的 `DOCTOR/PATIENT`、大小写与 `Dr/Pt` 映射、合理 continuation；
+- preview 返回 `speaker_candidate|text|source_start|source_end|confidence_marker|issues`；
+- `ACCEPT` 仍需 review；`NEEDS_REVIEW` 必须人工消除 unknown/empty；`REJECT` 不可 confirm；
+- unknown 永不默认成 doctor/patient；prompt injection/JSON/Markdown 只作 transcript 内容；
+- raw input 超过 4096 UTF-8 bytes 返回 413；segment >4000 chars 或 >500 segments 显式 422，不截断；
+- confirm 才产生连续 0-based `doctor|patient` canonical `segments[]`；
 - 无时间戳时不生成时间戳；
 - raw Transcript 先保存且不可覆盖；
 - AI Summary 独立保存为 system Artifact；
@@ -409,6 +415,7 @@ PATIENT: It is better, but I still feel nauseous in the morning.
 
 ```text
 POST /api/patients/{patient_id}/doctor-consults
+POST /api/transcripts/normalize                 # clinician-only；无 DB patient read / 无持久化 / 无 LLM
 GET  /api/me
 GET  /api/patients
 GET  /api/patients/{patient_id}/events   # Event 含 encounter_id
@@ -423,9 +430,11 @@ Phase C 两张任务卡均已完成：
 
 **C2 + D2 实现**：clinician/staff 登录后进入同一 factual Clinic dashboard，可从左栏 `Clinic Patients` 搜索/切换患者；产品 shell 为左侧 identity/directory、中间 `Glance | Timeline | Notes | Tasks`、右侧 Source/Comments/Versions/Audit。staff 权限由 backend RBAC 裁剪且不能 New Consult。patientId、role 与 session 都是 remount boundary；patient 仍只挂载独立 `PatientViewPage`。
 
-`New Consult` 页面解析每行 `DOCTOR:`/`PATIENT:`，未知 speaker、空 text、未标记行 fail closed；preview 使用 0-based 连续 segment。提交过程保留 textarea，使用 stable consult/ingestion identity，成功后进入新 Event Detail，并明确显示 raw saved、AI generated 或 deterministic fallback。Timeline 只按非空相同 `encounter_id` 组成 `Clinic Visit`；Event Detail 将 Transcript/AI Summary/Clinician Note 与 Comment/Revision/Audit 保持为 Event 内 lifecycle，不制造新医疗 Event。
+`New Consult` 已是 `Paste transcript → Review segments → Confirm and process` 三步流程。原文与 preview 并排；unknown 明显阻断；speaker/text 可修正，segment 可拆分/合并且 index 自动重排。patient/session change 清除 raw draft、preview、operation identity 和 pending response。提交保留 stable consult/ingestion identity，成功后进入新 Event Detail，并明确显示 raw saved、AI generated 或 deterministic fallback。Timeline 只按非空相同 `encounter_id` 组成 `Clinic Visit`；Event Detail 将 Transcript/AI Summary/Clinician Note 与 Comment/Revision/Audit 保持为 Event 内 lifecycle，不制造新医疗 Event。
 
-仍明确后置：独立 Nurse Workspace、Nurse input、录音/ASR、外部 dataset ingestion、Doctor AI Assistant、复杂 care-team assignment、appointment/billing/notification。Phase C、M7、D1、D2 Exit Gate 已通过；D3/D4/D5 未开始。
+D3 frozen evaluation 包含 40 个 synthetic cases（development 26 / frozen_holdout 14）。normalizer 在首次 holdout 前以 SHA-256 冻结；holdout outcome 14/14、speaker 12/12、ambiguous blocking 8/8，silent invention/truncation 为 0。frozen runner **不调用 provider/network**；provider 层明确 `NOT_RUN`，deterministic fallback 单独报告（development exact entity precision 0.888889 / recall 0.571429，task precision 1.0 / recall 0.5）。不得把两层合并为一个成绩。
+
+仍明确后置：独立 Nurse Workspace、Nurse input、录音/ASR、外部 dataset ingestion、Doctor AI Assistant、复杂 care-team assignment、appointment/billing/notification。Phase C、M7、D1、D2、D3 Exit Gate 已通过；D4/D5 未开始。
 
 ---
 
@@ -756,15 +765,17 @@ npm run dev -- --host --port 5173    # Vite dev server，代理 /api 到 :8000
 ```bash
 cd backend
 .venv/Scripts/python.exe -m pytest        # 覆盖第 12 节 required micro-tests
+.venv/Scripts/python.exe scripts/evaluate_transcripts.py --validate-corpus
+.venv/Scripts/python.exe scripts/evaluate_transcripts.py --evaluate-runtime
 ```
 
-> 当前进度：M1–M7、Phase C（C1+C2）、**D1 Identity** 与 **D2 Care Tasks + Patient Experience** 已落地。后端全量为 **258 passed**，TypeScript/Vite production build 通过；warm-path Glance Layer A P95 ≈ 3.8 ms（`backend/docs/perf_baseline.md`）。剩余 Phase D 工作：D3 Transcript Reliability、D4 evidence-bound Clinician Copilot、D5 TLS/at-rest 与跨角色集成。D3/D4/D5 尚未开始。
+> 当前进度：M1–M7、Phase C（C1+C2）、**D1 Identity**、**D2 Care Tasks + Patient Experience** 与 **D3 Transcript Reliability** 已落地。后端全量为 **292 passed**，frozen corpus validation/runtime runner 与 TypeScript/Vite production build 通过；warm-path Glance Layer A P95 ≈ 3.8 ms（`backend/docs/perf_baseline.md`）。剩余 Phase D 工作：D4 evidence-bound Clinician Copilot、D5 TLS/at-rest 与跨角色集成。
 
 架构约定（记录确切位置，随阶段更新）：
 
 - **PHI redaction 发生位置**：`backend/app/redaction.py`（`redact_content` / `restore_placeholders`）。在 `backend/app/ai_pipeline.py` 中，所有文本在进入 provider 之前先经 `redact_content`（姓名 / IC·ID / 手机号）；`placeholder_mapping` 仅存在于单次 pipeline 内存，不进 LLM / 日志 / DB。AI summary 与 highlights 由 `persist_derived` 原子写入（raw source 先落库、永不被覆盖）。
 - **RBAC 强制点**：所有权限判断在 server-side 完成，集中在 `backend/app/authz.py`（`authorize(action, resource)` + `PERMISSIONS` 矩阵）与 `backend/app/role_context.py`（DB 为身份/角色唯一权威，`X-Role` 只能作 demo 一致性断言，不一致即拒绝，不可提权）。每个端点经 `require_auth`（401）+ `authorize`（同院无权限 403 / 跨院或非本人 404）；不存在、跨院和非本人资源使用相同 404 body，避免存在性探测。UI 只做展示裁剪，不作为安全边界，角色切换会重新挂载整个 patient workspace 以清除敏感状态。
-- **LLM 客户端出口**：`backend/app/llm_client.py`（`LLMClient` protocol）是唯一 provider 出口，只能接收 `RedactedContent`。API 默认 `deepseek`（Gate 0 `LIVE_VERIFIED`，详见 `backend/docs/gate0_provider_status.md`）；无 key / provider 出错 / schema 非法时明确降级到 deterministic fallback。provider 由 `NANTINGALE_LLM_PROVIDER` 选择，key 只从环境变量读取，永不打印/入库。
+- **LLM 客户端出口**：`backend/app/llm_client.py`（`LLMClient` protocol）是唯一 provider 出口，只能接收 `RedactedContent`。实际仅支持 `mock`（无 key、确定性）与 `deepseek`（live adapter）两个 provider；`NANTINGALE_LLM_PROVIDER` 默认 `deepseek`。`deepseek` 缺 key / provider 出错 / schema 非法时明确降级到 deterministic fallback；key 只从环境变量读取，永不打印/入库。
 
 ### Demo auth（D1）：Invite → Register → Login → Session → Logout
 
@@ -830,7 +841,7 @@ cd backend
 [Environment]::SetEnvironmentVariable("DEEPSEEK_API_KEY", "你的 DeepSeek API key", "User")
 ```
 
-项目 `.gitignore` 已排除 `.env`，但当前后端没有加载 `.env` 文件，因此仅创建 `.env` **不会生效**。Gate 0 已于 2026-08-26 用 `deepseek-v4-flash` 完成无 PHI smoke check，状态为 `LIVE_VERIFIED`；live adapter 已可用，但无 key 或调用失败时仍会明确降级到 deterministic fallback。
+项目 `.gitignore` 已排除 `.env`，但当前后端没有加载 `.env` 文件，因此仅创建 `.env` **不会生效**。`deepseek-v4-flash` 曾于 2026-08-26 完成一次无 PHI smoke check（记录在 `backend/docs/gate0_provider_status.md`）；live adapter 在配置 key 后可用，但无 key 或调用失败时仍会明确降级到 deterministic fallback。
 
 ---
 

@@ -1,0 +1,301 @@
+{
+  "schema_version": 1,
+  "corpus_status": "FROZEN",
+  "runtime_status": "EVALUATED_LOCAL_DETERMINISTIC",
+  "frozen_base_commit": "ca114ebf6a2a92155aa6a1d6f9e48b934c76b528",
+  "encoding": "UTF-8",
+  "newline": "LF",
+  "protocol_limits": {
+    "max_raw_text_bytes": 4096,
+    "max_segments": 500,
+    "max_segment_text_characters": 4000
+  },
+  "splits": {
+    "development": 26,
+    "frozen_holdout": 14
+  },
+  "frozen_holdout_digest_algorithm": "sha256(path<TAB>byte_length<TAB>sha256<LF>, sorted by path)",
+  "frozen_holdout_digest": "e2b429ff98cfc802b307c7de46f4ffa0006e12211cce7efaf37799b762a4d962",
+  "cases": [
+    {
+      "path": "cases/tr_dev_001_canonical_uppercase.json",
+      "case_id": "tr_dev_001_canonical_uppercase",
+      "split": "development",
+      "byte_length": 2450,
+      "sha256": "7e2cd91dda33f1801c9d1a09f3bdbfce606d261c835901583622c3f7548c7c15"
+    },
+    {
+      "path": "cases/tr_dev_002_title_case_labels.json",
+      "case_id": "tr_dev_002_title_case_labels",
+      "split": "development",
+      "byte_length": 2170,
+      "sha256": "0b60689c316376152dde6f8ebf3a91bcb5cb867422b8c62229dffe939ba3abb2"
+    },
+    {
+      "path": "cases/tr_dev_003_dr_pt_mapping.json",
+      "case_id": "tr_dev_003_dr_pt_mapping",
+      "split": "development",
+      "byte_length": 2191,
+      "sha256": "b6e24e0ebef803dd76e89c2455942bf4e4501f4b5144a86862c7dd146f4ef1b2"
+    },
+    {
+      "path": "cases/tr_dev_004_lowercase_labels.json",
+      "case_id": "tr_dev_004_lowercase_labels",
+      "split": "development",
+      "byte_length": 1949,
+      "sha256": "55a6b36361480591137344584b0d3afd0c3a75778a86fae721f2e8b76a6953d5"
+    },
+    {
+      "path": "cases/tr_dev_005_continuation_line.json",
+      "case_id": "tr_dev_005_continuation_line",
+      "split": "development",
+      "byte_length": 2041,
+      "sha256": "55acb9da2fe921a4c13f20d9880c124c76fcc4b556309ff38f8417f433dc18ce"
+    },
+    {
+      "path": "cases/tr_dev_006_blank_lines.json",
+      "case_id": "tr_dev_006_blank_lines",
+      "split": "development",
+      "byte_length": 2161,
+      "sha256": "3e430d61bd0682c0061889c17303729929d2b042bb02e4d4beed71d2ba976880"
+    },
+    {
+      "path": "cases/tr_dev_007_repeated_label.json",
+      "case_id": "tr_dev_007_repeated_label",
+      "split": "development",
+      "byte_length": 2195,
+      "sha256": "bcc169eba1ea11974b8da8fccb6d6456fbd1ceb0d26a08fb4526c8fcc1bc71c1"
+    },
+    {
+      "path": "cases/tr_dev_008_dotted_abbreviations.json",
+      "case_id": "tr_dev_008_dotted_abbreviations",
+      "split": "development",
+      "byte_length": 1958,
+      "sha256": "21e07e50cba5f17c02848b34b8ed75731729766f34f4420cef64ea7e1b772879"
+    },
+    {
+      "path": "cases/tr_dev_009_bilingual_content.json",
+      "case_id": "tr_dev_009_bilingual_content",
+      "split": "development",
+      "byte_length": 2337,
+      "sha256": "7d37e081aa643fcad3f6f295888e945a2c942b1e1d5e52e08380b53d7fb184cc"
+    },
+    {
+      "path": "cases/tr_dev_010_self_correction.json",
+      "case_id": "tr_dev_010_self_correction",
+      "split": "development",
+      "byte_length": 2257,
+      "sha256": "48cfd1e10b27c7434c0afd62502c401c27300d21a7942045b10426c928ca95a5"
+    },
+    {
+      "path": "cases/tr_dev_011_interruption.json",
+      "case_id": "tr_dev_011_interruption",
+      "split": "development",
+      "byte_length": 2183,
+      "sha256": "2d4d515354be100f522e05b24598120ab3b6f44fa49de643e78a81cd011ec1c3"
+    },
+    {
+      "path": "cases/tr_dev_012_medication_dose.json",
+      "case_id": "tr_dev_012_medication_dose",
+      "split": "development",
+      "byte_length": 2494,
+      "sha256": "01a7ae6cf5a93c102501603f2854ffa153fa4127506d87c088fece914b008fe3"
+    },
+    {
+      "path": "cases/tr_dev_013_negation.json",
+      "case_id": "tr_dev_013_negation",
+      "split": "development",
+      "byte_length": 2369,
+      "sha256": "e7e88f6d145a5e02ec7a3723ce3580c2a14a86ed44ababe45a966f7a1cd90ed4"
+    },
+    {
+      "path": "cases/tr_dev_014_time_expression.json",
+      "case_id": "tr_dev_014_time_expression",
+      "split": "development",
+      "byte_length": 2228,
+      "sha256": "d652257eb8df2b4df49a7c4e7aa1d4623a0f7d82caf62134b528ca92973d194a"
+    },
+    {
+      "path": "cases/tr_dev_015_task_pending.json",
+      "case_id": "tr_dev_015_task_pending",
+      "split": "development",
+      "byte_length": 2452,
+      "sha256": "f82eb2eb72cf96ba59c87addfa998c0c22e5d687e9b199b31e87c18779073cde"
+    },
+    {
+      "path": "cases/tr_dev_016_task_reported_done.json",
+      "case_id": "tr_dev_016_task_reported_done",
+      "split": "development",
+      "byte_length": 2277,
+      "sha256": "fa7dd49ee963aca6ee79a8c4497727eccc307b7ad490f7f321ce1f028500ec96"
+    },
+    {
+      "path": "cases/tr_dev_017_internal_contradiction.json",
+      "case_id": "tr_dev_017_internal_contradiction",
+      "split": "development",
+      "byte_length": 2525,
+      "sha256": "162c4c36fea98c312809e587cf6d91aa1b090d0627cff5f890ca171834c626d8"
+    },
+    {
+      "path": "cases/tr_dev_018_no_clinical_information.json",
+      "case_id": "tr_dev_018_no_clinical_information",
+      "split": "development",
+      "byte_length": 1940,
+      "sha256": "9aae8e73c7c877a85ac02a246e1927b5d2b8b3f5a44e7d37ece303aa6e86ff49"
+    },
+    {
+      "path": "cases/tr_dev_019_synthetic_name.json",
+      "case_id": "tr_dev_019_synthetic_name",
+      "split": "development",
+      "byte_length": 2383,
+      "sha256": "0dfb5b4f6675b9297b86fbd471b421231883216e96a0a9837172d62ed704f990"
+    },
+    {
+      "path": "cases/tr_dev_020_synthetic_id.json",
+      "case_id": "tr_dev_020_synthetic_id",
+      "split": "development",
+      "byte_length": 2081,
+      "sha256": "a4b9feb6f58112273560b0612396e3197a097e98e28361d4532e785ac007756e"
+    },
+    {
+      "path": "cases/tr_dev_021_synthetic_phone.json",
+      "case_id": "tr_dev_021_synthetic_phone",
+      "split": "development",
+      "byte_length": 2097,
+      "sha256": "715320ad6e3aff1f45c70ebacf88d0febf1429d7b04ab4e90736b200fbc1dd00"
+    },
+    {
+      "path": "cases/tr_dev_022_prompt_injection.json",
+      "case_id": "tr_dev_022_prompt_injection",
+      "split": "development",
+      "byte_length": 2112,
+      "sha256": "368f13f3427fdea802254f93176472262def5a435342df6421f4f4b651c0d0c6"
+    },
+    {
+      "path": "cases/tr_dev_023_malicious_json.json",
+      "case_id": "tr_dev_023_malicious_json",
+      "split": "development",
+      "byte_length": 2068,
+      "sha256": "9ed17490588b40d5670428d2ba45fbe2fa22beaf799af103de99810e26b0d385"
+    },
+    {
+      "path": "cases/tr_dev_024_malicious_markdown.json",
+      "case_id": "tr_dev_024_malicious_markdown",
+      "split": "development",
+      "byte_length": 2018,
+      "sha256": "a4cb2568387a23ece5994766d32d2d847b7ff40b425b70ecc1d00ea5ff4ec78d"
+    },
+    {
+      "path": "cases/tr_dev_025_exact_anchor.json",
+      "case_id": "tr_dev_025_exact_anchor",
+      "split": "development",
+      "byte_length": 2442,
+      "sha256": "f3b5260d2797ff19f4f872353a4555208baaa8511a27c5f92b0a26fb60c6583e"
+    },
+    {
+      "path": "cases/tr_dev_026_phi_quote_restoration.json",
+      "case_id": "tr_dev_026_phi_quote_restoration",
+      "split": "development",
+      "byte_length": 2575,
+      "sha256": "9359ddf0042fcfe65e89161a052eb3e4812827ec27bc18abf38bb0b5959e7715"
+    },
+    {
+      "path": "cases/tr_hold_027_unknown_speaker.json",
+      "case_id": "tr_hold_027_unknown_speaker",
+      "split": "frozen_holdout",
+      "byte_length": 1622,
+      "sha256": "1aaca141f3850b40aab660d020e0d5fee6346e234566f6464d67ad129ea8d748"
+    },
+    {
+      "path": "cases/tr_hold_028_three_party_dialogue.json",
+      "case_id": "tr_hold_028_three_party_dialogue",
+      "split": "frozen_holdout",
+      "byte_length": 1619,
+      "sha256": "9806b490bc9996516dea11e008902c022717915103b1d0b542bda3227ec29e9b"
+    },
+    {
+      "path": "cases/tr_hold_029_unlabeled_transcript.json",
+      "case_id": "tr_hold_029_unlabeled_transcript",
+      "split": "frozen_holdout",
+      "byte_length": 1568,
+      "sha256": "5698c3620fd54e19ec91ca875bbfb4e9ff45e048d4a138e2abc415013865a745"
+    },
+    {
+      "path": "cases/tr_hold_030_ambiguous_leading_continuation.json",
+      "case_id": "tr_hold_030_ambiguous_leading_continuation",
+      "split": "frozen_holdout",
+      "byte_length": 1637,
+      "sha256": "26e258213dd32323fec2379dc1a6aa972bb9448e0f9e5da9b5345d0eb162bc14"
+    },
+    {
+      "path": "cases/tr_hold_031_empty_labelled_turn.json",
+      "case_id": "tr_hold_031_empty_labelled_turn",
+      "split": "frozen_holdout",
+      "byte_length": 1554,
+      "sha256": "c02745cb9e5222ff0748bf9dc6f6b7484e2dc8260069541ce79eeeaef60c182d"
+    },
+    {
+      "path": "cases/tr_hold_032_overlong_input.json",
+      "case_id": "tr_hold_032_overlong_input",
+      "split": "frozen_holdout",
+      "byte_length": 5569,
+      "sha256": "8308644460de50cf3ca787fe4bc4c6b3e2a9b751d9351ee224b7790d2e4b4a10"
+    },
+    {
+      "path": "cases/tr_hold_033_unknown_clinical_label.json",
+      "case_id": "tr_hold_033_unknown_clinical_label",
+      "split": "frozen_holdout",
+      "byte_length": 1634,
+      "sha256": "06dbb63e8853620a1560b845abf57d7a335d60ac6b0533acdb559b39324d21c1"
+    },
+    {
+      "path": "cases/tr_hold_034_unanchorable_provider_quote.json",
+      "case_id": "tr_hold_034_unanchorable_provider_quote",
+      "split": "frozen_holdout",
+      "byte_length": 2123,
+      "sha256": "68041a01066d5e533eb0f7a21a5eb3ff92b754ef02cb2ec8cdf2da090d830d1d"
+    },
+    {
+      "path": "cases/tr_hold_035_provider_invalid_schema.json",
+      "case_id": "tr_hold_035_provider_invalid_schema",
+      "split": "frozen_holdout",
+      "byte_length": 2033,
+      "sha256": "330848b7894378ae69b3dacf4e0ab498cac01b2c2f65772d5f6b1322179c62b8"
+    },
+    {
+      "path": "cases/tr_hold_036_provider_failure.json",
+      "case_id": "tr_hold_036_provider_failure",
+      "split": "frozen_holdout",
+      "byte_length": 2057,
+      "sha256": "93f29cc7344cb7f845b616e2de4c4b68e4a02fc45556e028a61406368403a4ae"
+    },
+    {
+      "path": "cases/tr_hold_037_placeholder_corruption.json",
+      "case_id": "tr_hold_037_placeholder_corruption",
+      "split": "frozen_holdout",
+      "byte_length": 2233,
+      "sha256": "8f3d19f7e5e74b6004bd377bb53bb326ac37c68839864d8e2e61320b4d0a5128"
+    },
+    {
+      "path": "cases/tr_hold_038_anchor_drop_rate.json",
+      "case_id": "tr_hold_038_anchor_drop_rate",
+      "split": "frozen_holdout",
+      "byte_length": 2335,
+      "sha256": "3dc5f1e50e8cd9b3175f241cf8e62ca685580ed15d309f77c798374a038ebbaf"
+    },
+    {
+      "path": "cases/tr_hold_039_fallback_no_candidates.json",
+      "case_id": "tr_hold_039_fallback_no_candidates",
+      "split": "frozen_holdout",
+      "byte_length": 1998,
+      "sha256": "428a0dd62689e7e42a536fac732d35c7f7f27f73d7af93789e430cf26ba005ec"
+    },
+    {
+      "path": "cases/tr_hold_040_chinese_unknown_labels.json",
+      "case_id": "tr_hold_040_chinese_unknown_labels",
+      "split": "frozen_holdout",
+      "byte_length": 1742,
+      "sha256": "ce63105ef774b1488d772c59f54d4eaafdd3ef0233132171b782b74ee6aaf286"
+    }
+  ]
+}
