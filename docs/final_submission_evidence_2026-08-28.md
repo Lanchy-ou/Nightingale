@@ -9,7 +9,7 @@
 - Original Phase E baseline: `7b6da1d63245f45c60143e3a1bd6ac6b406255e4`
 - Patient Multi-turn Check-in feature: `b4a5d21` (`feat(patient): add bounded multi-turn check-in`)
 - Check-in no-fast-forward merge on main: `25a1dc9f7ac46eca048c217486e52b7ebf4b2cbb`
-- E5 package commit: not created at the time this first manifest draft was written; an immutable package commit and any evidence-only attestation commit are recorded in the final section after creation.
+- E5 package commit: `b0bef9d65b58ccdd5fa2ab79b8ffc6d4302faef2` (`docs(submission): finalize Nightingale submission package`).
 - `origin/main` before E5: `7b6da1d63245f45c60143e3a1bd6ac6b406255e4`
 
 The Check-in branch was verified to have the expected baseline and no E5/unrelated changes before its feature commit. `origin/main` was fetched after the feature commit and had not drifted, so the authorized normal `--no-ff` merge proceeded. No rebase, force push, amend, or history rewrite was used.
@@ -68,7 +68,7 @@ Command:
 backend\.venv\Scripts\python.exe -m pytest
 ```
 
-Observed: **509 passed, 2 skipped, 1 cache warning, 64.44 s**.
+Observed after the E5 package commit: **509 passed, 2 skipped, 1 cache warning, 64.65 s**.
 
 The warning was an environment permission issue creating pytest cache/cleanup paths; the test process exited 0. The two skips were re-run with `-rs` and are exactly:
 
@@ -137,7 +137,7 @@ Observed: `HARD_GATES_PASS`; known-PHI unredacted payload 0; silent speaker inve
 backend\.venv\Scripts\python.exe -B scripts\evaluate_copilot.py
 ```
 
-Observed: `D4_COPILOT_EVAL_PASS`; Provider `mock`; four questions; AI self-citation rejected; forged confirmation rejected. Reported Copilot read-path P50/P95: 16.942/60.004 ms (not Glance latency).
+Observed after the E5 package commit: `D4_COPILOT_EVAL_PASS`; Provider `mock`; four questions; AI self-citation rejected; forged confirmation rejected. Reported Copilot read-path P50/P95: 17.115/57.243 ms (not Glance latency).
 
 ## 7. Provider, fallback, and ASR separation
 
@@ -235,17 +235,20 @@ No CA trust-store installation or TLS bypass was performed. Temporary SQLCipher 
 
 ## 14. Final Git and verification attestation
 
-This section is finalized after the E5 package commit:
+Package attestation at the time this evidence-only update was prepared:
 
-- package commit: pending;
-- final evidence-only attestation commit (if required): pending;
-- final local `main`: pending;
-- final `origin/main`: pending;
-- final worktree clean: pending;
-- post-commit full backend/build/eval/security/dependency/secret/diff result: pending;
-- submission zip path/SHA-256: pending;
+- package commit: `b0bef9d65b58ccdd5fa2ab79b8ffc6d4302faef2`;
+- package commit full backend: 509 passed / 2 explicit local-ASR-input skips;
+- package commit security/integration: 22 passed;
+- package commit D3: corpus validation and deterministic runtime hard gates passed; Provider layer `NOT_RUN`;
+- package commit D4: frozen mock eval passed;
+- package commit frontend: three Node checks and 59-module production build passed;
+- package commit dependencies/secret: `pip check`, `npm ls --depth=0`, and `SECRET_SCAN_PASS`;
+- PDF: 3 pages, rendered and visually inspected;
+- final evidence-only attestation commit: the commit containing this section and `.gitattributes`;
+- final local/remote hashes, worktree status, and submission zip SHA-256: recorded after this attestation commit and push in the final report.
 
-Because a commit cannot contain its own hash, the immutable package commit is the hash recorded and tested by the subsequent evidence-only attestation commit. The final report separately states the final local/remote attestation hash. No history rewrite is used.
+Because a commit cannot contain its own hash, the immutable package commit above is the hash tested before this evidence-only attestation commit. The final report separately states the final local/remote attestation hash. No history rewrite is used.
 
 ## 15. Submission Ready decision
 
