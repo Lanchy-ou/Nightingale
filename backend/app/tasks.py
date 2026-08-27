@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from .highlights import compute_score
@@ -166,14 +166,27 @@ def link_task_highlight(db: Session, task: Task) -> Highlight:
                 Highlight.entity_type == "task",
                 Highlight.source_artifact_id == task.source_artifact_id,
                 Highlight.task_id.is_(None),
+                Highlight.status != "rejected",
             )
             .order_by(Highlight.highlight_id)
         ).all()
         for candidate in candidates:
             if candidate.source_span == task.source_span:
-                candidate.task_id = task.task_id
-                db.add(candidate)
-                return candidate
+                # Atomic claim: another creator may have selected the same
+                # unowned row. Only the first conditional UPDATE wins; a loser
+                # falls through and creates its own dedicated Highlight.
+                result = db.execute(
+                    update(Highlight)
+                    .where(
+                        Highlight.highlight_id == candidate.highlight_id,
+                        Highlight.task_id.is_(None),
+                        Highlight.status != "rejected",
+                    )
+                    .values(task_id=task.task_id)
+                )
+                if result.rowcount == 1:
+                    db.refresh(candidate)
+                    return candidate
 
     now = datetime.now()
     highlight = Highlight(
@@ -218,10 +231,22 @@ def recompute_task_highlights(db: Session, patient_id: str) -> None:
         if highlight is None:
             continue
         unresolved = task.status in UNRESOLVED_TASK_STATUSES
-        if highlight.feature_flags.get("unresolved_task") == unresolved:
+        dedicated = highlight.entity_key == f"task:{task.task_id}"
+        desired_reason = (
+            f"Unresolved care task ({task.assigned_role})"
+            if unresolved
+            else f"Care task {task.status.replace('_', ' ')} ({task.assigned_role})"
+        )
+        if (
+            highlight.feature_flags.get("unresolved_task") == unresolved
+            and (not dedicated or highlight.risk_reason == desired_reason)
+        ):
             continue
         flags = {**highlight.feature_flags, "unresolved_task": unresolved}
         highlight.feature_flags = flags
         highlight.importance_score = compute_score(flags)
+        if dedicated:
+            highlight.risk_reason = desired_reason
+            highlight.assertion_value = task.status
         highlight.updated_at = datetime.now()
         db.add(highlight)

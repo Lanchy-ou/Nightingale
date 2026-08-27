@@ -1,10 +1,69 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
+from threading import Barrier
+
+from fastapi.testclient import TestClient
 from sqlalchemy import select
+from sqlalchemy import UniqueConstraint
 
 from app.highlights import WEIGHTS
-from app.models import Highlight
+from app.main import app
+from app.models import Event, Highlight
 from seed import fixture
+
+
+def _unowned_highlight(db_session, *, highlight_id: str, status: str = "suggested"):
+    now = datetime.now()
+    row = Highlight(
+        highlight_id=highlight_id,
+        patient_id=fixture.PATIENT_ID,
+        event_id=fixture.EVT_DOC_0821,
+        artifact_id=fixture.ART_DOC_TRANSCRIPT,
+        source_artifact_id=fixture.ART_DOC_TRANSCRIPT,
+        source_span={"kind": "segment", "index": 18, "offset": [0, 56]},
+        task_id=None,
+        text="Follow up after results",
+        risk_reason="AI-derived task candidate",
+        feature_flags={
+            "recency": True,
+            "explicit_risk": False,
+            "unresolved_task": False,
+            "clinician_confirmed": False,
+            "symptom_change": False,
+            "repeated_mentions": False,
+        },
+        importance_score=2,
+        status=status,
+        status_history=[],
+        created_at=now,
+        updated_at=now,
+        entity_type="task",
+        entity_key="task:follow-up-results",
+        assertion_value="pending",
+        conflict_with_artifact_id=None,
+        review_status=None,
+    )
+    db_session.add(row)
+    db_session.commit()
+    return row
+
+
+def _create_exact_task(client, title: str):
+    return client.post(
+        f"/api/events/{fixture.EVT_DOC_0821}/tasks",
+        json={
+            "title": title,
+            "description": "internal",
+            "assigned_role": "staff",
+            "assigned_user_id": None,
+            "patient_visible": False,
+            "due_at": None,
+            "source_artifact_id": fixture.ART_DOC_TRANSCRIPT,
+            "source_span": {"kind": "segment", "index": 18, "offset": [0, 56]},
+        },
+    )
 
 
 def test_seed_unresolved_task_is_structural_not_fixed_false(db_session):
@@ -263,3 +322,115 @@ def test_exact_matching_unowned_highlight_is_adopted_not_duplicated(
         select(Highlight).where(Highlight.task_id == task_id)
     ).all()
     assert len(own) == 1  # adopted, not duplicated
+
+
+def test_rejected_unowned_highlight_is_not_adopted_and_task_still_enters_glance(
+    clinician_client, db_session
+):
+    rejected = _unowned_highlight(
+        db_session, highlight_id="hl_rejected_unowned", status="rejected"
+    )
+
+    created = _create_exact_task(clinician_client, "Real follow-up task")
+    assert created.status_code == 200
+    task_id = created.json()["task_id"]
+
+    db_session.expire_all()
+    assert db_session.get(Highlight, rejected.highlight_id).task_id is None
+    linked = db_session.scalars(
+        select(Highlight).where(Highlight.task_id == task_id)
+    ).all()
+    assert len(linked) == 1
+    assert linked[0].highlight_id != rejected.highlight_id
+    assert linked[0].status != "rejected"
+
+    glance = clinician_client.get(f"/api/patients/{fixture.PATIENT_ID}/glance")
+    assert glance.status_code == 200
+    assert task_id in {row["task_id"] for row in glance.json()["highlights"]}
+
+
+def test_task_highlight_mapping_has_foreign_key_and_unique_constraint():
+    column = Highlight.__table__.c.task_id
+    assert {foreign_key.target_fullname for foreign_key in column.foreign_keys} == {
+        "tasks.task_id"
+    }
+    unique_columns = {
+        tuple(col.name for col in constraint.columns)
+        for constraint in Highlight.__table__.constraints
+        if isinstance(constraint, UniqueConstraint)
+    }
+    assert ("task_id",) in unique_columns
+
+
+def test_concurrent_exact_adoption_gives_each_task_exactly_one_highlight(db_session):
+    candidate = _unowned_highlight(
+        db_session, highlight_id="hl_concurrent_unowned"
+    )
+    barrier = Barrier(3)
+
+    def create(title: str):
+        with TestClient(app, headers={"X-User-Id": fixture.USER_CLINICIAN_ID}) as client:
+            barrier.wait()
+            return _create_exact_task(client, title)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(create, "Concurrent task A")
+        second = pool.submit(create, "Concurrent task B")
+        barrier.wait()
+        responses = [first.result(), second.result()]
+
+    assert [response.status_code for response in responses] == [200, 200]
+    task_ids = {response.json()["task_id"] for response in responses}
+    assert len(task_ids) == 2
+
+    db_session.expire_all()
+    linked = db_session.scalars(
+        select(Highlight).where(Highlight.task_id.in_(task_ids))
+    ).all()
+    assert len(linked) == 2
+    assert {row.task_id for row in linked} == task_ids
+    assert db_session.get(Highlight, candidate.highlight_id).task_id in task_ids
+
+
+def test_terminal_dedicated_highlight_never_claims_to_be_unresolved(
+    clinician_client, db_session
+):
+    db_session.add(
+        Event(
+            event_id="evt_ben_terminal_task",
+            patient_id=fixture.PATIENT_B_ID,
+            clinic_id=fixture.CLINIC_ID,
+            event_type="doctor_consult",
+            started_at=datetime(2026, 8, 27, 10, 0),
+            ended_at=None,
+            created_at=datetime(2026, 8, 27, 10, 5),
+        )
+    )
+    db_session.commit()
+    created = clinician_client.post(
+        "/api/events/evt_ben_terminal_task/tasks",
+        json={
+            "title": "Return monitoring device",
+            "description": "internal",
+            "assigned_role": "patient",
+            "assigned_user_id": None,
+            "patient_visible": True,
+            "due_at": None,
+            "source_artifact_id": None,
+            "source_span": None,
+        },
+    )
+    assert created.status_code == 200
+    task_id = created.json()["task_id"]
+    cancelled = clinician_client.post(
+        f"/api/tasks/{task_id}/transition",
+        json={"expected_status": "open", "status": "cancelled"},
+    )
+    assert cancelled.status_code == 200
+
+    glance = clinician_client.get(f"/api/patients/{fixture.PATIENT_B_ID}/glance")
+    assert glance.status_code == 200
+    row = next(item for item in glance.json()["highlights"] if item["task_id"] == task_id)
+    assert row["feature_flags"]["unresolved_task"] is False
+    assert "unresolved" not in row["risk_reason"].lower()
+    assert "cancelled" in row["risk_reason"].lower()
