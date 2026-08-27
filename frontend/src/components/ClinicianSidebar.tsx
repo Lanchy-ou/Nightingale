@@ -25,8 +25,8 @@ export default function ClinicianSidebar({
     );
   }, [patients, query]);
   return (
-    <aside className="clinician-sidebar" aria-label="Clinician navigation">
-      <div className="sidebar-brand" aria-label="Nightingale clinician workspace">
+    <aside className="clinician-sidebar" aria-label={identity.role === 'staff' ? 'Nurse workspace navigation' : 'Clinician navigation'}>
+      <div className="sidebar-brand" aria-label={identity.role === 'staff' ? 'Nightingale nurse workspace' : 'Nightingale clinician workspace'}>
         <span className="sidebar-brand-mark" aria-hidden="true">N</span>
         <span>
           <strong>Nightingale</strong>
@@ -37,7 +37,7 @@ export default function ClinicianSidebar({
         <div className="identity-copy">
           <small>Signed in as</small>
           <strong>{identity.display_name ?? 'Clinician'}</strong>
-          <span>{identity.role === 'staff' ? 'Clinical support' : identity.role}</span>
+          <span>{identity.professional_title ?? (identity.role === 'staff' ? 'Clinical support' : identity.role)}</span>
         </div>
       </div>
 

@@ -246,7 +246,13 @@ def build_clinics() -> list[Clinic]:
 def build_users() -> list[User]:
     return [
         User(user_id=USER_PATIENT_ID, clinic_id=CLINIC_ID, name=PATIENT_NAME, role="patient", patient_id=PATIENT_ID),
-        User(user_id=USER_STAFF_ID, clinic_id=CLINIC_ID, name="Bob Lee", role="staff"),
+        User(
+            user_id=USER_STAFF_ID,
+            clinic_id=CLINIC_ID,
+            name="Bob Lee",
+            role="staff",
+            professional_title="Registered Nurse",
+        ),
         User(user_id=USER_CLINICIAN_ID, clinic_id=CLINIC_ID, name="Dr. Carol Wong", role="clinician"),
         User(user_id=USER_ADMIN_ID, clinic_id=CLINIC_ID, name="Nightingale Admin", role="admin"),
         User(user_id=USER_PATIENT_B_ID, clinic_id=CLINIC_ID, name=PATIENT_B_NAME, role="patient", patient_id=PATIENT_B_ID),

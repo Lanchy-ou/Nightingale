@@ -211,6 +211,19 @@ function PatientWorkspace({
     [events, route.eventId],
   );
   const latestEvent = events.length ? [...events].sort((a, b) => b.started_at.localeCompare(a.started_at))[0] : null;
+  const encounterOptions = useMemo(() => {
+    const grouped = new Map<string, Event[]>();
+    events.forEach((event) => {
+      if (!event.encounter_id) return;
+      grouped.set(event.encounter_id, [...(grouped.get(event.encounter_id) ?? []), event]);
+    });
+    return [...grouped.entries()]
+      .sort(([, left], [, right]) => right[0].started_at.localeCompare(left[0].started_at))
+      .map(([encounterId, groupedEvents]) => ({
+        encounterId,
+        label: `Clinic Visit · ${formatDate(groupedEvents[0].started_at)} · ${groupedEvents.map((event) => event.event_type.replace(/_/g, ' ')).join(' + ')}`,
+      }));
+  }, [events]);
 
   const updateContextState = useCallback((state: EventContextState) => {
     setEventContext(state);
@@ -297,18 +310,24 @@ function PatientWorkspace({
             </div>
           </div>
           <div className="patient-primary-actions">
-            {identity.role === 'staff' && <div className="workspace-role-chip"><strong>Clinical support</strong><span>Staff Notes · Tasks · collaboration</span></div>}
+            {identity.role === 'staff' && <div className="workspace-role-chip"><strong>Nurse workspace</strong><span>Staff Notes · Tasks · collaboration</span></div>}
             {identity.role === 'clinician' && <button
               className="primary-button"
               onClick={() => onNavigate({ kind: 'patient', patientId, mode: 'new' })}
             >
-              Record consultation
+              Record doctor consultation
+            </button>}
+            {identity.role === 'staff' && <button
+              className="primary-button"
+              onClick={() => onNavigate({ kind: 'patient', patientId, mode: 'new' })}
+            >
+              Record nurse consultation
             </button>}
           </div>
         </header>
 
         {route.mode !== 'new' && (
-          <nav className="workspace-tabs" aria-label="Patient workspace views">
+          <nav className={`workspace-tabs ${route.mode === 'event' ? 'with-event-detail' : ''}`} aria-label="Patient workspace views">
             {(['glance', 'timeline'] as PatientTab[]).map((tab) => (
               <button
                 key={tab}
@@ -328,7 +347,7 @@ function PatientWorkspace({
 
         {completion && route.mode === 'event' && (
           <div className={`completion-banner ${completion.degraded ? 'fallback' : 'success'}`}>
-            <strong>{completion.degraded ? 'Completed with deterministic fallback' : 'Doctor Consult completed'}</strong>
+            <strong>{completion.degraded ? 'Completed with deterministic fallback' : `${completion.event.event_type === 'nurse_consult' ? 'Nurse' : 'Doctor'} Consult completed`}</strong>
             <span>Raw transcript saved · AI summary saved · {completion.highlight_ids.length} exact-source highlight{completion.highlight_ids.length === 1 ? '' : 's'}</span>
             {completion.fallback_reason && <small>Fallback reason: {completion.fallback_reason}</small>}
           </div>
@@ -365,8 +384,14 @@ function PatientWorkspace({
             onCompleted={completed}
           />
         )}
-        {route.mode === 'new' && identity.role !== 'clinician' && (
-          <div className="empty-state"><h3>Clinician access required</h3><p>Staff share the clinic shell and Care Tasks workflow, but cannot start a Doctor Consult.</p><button onClick={() => openTab('tasks')}>Open Care Tasks</button></div>
+        {route.mode === 'new' && identity.role === 'staff' && (
+          <NewDoctorConsult
+            patient={patient}
+            consultKind="nurse"
+            encounterOptions={encounterOptions}
+            onCancel={() => openTab('timeline')}
+            onCompleted={completed}
+          />
         )}
         {route.mode === 'event' && selectedEvent && (
           <ClinicalEventDetail
@@ -491,14 +516,14 @@ export default function ClinicianWorkspacePage({ roleKey, onLogout }: { roleKey:
     setRoute(next);
   }
 
-  if (error) return <div className="shell-load-error">Unable to load clinician workspace: {error}</div>;
-  if (!identity) return <div className="shell-loading">Loading clinician workspace…</div>;
+  if (error) return <div className="shell-load-error">Unable to load clinical workspace: {error}</div>;
+  if (!identity) return <div className="shell-loading">Loading clinical workspace…</div>;
 
   const selectedPatientId = route.kind === 'patient' ? route.patientId : null;
   const shellStyle = { '--sidebar-width': `${sidebarWidth}px` } as CSSProperties;
   const workspaceStyle = { '--context-width': `${contextWidth}px` } as CSSProperties;
   return (
-    <div className="clinician-shell" style={shellStyle}>
+    <div className={`clinician-shell role-${identity.role}`} style={shellStyle}>
       <ClinicianSidebar
         identity={identity}
         patients={patients}
@@ -512,8 +537,8 @@ export default function ClinicianWorkspacePage({ roleKey, onLogout }: { roleKey:
         <div className="workspace-area dashboard-area" style={workspaceStyle}>
           <main className="workspace-main clinic-dashboard">
             <p className="eyebrow">{identity.clinic_name}</p>
-            <h1>Clinic dashboard</h1>
-            <p className="dashboard-lead">Choose an authorized clinic patient to open their longitudinal record.</p>
+            <h1>{identity.role === 'staff' ? 'Nurse workspace' : 'Clinic dashboard'}</h1>
+            <p className="dashboard-lead">{identity.role === 'staff' ? 'Open a clinic patient to review evidence, coordinate care, and record Nurse Consults.' : 'Choose an authorized clinic patient to open their longitudinal record.'}</p>
             <div className="dashboard-patient-grid">
               {patients.map((patient) => (
                 <button key={patient.patient_id} onClick={() => navigate({ kind: 'patient', patientId: patient.patient_id, mode: 'glance' })}>

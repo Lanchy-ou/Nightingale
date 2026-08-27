@@ -29,6 +29,8 @@ from ..schemas import (
     DoctorConsultCreate,
     DoctorConsultOut,
     EventOut,
+    NurseConsultCreate,
+    NurseConsultOut,
     SessionIngestRequest,
     SourceIngestRequest,
 )
@@ -53,6 +55,13 @@ def _doctor_consult_ids(clinic_id: str, patient_id: str, consult_id: str) -> tup
     event_id = f"evt_{stable_id('doctor_consult', clinic_id, patient_id, consult_id)}"
     encounter_id = f"enc_{stable_id('clinic_visit', clinic_id, patient_id, consult_id)}"
     source_id = f"art_{stable_id('doctor_transcript', clinic_id, patient_id, consult_id)}"
+    return event_id, encounter_id, source_id
+
+
+def _nurse_consult_ids(clinic_id: str, patient_id: str, consult_id: str) -> tuple[str, str, str]:
+    event_id = f"evt_{stable_id('nurse_consult', clinic_id, patient_id, consult_id)}"
+    encounter_id = f"enc_{stable_id('clinic_visit', clinic_id, patient_id, consult_id)}"
+    source_id = f"art_{stable_id('nurse_transcript', clinic_id, patient_id, consult_id)}"
     return event_id, encounter_id, source_id
 
 
@@ -135,6 +144,103 @@ def _ingest_common(
     }
 
 
+def _create_consult(
+    *,
+    db: Session,
+    ctx: RoleContext,
+    patient: Patient,
+    body: DoctorConsultCreate | NurseConsultCreate,
+    event_type: str,
+    action: str,
+    audit_action: str,
+    summary_type: str,
+    ids: tuple[str, str, str],
+    requested_encounter_id: str | None = None,
+) -> dict:
+    """Shared raw-first orchestration; role semantics stay in each endpoint."""
+    authorize(ctx, action, patient.clinic_id, patient.patient_id)
+    event_id, generated_encounter_id, source_id = ids
+    encounter_id = requested_encounter_id or generated_encounter_id
+    key = _namespaced_key(
+        patient.clinic_id,
+        patient.patient_id,
+        event_type,
+        stable_id(body.consult_id, body.ingestion_key),
+    )
+
+    raw = _existing_raw(db, key)
+    event = db.get(Event, event_id)
+    if raw is not None:
+        if raw.event_id != event_id or event is None:
+            raise HTTPException(status_code=409, detail="Idempotency identity conflict")
+    else:
+        if event is not None or db.get(Artifact, source_id) is not None:
+            raise HTTPException(status_code=409, detail="consult_id already exists")
+
+        now = datetime.now()
+        event = Event(
+            event_id=event_id,
+            patient_id=patient.patient_id,
+            clinic_id=patient.clinic_id,
+            event_type=event_type,
+            encounter_id=encounter_id,
+            started_at=body.started_at,
+            ended_at=body.ended_at,
+            created_at=now,
+        )
+        raw = Artifact(
+            artifact_id=source_id,
+            event_id=event_id,
+            artifact_type="transcript",
+            author_role="system",
+            author_id=None,
+            content=body.content.model_dump(),
+            created_at=now,
+            version=1,
+            provenance_pointer=None,
+            ingestion_key=key,
+        )
+        db.add(event)
+        db.add(raw)
+        add_audit(
+            db,
+            actor_id=ctx.user_id,
+            actor_role=ctx.role,
+            action=audit_action,
+            target_type="event",
+            target_id=event_id,
+            clinic_id=patient.clinic_id,
+            patient_id=patient.patient_id,
+            event_id=event_id,
+        )
+        add_audit(
+            db,
+            actor_id=ctx.user_id,
+            actor_role=ctx.role,
+            action="source_ingest",
+            target_type="artifact",
+            target_id=source_id,
+            clinic_id=patient.clinic_id,
+            patient_id=patient.patient_id,
+            event_id=event_id,
+        )
+        db.commit()
+        event = db.get(Event, event_id)
+        raw = db.get(Artifact, source_id)
+
+    result = _ingest_common(
+        db, event, raw, summary_type, ctx, patient_visible=False
+    )
+    artifact_count = db.scalar(
+        select(func.count()).select_from(Artifact).where(Artifact.event_id == event_id)
+    ) or 0
+    result["event"] = EventOut.model_validate(event).model_copy(
+        update={"artifact_count": artifact_count}
+    )
+    result["encounter_id"] = event.encounter_id
+    return result
+
+
 @router.post(
     "/patients/{patient_id}/doctor-consults",
     response_model=DoctorConsultOut,
@@ -153,103 +259,59 @@ def create_doctor_consult(
     patient = db.get(Patient, patient_id)
     if patient is None:
         raise resource_not_found()
-    # Unified scope/permission check: same-clinic non-clinicians receive 403;
-    # cross-clinic callers receive the same generic 404 as an absent patient.
-    authorize(ctx, "create_doctor_consult", patient.clinic_id, patient.patient_id)
-
-    event_id, encounter_id, source_id = _doctor_consult_ids(
-        patient.clinic_id, patient.patient_id, body.consult_id
-    )
-    key = _namespaced_key(
-        patient.clinic_id,
-        patient.patient_id,
-        "doctor_consult",
-        stable_id(body.consult_id, body.ingestion_key),
-    )
-
-    raw = _existing_raw(db, key)
-    event = db.get(Event, event_id)
-    if raw is not None:
-        if raw.event_id != event_id or event is None:
-            raise HTTPException(status_code=409, detail="Idempotency identity conflict")
-    else:
-        # consult_id is itself a stable business identity. A different
-        # ingestion key must not append a second Transcript to that consult.
-        if event is not None or db.get(Artifact, source_id) is not None:
-            raise HTTPException(status_code=409, detail="consult_id already exists")
-
-        now = datetime.now()
-        event = Event(
-            event_id=event_id,
-            patient_id=patient.patient_id,
-            clinic_id=patient.clinic_id,
-            event_type="doctor_consult",
-            encounter_id=encounter_id,
-            started_at=body.started_at,
-            ended_at=body.ended_at,
-            created_at=now,
-        )
-        raw = Artifact(
-            artifact_id=source_id,
-            event_id=event_id,
-            artifact_type="transcript",
-            author_role="system",
-            author_id=None,
-            # Persist only the validated, trimmed canonical shape. No preview,
-            # guessed speaker, or invented timestamp crosses this boundary.
-            content=body.content.model_dump(),
-            created_at=now,
-            version=1,
-            provenance_pointer=None,
-            ingestion_key=key,
-        )
-        db.add(event)
-        db.add(raw)
-        add_audit(
-            db,
-            actor_id=ctx.user_id,
-            actor_role=ctx.role,
-            action="doctor_consult_create",
-            target_type="event",
-            target_id=event_id,
-            clinic_id=patient.clinic_id,
-            patient_id=patient.patient_id,
-            event_id=event_id,
-        )
-        add_audit(
-            db,
-            actor_id=ctx.user_id,
-            actor_role=ctx.role,
-            action="source_ingest",
-            target_type="artifact",
-            target_id=source_id,
-            clinic_id=patient.clinic_id,
-            patient_id=patient.patient_id,
-            event_id=event_id,
-        )
-        # Raw-first durability boundary: derived processing starts only after
-        # this transaction is committed.
-        db.commit()
-        event = db.get(Event, event_id)
-        raw = db.get(Artifact, source_id)
-
-    result = _ingest_common(
-        db,
-        event,
-        raw,
-        "ai_doctor_consult_summary",
-        ctx,
-        patient_visible=False,
-    )
-    artifact_count = db.scalar(
-        select(func.count()).select_from(Artifact).where(Artifact.event_id == event_id)
-    ) or 0
-    event_out = EventOut.model_validate(event).model_copy(
-        update={"artifact_count": artifact_count}
+    result = _create_consult(
+        db=db,
+        ctx=ctx,
+        patient=patient,
+        body=body,
+        event_type="doctor_consult",
+        action="create_doctor_consult",
+        audit_action="doctor_consult_create",
+        summary_type="ai_doctor_consult_summary",
+        ids=_doctor_consult_ids(patient.clinic_id, patient.patient_id, body.consult_id),
     )
     return DoctorConsultOut(
-        event=event_out,
-        encounter_id=event.encounter_id,
+        event=result["event"],
+        encounter_id=result["encounter_id"],
+        source_artifact_id=result["source_artifact_id"],
+        ai_summary_artifact_id=result["ai_summary_artifact_id"],
+        highlight_ids=result["highlight_ids"],
+        generation_method=result["generation_method"],
+        degraded=result["degraded"],
+        fallback_reason=result["fallback_reason"],
+        idempotent_replay=result["idempotent_replay"],
+    )
+
+
+@router.post(
+    "/patients/{patient_id}/nurse-consults",
+    response_model=NurseConsultOut,
+)
+def create_nurse_consult(
+    patient_id: str,
+    body: NurseConsultCreate,
+    db: Session = Depends(get_db),
+    ctx: RoleContext = Depends(require_auth),
+):
+    """Create a separate Nurse Consult Event under staff authority."""
+    patient = db.get(Patient, patient_id)
+    if patient is None:
+        raise resource_not_found()
+    result = _create_consult(
+        db=db,
+        ctx=ctx,
+        patient=patient,
+        body=body,
+        event_type="nurse_consult",
+        action="create_nurse_consult",
+        audit_action="nurse_consult_create",
+        summary_type="ai_nurse_consult_summary",
+        ids=_nurse_consult_ids(patient.clinic_id, patient.patient_id, body.consult_id),
+        requested_encounter_id=body.encounter_id,
+    )
+    return NurseConsultOut(
+        event=result["event"],
+        encounter_id=result["encounter_id"],
         source_artifact_id=result["source_artifact_id"],
         ai_summary_artifact_id=result["ai_summary_artifact_id"],
         highlight_ids=result["highlight_ids"],

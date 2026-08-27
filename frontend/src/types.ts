@@ -143,6 +143,7 @@ export interface CurrentIdentity {
   clinic_id: string | null;
   patient_id: string | null;
   display_name: string | null;
+  professional_title: string | null;
   clinic_name: string | null;
   authenticated: boolean;
 }
@@ -153,11 +154,17 @@ export interface DoctorTranscriptSegment {
   text: string;
 }
 
+export interface NurseTranscriptSegment {
+  index: number;
+  speaker: 'nurse' | 'patient';
+  text: string;
+}
+
 export type TranscriptNormalizeOutcome = 'ACCEPT' | 'NEEDS_REVIEW' | 'REJECT';
 
 export interface TranscriptPreviewSegment {
   index: number;
-  speaker_candidate: 'doctor' | 'patient' | null;
+  speaker_candidate: 'doctor' | 'nurse' | 'patient' | null;
   text: string;
   // Nullable: after a user edit/split/merge that cannot be mapped back to the
   // raw text exactly, the source range is cleared (never a pseudo-precise span).
@@ -185,6 +192,33 @@ export interface DoctorConsultResult {
   degraded: boolean;
   fallback_reason: string | null;
   idempotent_replay: boolean;
+}
+
+export type NurseConsultResult = DoctorConsultResult;
+
+// --- E1 Admin oversight ---------------------------------------------------
+export interface AdminUser {
+  user_id: string;
+  display_name: string;
+  email: string | null;
+  role: 'patient' | 'staff' | 'clinician' | 'admin';
+  professional_title: string | null;
+  patient_id: string | null;
+  account_status: 'active' | 'disabled';
+  disabled_at: string | null;
+  active_session_count: number;
+  last_seen_at: string | null;
+}
+
+export interface AdminAccessAudit {
+  audit_id: string;
+  actor_id: string | null;
+  actor_role: string | null;
+  action: string;
+  target_type: string;
+  target_id: string;
+  details: Record<string, string> | null;
+  created_at: string;
 }
 
 // --- D1 Identity, Invite, Login and Session ---

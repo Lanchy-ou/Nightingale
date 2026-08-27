@@ -5,7 +5,12 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from ..authz import authorize, require_auth
 from ..role_context import RoleContext
-from ..schemas import TranscriptNormalizeOut, TranscriptNormalizeRequest
+from ..nurse_transcript_normalizer import normalize_nurse_transcript
+from ..schemas import (
+    NurseTranscriptNormalizeOut,
+    TranscriptNormalizeOut,
+    TranscriptNormalizeRequest,
+)
 from ..transcript_normalizer import normalize_transcript
 
 
@@ -26,6 +31,26 @@ def normalize_transcript_preview(
     if result.reason in {"EMPTY_INPUT", "TOO_MANY_SEGMENTS", "SEGMENT_TEXT_TOO_LONG"}:
         raise HTTPException(status_code=422, detail=result.reason)
     return TranscriptNormalizeOut(
+        outcome=result.outcome,
+        normalize_reason=result.reason,
+        raw_byte_length=result.raw_byte_length,
+        segments=[segment.__dict__ for segment in result.segments],
+        issues=result.issues,
+    )
+
+
+@router.post("/nurse-normalize", response_model=NurseTranscriptNormalizeOut)
+def normalize_nurse_transcript_preview(
+    body: TranscriptNormalizeRequest,
+    ctx: RoleContext = Depends(require_auth),
+):
+    authorize(ctx, "normalize_nurse_transcript", ctx.clinic_id, None)
+    result = normalize_nurse_transcript(body.raw_text)
+    if result.reason == "INPUT_TOO_LONG":
+        raise HTTPException(status_code=413, detail=result.reason)
+    if result.reason in {"EMPTY_INPUT", "TOO_MANY_SEGMENTS", "SEGMENT_TEXT_TOO_LONG"}:
+        raise HTTPException(status_code=422, detail=result.reason)
+    return NurseTranscriptNormalizeOut(
         outcome=result.outcome,
         normalize_reason=result.reason,
         raw_byte_length=result.raw_byte_length,

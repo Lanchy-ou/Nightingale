@@ -327,6 +327,7 @@ def test_current_identity_and_clinic_patient_list_handoff(
         "clinic_id": fixture.CLINIC_ID,
         "patient_id": None,
         "display_name": "Dr. Carol Wong",
+        "professional_title": None,
         "clinic_name": fixture.CLINIC_NAME,
         "authenticated": True,
     }

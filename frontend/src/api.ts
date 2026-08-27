@@ -1,5 +1,7 @@
 import type {
   Artifact,
+  AdminAccessAudit,
+  AdminUser,
   ArtifactVersion,
   AuditLog,
   Comment,
@@ -7,6 +9,8 @@ import type {
   DiffResult,
   DoctorConsultResult,
   DoctorTranscriptSegment,
+  NurseConsultResult,
+  NurseTranscriptSegment,
   Event,
   Highlight,
   InviteCreated,
@@ -158,6 +162,22 @@ export const api = {
   createInvite: (payload: { email: string; role: string; patient_id?: string | null }) =>
     post<InviteCreated>('/api/auth/invites', payload),
   listInvites: (signal?: AbortSignal) => get<InviteInfo[]>('/api/auth/invites', signal),
+  getAdminUsers: (signal?: AbortSignal) => get<AdminUser[]>('/api/admin/users', signal),
+  updateAdminUserStatus: (
+    userId: string,
+    expectedStatus: 'active' | 'disabled',
+    status: 'active' | 'disabled',
+  ) => patch<AdminUser>(`/api/admin/users/${userId}/status`, {
+    expected_status: expectedStatus,
+    status,
+  }),
+  revokeAdminUserSessions: (userId: string, expectedActiveSessionCount: number) =>
+    post<{ user_id: string; revoked_count: number }>(
+      `/api/admin/users/${userId}/revoke-sessions`,
+      { expected_active_session_count: expectedActiveSessionCount },
+    ),
+  getAdminAccessAudit: (signal?: AbortSignal) =>
+    get<AdminAccessAudit[]>('/api/admin/access-audit', signal),
 
   getCurrentIdentity: (signal?: AbortSignal) => get<CurrentIdentity>(`/api/auth/session`, signal),
   getClinicPatients: (signal?: AbortSignal) => get<Patient[]>(`/api/patients`, signal),
@@ -229,6 +249,8 @@ export const api = {
     }),
   normalizeTranscript: (rawText: string, signal?: AbortSignal) =>
     post<TranscriptNormalizeResult>(`/api/transcripts/normalize`, { raw_text: rawText }, signal),
+  normalizeNurseTranscript: (rawText: string, signal?: AbortSignal) =>
+    post<TranscriptNormalizeResult>(`/api/transcripts/nurse-normalize`, { raw_text: rawText }, signal),
   createDoctorConsult: (
     patientId: string,
     consultId: string,
@@ -243,6 +265,24 @@ export const api = {
       ingestion_key: ingestionKey,
       started_at: startedAt,
       ended_at: endedAt,
+      content: { segments },
+    }, signal),
+  createNurseConsult: (
+    patientId: string,
+    consultId: string,
+    ingestionKey: string,
+    startedAt: string,
+    endedAt: string | null,
+    encounterId: string | null,
+    segments: NurseTranscriptSegment[],
+    signal?: AbortSignal,
+  ) =>
+    post<NurseConsultResult>(`/api/patients/${patientId}/nurse-consults`, {
+      consult_id: consultId,
+      ingestion_key: ingestionKey,
+      started_at: startedAt,
+      ended_at: endedAt,
+      encounter_id: encounterId,
       content: { segments },
     }, signal),
   createSession: (

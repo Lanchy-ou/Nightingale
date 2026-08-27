@@ -356,7 +356,7 @@ GET  /api/tasks/{task_id}/provenance
 
 Task 必须有 origin Event；Artifact/Span provenance 可选但必须成对并精确解析。transition 接收 `expected_status`，以原子条件更新实现 deterministic 409。患者只能推进本人、patient-visible、assigned-patient Task 到 `in_progress|reported_done`；只有 staff/clinician 可将 `reported_done` 确认为 `completed` 或取消未终结 Task。终态不可恢复。create/transition/conflict 进入 metadata-only AuditLog。
 
-`unresolved_task` 不再是 seed 常量。Task↔Glance 映射是**显式的一对一关系**：`Highlight.task_id` 使用 Task FK + unique constraint；Task 创建时仅以条件 UPDATE/CAS 采纳 patient/event/source_artifact/source_span 完全匹配、未占用且非 rejected 的 task Highlight，竞争失败或不匹配则创建专属行。Event-only Task 不误伤同 Event 无关 Highlight；`recompute_task_highlights` 只更新对应 `task_id`，completed/cancelled 清除 unresolved 权重并为专属行写入准确终态文案。精确 provenance 只有用户**明确选择 quote 并确认**后才保存，否则为 Event-level；Glance 的 Open Task 定位到具体 Task。`resolve_exact_span` 对任意异常结构 fail closed（422/404，绝不 500）。clinician/staff 共用 clinic shell 的 `Tasks` tab；没有 Nurse Workspace、假 appointment 或 assignment 状态。
+`unresolved_task` 不再是 seed 常量。Task↔Glance 映射是**显式的一对一关系**：`Highlight.task_id` 使用 Task FK + unique constraint；Task 创建时仅以条件 UPDATE/CAS 采纳 patient/event/source_artifact/source_span 完全匹配、未占用且非 rejected 的 task Highlight，竞争失败或不匹配则创建专属行。Event-only Task 不误伤同 Event 无关 Highlight；`recompute_task_highlights` 只更新对应 `task_id`，completed/cancelled 清除 unresolved 权重并为专属行写入准确终态文案。精确 provenance 只有用户**明确选择 quote 并确认**后才保存，否则为 Event-level；Glance 的 Open Task 定位到具体 Task。`resolve_exact_span` 对任意异常结构 fail closed（422/404，绝不 500）。clinician/staff 共用 clinic shell 的 `Tasks` tab；E1 只增加同 shell 的 Nurse/Staff 角色呈现，不创建平行 Nurse App、假 appointment 或 assignment 状态。
 
 ---
 
@@ -428,13 +428,34 @@ Phase C 两张任务卡均已完成：
 1. `Task_Card/C1_Task_Card.md`：Encounter/Transcript schema、clinician-only Doctor Consult endpoint、raw-first/AI/provenance/RBAC 测试；
 2. `Task_Card/C2_Task_Card.md`：三栏 Clinician Shell、New Consult UI、Clinic Visit/Timeline master-detail、Source Viewer、Comment/Revision/Audit 集成。
 
-**C2 + D2 实现**：clinician/staff 登录后进入同一 factual Clinic dashboard，可从左栏 `Clinic Patients` 搜索/切换患者；产品 shell 为左侧 identity/directory、中间 `Glance | Timeline | Notes | Tasks`、右侧 Source/Comments/Versions/Audit。staff 权限由 backend RBAC 裁剪且不能 New Consult。patientId、role 与 session 都是 remount boundary；patient 仍只挂载独立 `PatientViewPage`。
+**C2 + D2 + E1 实现**：clinician/staff 登录后进入同一 factual Clinic dashboard，可从左栏 `Clinic Patients` 搜索/切换患者；产品 shell 为左侧 identity/directory、中间 `Glance | Timeline | Notes | Tasks`、右侧 Source/Comments/Versions/Audit。E1 让 staff 以 `Registered Nurse` professional title 进入轻度差异化的 Nurse workspace，可创建 Nurse Consult；其权限仍由 backend RBAC 裁剪，不能创建 Doctor Consult、Clinician Note、clinician confirmation 或使用 clinician-only Copilot。patientId、role 与 session 都是 remount boundary；patient 仍只挂载独立 `PatientViewPage`。
 
 `New Consult` 已是 `Paste transcript → Review segments → Confirm and process` 三步流程。原文与 preview 并排；unknown 明显阻断；speaker/text 可修正，segment 可拆分/合并且 index 自动重排。patient/session change 清除 raw draft、preview、operation identity 和 pending response。提交保留 stable consult/ingestion identity，成功后进入新 Event Detail，并明确显示 raw saved、AI generated 或 deterministic fallback。Timeline 只按非空相同 `encounter_id` 组成 `Clinic Visit`；Event Detail 将 Transcript/AI Summary/Clinician Note 与 Comment/Revision/Audit 保持为 Event 内 lifecycle，不制造新医疗 Event。
 
 D3 frozen evaluation 包含 40 个 synthetic cases（development 26 / frozen_holdout 14）。normalizer 在首次 holdout 前以 SHA-256 冻结；holdout outcome 14/14、speaker 12/12、ambiguous blocking 8/8，silent invention/truncation 为 0。frozen runner **不调用 provider/network**；provider 层明确 `NOT_RUN`，deterministic fallback 单独报告（development exact entity precision 0.888889 / recall 0.571429，task precision 1.0 / recall 0.5）。不得把两层合并为一个成绩。
 
-仍明确后置：独立 Nurse Workspace、Nurse input、录音/ASR、外部 dataset ingestion、复杂 care-team assignment、appointment/billing/notification。Phase C、M7、D1–D4 Exit Gate 与 D5 自动化安全/集成门已通过；5-8 位独立观察者要求由 owner 取消，不作真人 usability claim。
+仍明确后置：平行 Nurse App、录音/ASR、外部 dataset ingestion、复杂 care-team assignment、appointment/billing/notification。Phase C、M7、D1–D5 与 E1 Exit Gate 已通过；5-8 位独立观察者要求由 owner 取消，不作真人 usability claim。
+
+### 4.6 E1 Role Workspaces（2026-08-27）
+
+> 状态：**E1 COMPLETE。** Phase E 后续 E2–E5 未因本节自动开始。
+
+Nurse/Staff 继续使用 `staff` RBAC role；`professional_title=Registered Nurse` 只负责真实身份呈现，不参与授权。Doctor 与 Staff 使用同一三栏 clinical shell，但 Staff 采用相关的 teal accent、Nurse identity、`Record nurse consultation` 主操作和 Staff authority 文案。Nurse transcript 使用独立 `/api/transcripts/nurse-normalize`，只接受 `nurse|patient`；冻结的 Doctor normalizer 文件及 SHA-256 `1ac0e01e92401b1728e7b938541e71f8d95e81cca137376004953eb2cd371476` 未改变。确认后：
+
+```text
+POST /api/patients/{patient_id}/nurse-consults
+  -> new nurse_consult Event
+  -> immutable system Transcript committed first
+  -> existing redaction / LLMClient / fallback pipeline
+  -> independent ai_nurse_consult_summary
+  -> exact-span-resolving Highlights only
+```
+
+Clinic Visit 只能由用户显式选择既有非空 `encounter_id` 组成；Nurse/Doctor Event、Artifact 与 authority 始终分离。相同 consult/ingestion replay 幂等，不同 identity 返回 409；provider failure 保留 raw source。
+
+Admin 登录后进入独立 `AdminWorkspacePage`，沿用现有字体、间距、卡片、按钮、状态标签与品牌色，只提供 Users/Invites/Sessions/Access Audit。Admin API 为 `GET /api/admin/users`、`PATCH /api/admin/users/{user_id}/status`、`POST /api/admin/users/{user_id}/revoke-sessions`、`GET /api/admin/access-audit`；全部 clinic-scoped、strict response、metadata-only，并使用 compare-and-set。禁止 self-disable 和 last-active-admin disable；disable 会在同一 transaction 撤销 active sessions。Admin 页面没有 Note、Copilot、Glance confirmation 或 clinical Task controls。
+
+E1 增加 `User.professional_title` nullable column。现有本地 synthetic SQLite Demo 没有 migration runner；升级后必须重新运行 seed 命令重建 Demo schema。没有新增 dependency、provider、外部数据或需追加的 attribution。
 
 ---
 
@@ -771,7 +792,7 @@ cd backend
 .venv/Scripts/python.exe -B scripts/evaluate_copilot.py
 ```
 
-> 当前进度：M1–M7、Phase C、D1–D4 已完成；D5 达到 **D5_AUTOMATED_SECURITY_COMPLETE**。SQLCipher database/backup/restore、Caddy TLS、CSRF/CORS/headers/rate/body/error hardening、body-only invite preview、offline-Caddy token log probe 与三角色 real-session integration tests 已通过。Owner 已取消 5-8 位独立观察者要求，原空白协议已删除且没有生成模拟结果。项目可称为“Phase D 工程实现与自动化验收完成的 synthetic-data product Demo”，但不得声称经过真人 usability research、production deployment certification 或可用于真实医疗。详见 `docs/d5_deployment_security_decisions.md` 与 `docs/d5_automated_evidence_2026-08-27.md`。
+> 当前进度：M1–M7、Phase C、D1–D5 与 Phase E 的 E1 已完成；其他 Phase E 任务必须以各自任务卡/分支 Exit Gate 判断，不由 E1 自动宣称完成。D5 达到 **D5_AUTOMATED_SECURITY_COMPLETE**。E1 增加 Nurse/Staff 与 Admin 角色闭环，但不改变 synthetic-data、非生产医疗、无人类 usability 结论的边界。详见 `Task_Card/E1_Role_Workspaces_Task_Card.md`、`docs/d5_deployment_security_decisions.md` 与 `docs/d5_automated_evidence_2026-08-27.md`。
 
 架构约定（记录确切位置，随阶段更新）：
 
@@ -802,9 +823,9 @@ Admin 创建 clinic invite（一次性链接，不发送真实邮件）
 | 角色 | 邮箱 | 登录后进入 |
 |---|---|---|
 | Clinician | doctor@demo.clinic | 三栏 Clinician Workspace |
-| Staff | staff@demo.clinic | 共用 clinic shell（RBAC 裁剪，含 Care Tasks） |
+| Staff / Nurse | staff@demo.clinic | 同一 clinical shell 的 Nurse workspace（Nurse Consult、Staff Note、Care Tasks、Comments） |
 | Patient | alice@demo.clinic | 独立四区 Patient View（pat_001） |
-| Admin | admin@demo.clinic | PatientPage + Invite 管理页（`/admin/invites`） |
+| Admin | admin@demo.clinic | 独立 Admin Workspace（Users、Invites、Sessions、Access Audit；无 clinical authoring） |
 
 相关环境变量（后端）：
 

@@ -74,6 +74,7 @@ def _identity_out(user: User, clinic: Clinic | None) -> CurrentIdentityOut:
         clinic_id=user.clinic_id,
         patient_id=user.patient_id,
         display_name=user.name,
+        professional_title=user.professional_title,
         clinic_name=clinic.name if clinic else None,
         authenticated=True,
     )

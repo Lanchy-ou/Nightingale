@@ -51,6 +51,7 @@ AUDIT_ACTIONS = (
     "highlight_status",
     "conflict",
     "doctor_consult_create",
+    "nurse_consult_create",
     "source_ingest",
     "ai_generate",
     "ai_fallback",
@@ -61,6 +62,8 @@ AUDIT_ACTIONS = (
     "login_failure",
     "logout",
     "session_revoked",
+    "account_disabled",
+    "account_reactivated",
     # D2 care-task lifecycle (metadata-only status history).
     "task_create",
     "task_transition",
@@ -86,6 +89,8 @@ class User(Base):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(String(32), nullable=False)
+    # Professional identity is presentation metadata, never an RBAC authority.
+    professional_title: Mapped[str | None] = mapped_column(String(128), nullable=True)
     # Maps a patient-role user to their own Patient record (M3).
     patient_id: Mapped[str | None] = mapped_column(
         String(64), ForeignKey("patients.patient_id"), nullable=True
