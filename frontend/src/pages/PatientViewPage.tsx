@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api';
-import type { PatientView } from '../types';
+import type { PatientTask, PatientView, TaskStatus } from '../types';
 
 const EVENT_TYPE_LABELS: Record<string, string> = {
   patient_ai_preconsult: 'AI 预问诊',
@@ -26,15 +26,20 @@ export default function PatientViewPage({
   onLogout?: () => void;
 }) {
   const [view, setView] = useState<PatientView | null>(null);
+  const [tab, setTab] = useState<'today' | 'care' | 'checkin' | 'summaries'>('today');
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [pendingTaskId, setPendingTaskId] = useState<string | null>(null);
+  const [taskError, setTaskError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     let cancelled = false;
     (async () => {
+      setLoading(true);
       try {
         const v = await api.getPatientView(patientId);
         if (!cancelled) {
@@ -43,6 +48,8 @@ export default function PatientViewPage({
         }
       } catch (e) {
         if (!cancelled) setError(String(e));
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     })();
     return () => {
@@ -53,6 +60,16 @@ export default function PatientViewPage({
   useEffect(() => {
     return load();
   }, [load, roleKey, refreshKey]);
+
+  useEffect(() => {
+    // patient/session identity is a hard remount boundary. Clear every draft,
+    // error and pending response even if a host reuses this component.
+    setMessage('');
+    setSubmitError(null);
+    setTaskError(null);
+    setPendingTaskId(null);
+    setTab('today');
+  }, [patientId, roleKey]);
 
   async function send() {
     if (!message.trim()) return;
@@ -75,10 +92,31 @@ export default function PatientViewPage({
     }
   }
 
-  if (error) return <div className="error">无法加载你的信息：{error}</div>;
-  if (!view) return <div className="muted">加载中…</div>;
+  async function transition(task: PatientTask, status: TaskStatus) {
+    setPendingTaskId(task.task_id);
+    setTaskError(null);
+    try {
+      await api.transitionTask(task.task_id, task.status, status);
+      setRefreshKey((key) => key + 1);
+    } catch (e: any) {
+      setTaskError(e?.status === 409
+        ? '这项任务已在别处更新。我们正在刷新最新状态。'
+        : String(e.message ?? e));
+      if (e?.status === 409) setRefreshKey((key) => key + 1);
+    } finally {
+      setPendingTaskId(null);
+    }
+  }
 
-  const summary = view.current_summary;
+  if (error) return <div className="error">无法加载你的信息：{error}</div>;
+  if (!view || loading) return <div className="patient-view"><div className="loading-card">正在加载你的照护计划…</div></div>;
+
+  const taskGroups: { key: keyof PatientView['care_plan']; label: string }[] = [
+    { key: 'open', label: '待开始' },
+    { key: 'in_progress', label: '进行中' },
+    { key: 'reported_done', label: '等待诊所确认' },
+    { key: 'completed', label: '已由诊所确认' },
+  ];
 
   return (
     <div className="patient-view">
@@ -93,84 +131,115 @@ export default function PatientViewPage({
         )}
       </header>
 
-      <section className="pv-card pv-primary">
-        <h2>你现在需要知道的事</h2>
-        {summary ? (
-          <>
-            <p className="pv-lead">{summary.instruction}</p>
-            {summary.follow_up && (
-              <p className="pv-followup">📅 {summary.follow_up}</p>
-            )}
-            <div className="pv-date muted">更新于 {fmtDate(summary.event_time)}</div>
-          </>
-        ) : (
-          <p className="muted">暂时没有新的说明。如有疑问请联系你的诊所。</p>
-        )}
-      </section>
-
-      <section className="pv-card">
-        <h2>你的下一步</h2>
-        {view.upcoming.length === 0 ? (
-          <p className="muted">暂时没有待办安排。</p>
-        ) : (
-          <ul className="pv-list">
-            {view.upcoming.map((u) => (
-              <li key={`${u.source_artifact_id}:${u.event_time}`}>
-                <span className="pv-check">✔</span>
-                <span>{u.text}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section className="pv-card">
-        <h2>医生给你的说明</h2>
-        {view.instructions.length === 0 ? (
-          <p className="muted">暂时没有医生说明。</p>
-        ) : (
-          <ul className="pv-list">
-            {view.instructions.map((i) => (
-              <li key={i.artifact_id} className="pv-instruction">
-                <div className="pv-date muted">{fmtDate(i.event_time)}</div>
-                <p>{i.instruction}</p>
-                {i.follow_up && <p className="pv-followup">📅 {i.follow_up}</p>}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section className="pv-card">
-        <h2>和 AI 助手说说你的情况</h2>
-        <p className="muted">用一两句话描述你最近的情况，AI 助手会整理成你的就诊记录。</p>
-        <textarea
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          placeholder="例如：这周头痛好多了，但早上还是有点恶心…"
-          rows={3}
-        />
-        <div className="inline-actions">
-          <button onClick={send} disabled={busy || !message.trim()}>
-            {busy ? '发送中…' : '发送'}
+      <nav className="pv-tabs" aria-label="Patient experience sections">
+        {([
+          ['today', 'Today'],
+          ['care', 'Care Plan'],
+          ['checkin', 'Check-in'],
+          ['summaries', 'Visit Summaries'],
+        ] as const).map(([key, label]) => (
+          <button key={key} className={tab === key ? 'active' : ''} onClick={() => setTab(key)}>
+            {label}
           </button>
-          {submitError && <span className="error-inline">{submitError}</span>}
-        </div>
+        ))}
+      </nav>
 
-        {view.sessions.length > 0 && (
+      {taskError && <div className="form-error">{taskError}</div>}
+
+      {tab === 'today' && (
+        <>
+          <section className="pv-card pv-primary">
+            <h2>今天需要知道的事</h2>
+            {view.today.instruction ? (
+              <>
+                <p className="pv-lead">{view.today.instruction.instruction}</p>
+                <div className="pv-date muted">更新于 {fmtDate(view.today.instruction.event_time)}</div>
+              </>
+            ) : <p className="muted">暂时没有新的医生说明。</p>}
+            {view.today.next_follow_up && <p className="pv-followup">后续安排：{view.today.next_follow_up}</p>}
+          </section>
+          <section className="pv-card">
+            <h2>最近需要行动</h2>
+            {view.today.tasks.length === 0
+              ? <p className="muted">目前没有待处理的照护任务。</p>
+              : view.today.tasks.map((task) => (
+                <PatientTaskCard key={task.task_id} task={task} pending={pendingTaskId === task.task_id} onTransition={transition} />
+              ))}
+          </section>
+        </>
+      )}
+
+      {tab === 'care' && (
+        <section className="pv-card">
+          <h2>你的照护计划</h2>
+          {taskGroups.map(({ key, label }) => (
+            <div className="pv-task-group" key={key}>
+              <h3>{label}</h3>
+              {view.care_plan[key].length === 0
+                ? <p className="muted">没有项目</p>
+                : view.care_plan[key].map((task) => (
+                  <PatientTaskCard key={task.task_id} task={task} pending={pendingTaskId === task.task_id} onTransition={transition} />
+                ))}
+            </div>
+          ))}
+        </section>
+      )}
+
+      {tab === 'checkin' && (
+        <section className="pv-card">
+          <h2>提交近况</h2>
+          <p className="pv-notice">发送后会保存为新的患者对话记录，并由 AI 整理给照护团队查看；不会直接修改医生记录或任务状态。</p>
+          <textarea value={message} onChange={(e) => setMessage(e.target.value)} placeholder="例如：这周头痛好多了，但早上还是有点恶心…" rows={4} />
+          <div className="inline-actions">
+            <button onClick={send} disabled={busy || !message.trim()}>{busy ? '正在发送…' : submitError ? '重试发送' : '发送近况'}</button>
+            {busy && <span className="muted">正在安全保存你的原始输入…</span>}
+          </div>
+          {submitError && <div className="form-error">发送失败：{submitError}。你的文字仍保留，可重试。</div>}
           <div className="pv-sessions">
-            <h3 className="pv-subhead">过往对话</h3>
+            <h3 className="pv-subhead">过往 Check-in</h3>
+            {view.check_in.sessions.length === 0 ? <p className="muted">还没有提交记录。</p> : (
+              <ul className="pv-list">
+                {view.check_in.sessions.map((session) => (
+                  <li key={session.event_id} className="pv-session"><span className="pv-date muted">{fmtDate(session.started_at)}</span><span>{EVENT_TYPE_LABELS[session.event_type] ?? session.event_type}</span></li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
+      )}
+
+      {tab === 'summaries' && (
+        <section className="pv-card">
+          <h2>就诊说明</h2>
+          {view.visit_summaries.summaries.length === 0 ? <p className="muted">暂时没有患者可见的就诊说明。</p> : (
             <ul className="pv-list">
-              {view.sessions.map((s) => (
-                <li key={s.event_id} className="pv-session">
-                  <span className="pv-date muted">{fmtDate(s.started_at)}</span>
-                  <span>{EVENT_TYPE_LABELS[s.event_type] ?? s.event_type}</span>
+              {view.visit_summaries.summaries.map((summary) => (
+                <li key={summary.artifact_id} className="pv-instruction">
+                  <div className="pv-date muted">{fmtDate(summary.event_time)}</div>
+                  <p>{summary.instruction}</p>
+                  {summary.follow_up && <p className="pv-followup">后续安排：{summary.follow_up}</p>}
                 </li>
               ))}
             </ul>
-          </div>
-        )}
-      </section>
+          )}
+        </section>
+      )}
     </div>
+  );
+}
+
+function PatientTaskCard({ task, pending, onTransition }: {
+  task: PatientTask;
+  pending: boolean;
+  onTransition: (task: PatientTask, status: TaskStatus) => void;
+}) {
+  return (
+    <article className={`pv-task pv-task-${task.status}`}>
+      <div><strong>{task.title}</strong>{task.due_at && <small>截止 {fmtDate(task.due_at)}</small>}</div>
+      {task.status === 'open' && <button disabled={pending} onClick={() => onTransition(task, 'in_progress')}>{pending ? '更新中…' : '开始'}</button>}
+      {(task.status === 'open' || task.status === 'in_progress') && <button disabled={pending} onClick={() => onTransition(task, 'reported_done')}>报告已完成</button>}
+      {task.status === 'reported_done' && <span className="pv-waiting">已报告完成 · 等待诊所确认</span>}
+      {task.status === 'completed' && <span className="pv-complete">诊所已确认完成</span>}
+    </article>
   );
 }

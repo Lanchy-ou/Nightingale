@@ -143,6 +143,7 @@ class AuditLogOut(BaseModel):
     clinic_id: str | None
     patient_id: str | None
     event_id: str | None
+    details: dict | None
     created_at: datetime
 
 
@@ -317,10 +318,123 @@ class PatientViewOut(BaseModel):
 
     patient_id: str
     display_name: str
-    current_summary: PatientViewSummary | None
-    instructions: list[PatientViewInstruction]
-    upcoming: list[PatientViewUpcoming]
+    today: "PatientViewToday"
+    care_plan: "PatientViewCarePlan"
+    check_in: "PatientViewCheckIn"
+    visit_summaries: "PatientViewVisitSummaries"
+
+
+# --- D2 Care Tasks + patient-safe product projection ----------------------
+class TaskCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(min_length=1, max_length=255)
+    description: str = Field(default="", max_length=4000)
+    assigned_role: Literal["patient", "staff", "clinician"]
+    assigned_user_id: str | None = None
+    patient_visible: bool = False
+    due_at: datetime | None = None
+    source_artifact_id: str | None = None
+    source_span: dict | None = None
+
+    @field_validator("title")
+    @classmethod
+    def trim_task_title(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("title must not be empty")
+        return value
+
+    @model_validator(mode="after")
+    def complete_provenance_pair(self):
+        if (self.source_artifact_id is None) != (self.source_span is None):
+            raise ValueError("source_artifact_id and source_span must be supplied together")
+        return self
+
+
+class TaskTransition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_status: Literal["open", "in_progress", "reported_done", "completed", "cancelled"]
+    status: Literal["open", "in_progress", "reported_done", "completed", "cancelled"]
+
+
+class ClinicalTaskOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
+
+    task_id: str
+    patient_id: str
+    clinic_id: str
+    event_id: str
+    source_artifact_id: str | None
+    source_span: dict | None
+    title: str
+    description: str
+    assigned_role: str
+    assigned_user_id: str | None
+    patient_visible: bool
+    status: str
+    due_at: datetime | None
+    created_by: str
+    created_at: datetime
+    updated_at: datetime
+    reported_done_at: datetime | None
+    completed_by: str | None
+    completed_at: datetime | None
+    cancelled_by: str | None
+    cancelled_at: datetime | None
+
+
+class PatientTaskOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
+
+    task_id: str
+    title: str
+    status: str
+    due_at: datetime | None
+    updated_at: datetime
+    reported_done_at: datetime | None
+    completed_at: datetime | None
+    patient_visible: bool
+
+
+class TaskProvenanceOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    task_id: str
+    event: EventBrief
+    source_artifact: ArtifactOut | None
+    span: dict | None
+    quote: str | None
+
+
+class PatientViewToday(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    instruction: PatientViewInstruction | None
+    tasks: list[PatientTaskOut]
+    next_follow_up: str | None
+
+
+class PatientViewCarePlan(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    open: list[PatientTaskOut]
+    in_progress: list[PatientTaskOut]
+    reported_done: list[PatientTaskOut]
+    completed: list[PatientTaskOut]
+
+
+class PatientViewCheckIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     sessions: list[PatientViewSession]
+
+
+class PatientViewVisitSummaries(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    summaries: list[PatientViewInstruction]
 
 
 # --- D1 Identity, Invite, Login and Session ---------------------------------

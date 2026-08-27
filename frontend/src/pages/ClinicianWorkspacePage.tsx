@@ -13,6 +13,7 @@ import AuditList from '../components/AuditList';
 import ClinicalEventDetail, { type EventContextState } from '../components/ClinicalEventDetail';
 import ClinicalNotesView from '../components/ClinicalNotesView';
 import ClinicalTimeline from '../components/ClinicalTimeline';
+import ClinicalTasksView from '../components/ClinicalTasksView';
 import ClinicianSidebar from '../components/ClinicianSidebar';
 import CommentThread from '../components/CommentThread';
 import GlancePanel from '../components/GlancePanel';
@@ -20,7 +21,7 @@ import NewDoctorConsult from '../components/NewDoctorConsult';
 import ProvenancePanel from '../components/ProvenancePanel';
 import RevisionPanel from '../components/RevisionPanel';
 
-type PatientTab = 'glance' | 'timeline' | 'notes';
+type PatientTab = 'glance' | 'timeline' | 'notes' | 'tasks';
 type ClinicalRoute =
   | { kind: 'dashboard' }
   | { kind: 'patient'; patientId: string; mode: PatientTab | 'new' | 'event'; eventId?: string };
@@ -31,7 +32,7 @@ function parseRoute(): ClinicalRoute {
   const patientId = parts[2];
   if (parts[3] === 'consults' && parts[4] === 'new') return { kind: 'patient', patientId, mode: 'new' };
   if (parts[3] === 'events' && parts[4]) return { kind: 'patient', patientId, mode: 'event', eventId: parts[4] };
-  if (['glance', 'timeline', 'notes'].includes(parts[3])) {
+  if (['glance', 'timeline', 'notes', 'tasks'].includes(parts[3])) {
     return { kind: 'patient', patientId, mode: parts[3] as PatientTab };
   }
   return { kind: 'patient', patientId, mode: 'glance' };
@@ -66,10 +67,12 @@ function PatientWorkspace({
   patientId,
   route,
   onNavigate,
+  identity,
 }: {
   patientId: string;
   route: Extract<ClinicalRoute, { kind: 'patient' }>;
   onNavigate: (route: ClinicalRoute) => void;
+  identity: CurrentIdentity;
 }) {
   const [patient, setPatient] = useState<Patient | null>(null);
   const [events, setEvents] = useState<Event[]>([]);
@@ -113,7 +116,7 @@ function PatientWorkspace({
     // patientId is a remount boundary, and route transitions clear context that
     // does not belong to the newly opened mode.
     if (route.mode !== 'event') setEventContext({ artifacts: [], selectedArtifact: null });
-    if (route.mode === 'glance' || route.mode === 'timeline' || route.mode === 'notes' || route.mode === 'new') {
+    if (route.mode === 'glance' || route.mode === 'timeline' || route.mode === 'notes' || route.mode === 'tasks' || route.mode === 'new') {
       setInitialArtifactId(null);
     }
   }, [route.mode]);
@@ -190,18 +193,18 @@ function PatientWorkspace({
             >
               Add note
             </button>
-            <button
+            {identity.role === 'clinician' && <button
               className="primary-button"
               onClick={() => onNavigate({ kind: 'patient', patientId, mode: 'new' })}
             >
               + New Consult
-            </button>
+            </button>}
           </div>
         </header>
 
         {route.mode !== 'new' && route.mode !== 'event' && (
           <nav className="workspace-tabs" aria-label="Patient workspace views">
-            {(['glance', 'timeline', 'notes'] as PatientTab[]).map((tab) => (
+            {(['glance', 'timeline', 'notes', 'tasks'] as PatientTab[]).map((tab) => (
               <button
                 key={tab}
                 className={route.mode === tab ? 'active' : ''}
@@ -223,7 +226,7 @@ function PatientWorkspace({
         )}
 
         {route.mode === 'glance' && (
-          <GlancePanel key={`glance:${refreshKey}`} patientId={patientId} onViewSource={handleViewSource} />
+          <GlancePanel key={`glance:${refreshKey}`} patientId={patientId} onViewSource={handleViewSource} onOpenTasks={() => openTab('tasks')} />
         )}
         {route.mode === 'timeline' && <ClinicalTimeline events={events} onOpenEvent={openEvent} />}
         {route.mode === 'notes' && (
@@ -234,12 +237,25 @@ function PatientWorkspace({
             onOpenEvent={(event) => openEvent(event)}
           />
         )}
-        {route.mode === 'new' && (
+        {route.mode === 'tasks' && (
+          <ClinicalTasksView
+            patientId={patientId}
+            events={events}
+            identity={identity}
+            refreshKey={refreshKey}
+            onChanged={changed}
+            onOpenEvent={openEvent}
+          />
+        )}
+        {route.mode === 'new' && identity.role === 'clinician' && (
           <NewDoctorConsult
             patient={patient}
             onCancel={() => openTab('timeline')}
             onCompleted={completed}
           />
+        )}
+        {route.mode === 'new' && identity.role !== 'clinician' && (
+          <div className="empty-state"><h3>Clinician access required</h3><p>Staff share the clinic shell and Care Tasks workflow, but cannot start a Doctor Consult.</p><button onClick={() => openTab('tasks')}>Open Care Tasks</button></div>
         )}
         {route.mode === 'event' && selectedEvent && (
           <ClinicalEventDetail
@@ -250,6 +266,7 @@ function PatientWorkspace({
             onBack={() => openTab('timeline')}
             onChanged={changed}
             onContextState={updateContextState}
+            role={identity.role ?? ''}
           />
         )}
         {route.mode === 'event' && !selectedEvent && (
@@ -291,7 +308,7 @@ function PatientWorkspace({
                   key={`${selectedArtifact.artifact_id}:${selectedArtifact.version}`}
                   artifact={selectedArtifact}
                   onReverted={changed}
-                  canRevert={selectedArtifact.artifact_type === 'clinician_note'}
+                  canRevert={selectedArtifact.artifact_type === `${identity.role}_note`}
                   defaultOpen
                 />
               )}
@@ -398,6 +415,7 @@ export default function ClinicianWorkspacePage({ roleKey, onLogout }: { roleKey:
           patientId={route.patientId}
           route={route}
           onNavigate={navigate}
+          identity={identity}
         />
       )}
     </div>

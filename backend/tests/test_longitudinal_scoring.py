@@ -20,8 +20,8 @@ def test_repeated_mentions_blood_test_both_sides(db_session):
     review = _hl(db_session, "hl_blood_test_review")
     assert pending.feature_flags["repeated_mentions"] is True
     assert review.feature_flags["repeated_mentions"] is True
-    # both sides recomputed: recency 2 + repeated_mentions 1
-    assert pending.importance_score == 3
+    # Origin-side score also carries the real unresolved Task weight (2).
+    assert pending.importance_score == 5
     assert review.importance_score == 3
 
 
@@ -72,9 +72,10 @@ def test_fixture_candidates_do_not_hand_fill_structural_flags():
         assert structural.isdisjoint(candidate["feature_flags"]), candidate["highlight_id"]
 
 
-def test_all_seed_highlights_unresolved_task_false(db_session):
-    for h in db_session.scalars(select(Highlight)).all():
-        assert h.feature_flags["unresolved_task"] is False
+def test_seed_unresolved_task_flag_matches_real_task_provenance(db_session):
+    for highlight in db_session.scalars(select(Highlight)).all():
+        expected = highlight.highlight_id == "hl_blood_test_pending"
+        assert highlight.feature_flags["unresolved_task"] is expected
 
 
 def test_seed_highlight_provenance_resolves(db_session):

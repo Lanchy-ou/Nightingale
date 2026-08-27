@@ -12,9 +12,11 @@ function riskColor(h: Highlight): string {
 export default function GlancePanel({
   patientId,
   onViewSource,
+  onOpenTasks,
 }: {
   patientId: string;
   onViewSource: (p: ProvenanceResult) => void;
+  onOpenTasks?: () => void;
 }) {
   const [highlights, setHighlights] = useState<Highlight[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -72,6 +74,9 @@ export default function GlancePanel({
             <div className="highlight-reason">{h.risk_reason}</div>
             <div className="highlight-actions">
               <button className="source-action" onClick={() => viewSource(h.highlight_id)}>View source <span aria-hidden="true">→</span></button>
+              {h.feature_flags.unresolved_task && onOpenTasks && (
+                <button className="source-action" onClick={onOpenTasks}>Open Task</button>
+              )}
               <button className="feedback-action" onClick={() => setStatus(h.highlight_id, 'accepted')} aria-label={`Accept ${h.text}`} title="Accept">✓ Accept</button>
               <button className="feedback-action" onClick={() => setStatus(h.highlight_id, 'rejected')} aria-label={`Reject ${h.text}`} title="Reject">✗ Reject</button>
               <button className="feedback-action" onClick={() => setStatus(h.highlight_id, 'pinned')} aria-label={`Pin ${h.text}`} title="Pin">⌖ Pin</button>

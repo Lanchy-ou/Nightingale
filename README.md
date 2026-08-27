@@ -332,20 +332,35 @@ Patient View 不是完整医生视图的复制。
 - raw AI-scribed notes；
 - 其他不应暴露的内部 clinical reasoning。
 
-**实现（M6）**：patient 角色登录后进入独立的 `PatientViewPage`（`frontend/src/pages/PatientViewPage.tsx`），不是临床工作区的删减版。数据来自唯一只读聚合端点 `GET /api/patients/{id}/patient-view`（`backend/app/api/patient_view.py`），它是对 clinician 已确认的 `patient_instruction` Artifact 的**读取时确定性投影**，不调用 LLM、不新建第二份 summary、不复制内部 clinical note。
+**实现（M6 + D2）**：patient 角色登录后进入独立的 `PatientViewPage`（`frontend/src/pages/PatientViewPage.tsx`），不是临床工作区的删减版。唯一聚合端点 `GET /api/patients/{id}/patient-view`（`backend/app/api/patient_view.py`）只读取 clinician-authored `patient_instruction` 与本人 patient-visible assigned Task；不调用 LLM、不从 clinician note 猜行动、不复制内部 clinical content。
 
-页面只含四块：
+产品导航严格为四区：
 
-1. **你现在需要知道的事** —— 最新 `patient_instruction` 的 `instruction` / `follow_up` 安全投影；
-2. **你的下一步** —— 只显示明确存在的非空 `follow_up` 字段，不从自由文本推断；
-3. **医生给你的说明** —— 按 Event 时间倒序的全部 `patient_instruction`；
-4. **和 AI 助手说说你的情况** —— 复用 M4 `POST /patients/{id}/sessions`，只返回 patient-safe 形状，成功后刷新本页。
+1. **Today** —— 最新明确 patient instruction、next follow-up、当前未终结 Task；
+2. **Care Plan** —— `open | in_progress | reported_done | completed` 分组，患者只能 Start/Report done；`reported_done` 明确显示等待诊所确认；
+3. **Check-in** —— 提交前说明、sending/error/retry 状态，原始 patient conversation 先落库；不直接修改 note 或 Task；
+4. **Visit Summaries** —— 仅 patient-facing instructions，按 `Event.started_at` 倒序。
 
-服务端合同（由 `tests/test_patient_view.py` 锁定）：只投影 `author_role=clinician` 且 `author_id` 对应同 clinic clinician 用户的 `patient_instruction`；只复制 `content.instruction`（非空字符串）与 `content.follow_up`（可选非空字符串）两个字段。未知 key 即使被写入也不会透出；`current_summary` 取最新 Event（再按 `Artifact.created_at`、`artifact_id` 稳定破平）；`upcoming` 只接受非空 `follow_up`；`sessions` 只含本人 `raw_conversation` 的 `patient_ai_preconsult|patient_followup` Event，不返回/伪造 `status`。`read_patient_view` 只授予 patient；staff/clinician/admin 同 scope 返 403，跨 clinic/非本人返统一 404，匿名返 401。
+服务端合同由 `tests/test_patient_view.py` 与 `tests/test_patient_task_projection.py` 锁定：response schema `extra=forbid`，Task 只返回 `task_id/title/status/due_at/updated_at/reported_done_at/completed_at/patient_visible`；不返回 description、assignee、Artifact/Span、AuditLog、importance score 或 clinical risk reason。`sessions` 仍只含本人的 patient session Event。跨 clinic/非本人使用统一 404，匿名 401，同 scope 非 patient 403。
+
+### 4.4 Care Tasks（D2）
+
+Task 是一等实体，不是 Comment、Highlight 或 pending 文本。最小 API：
+
+```text
+POST /api/events/{event_id}/tasks
+GET  /api/patients/{patient_id}/tasks
+POST /api/tasks/{task_id}/transition
+GET  /api/tasks/{task_id}/provenance
+```
+
+Task 必须有 origin Event；Artifact/Span provenance 可选但必须成对并精确解析。transition 接收 `expected_status`，以原子条件更新实现 deterministic 409。患者只能推进本人、patient-visible、assigned-patient Task 到 `in_progress|reported_done`；只有 staff/clinician 可将 `reported_done` 确认为 `completed` 或取消未终结 Task。终态不可恢复。create/transition/conflict 进入 metadata-only AuditLog。
+
+`unresolved_task` 不再是 seed 常量：Task create/transition 的写路径按 Event/Artifact/Span 精确匹配 Task Highlight、重算 `feature_flags` 与 `importance_score`；Glance read path 仍只读预计算值。clinician/staff 共用 clinic shell 的 `Tasks` tab，并可从 Event 或当前 Artifact 创建 Task；没有 Nurse Workspace、假 appointment 或 assignment 状态。
 
 ---
 
-### 4.4 当前阶段：Clinician New Consult（Phase C）
+### 4.5 Clinician New Consult（Phase C）
 
 > 状态：**Phase C Complete（C1 Backend + C2 Clinician Workspace），M7 Performance + Core Hardening 亦已完成。** 当前进入 Phase D Product Completion，详见 `docs/phase_d_product_completion_plan.md`。
 
@@ -406,11 +421,11 @@ Phase C 两张任务卡均已完成：
 1. `Task_Card/C1_Task_Card.md`：Encounter/Transcript schema、clinician-only Doctor Consult endpoint、raw-first/AI/provenance/RBAC 测试；
 2. `Task_Card/C2_Task_Card.md`：三栏 Clinician Shell、New Consult UI、Clinic Visit/Timeline master-detail、Source Viewer、Comment/Revision/Audit 集成。
 
-**C2 实现**：clinician 登录后先进入 factual Clinic dashboard，可从左栏 `Clinic Patients` 搜索/切换患者；产品 shell 为左侧 identity/directory、中间 `Glance | Timeline | Notes`、右侧 Source/Comments/Versions/Audit。Demo role switcher 在 shell 外独立标记。patientId 与 role 都是 remount boundary，临床请求使用 AbortController/stale-response guard；patient 仍只挂载 `PatientViewPage`。
+**C2 + D2 实现**：clinician/staff 登录后进入同一 factual Clinic dashboard，可从左栏 `Clinic Patients` 搜索/切换患者；产品 shell 为左侧 identity/directory、中间 `Glance | Timeline | Notes | Tasks`、右侧 Source/Comments/Versions/Audit。staff 权限由 backend RBAC 裁剪且不能 New Consult。patientId、role 与 session 都是 remount boundary；patient 仍只挂载独立 `PatientViewPage`。
 
 `New Consult` 页面解析每行 `DOCTOR:`/`PATIENT:`，未知 speaker、空 text、未标记行 fail closed；preview 使用 0-based 连续 segment。提交过程保留 textarea，使用 stable consult/ingestion identity，成功后进入新 Event Detail，并明确显示 raw saved、AI generated 或 deterministic fallback。Timeline 只按非空相同 `encounter_id` 组成 `Clinic Visit`；Event Detail 将 Transcript/AI Summary/Clinician Note 与 Comment/Revision/Audit 保持为 Event 内 lifecycle，不制造新医疗 Event。
 
-明确后置：独立 Nurse Workspace、Nurse input、录音/ASR、外部 dataset ingestion、Doctor AI Assistant、Task、care-team assignment、正式认证和 Patient Experience 视觉重构。Phase C Exit Gate 已通过，下一步才进入 Glance warm-path P95 性能验收。
+仍明确后置：独立 Nurse Workspace、Nurse input、录音/ASR、外部 dataset ingestion、Doctor AI Assistant、复杂 care-team assignment、appointment/billing/notification。Phase C、M7、D1、D2 Exit Gate 已通过；D3/D4/D5 未开始。
 
 ---
 
@@ -621,6 +636,11 @@ Consult Glance View：
 - `test_revision_history.py`
 - `test_highlight_provenance.py`
 - `test_concurrent_edits.py`
+- `test_task_lifecycle.py`
+- `test_task_rbac_scope.py`
+- `test_task_provenance.py`
+- `test_patient_task_projection.py`
+- `test_task_glance_integration.py`
 
 Bonus：
 
@@ -686,7 +706,7 @@ Bonus：
 
 ```text
 backend/    FastAPI + SQLAlchemy + SQLite（app/ 代码，seed/ fixture，tests/ pytest）
-frontend/   Vite + React 18 + TS（ClinicianWorkspacePage 三栏 shell + staff/admin 最小 PatientPage + 独立 PatientViewPage）
+frontend/   Vite + React 18 + TS（clinician/staff 共用三栏 clinic shell + 独立四区 PatientViewPage）
 ```
 
 ### Demo data（canonical fixture）
@@ -706,6 +726,7 @@ frontend/   Vite + React 18 + TS（ClinicianWorkspacePage 三栏 shell + staff/a
 - 两个历史事件与当前 episode 形成真实跨年/跨月呼应；历史 highlight 低分（无 recency），自然让位于当前 episode。
 - C1 已为 2026-08-21 Nurse/Doctor Consult 增加同一显式 `encounter_id=enc_visit_20260821`，使 C2 可将它们显示为一个 `Clinic Visit`；底层仍是两个独立 Event，且不得按日期自动分组。
 - `recency` 由 seed 冻结的 `as_of=2026-08-26 12:00` 计算；`repeated_mentions` 按相同 `entity_key` 的 distinct Event 分组（`symptom:headache frequency` 跨 3 个事件、`task:blood test` 跨 2 个事件），新旧两侧分数都重算。
+- D2 fixture 另含真实 Task 故事：blood-test Task 当前 `open`；symptom-diary Task 保留 `open -> reported_done -> completed` 的 metadata-only AuditLog 历史。
 - **Synthea 决策：不采用**。手写 canonical fixture 已完全满足 Candidate Brief 的 Synthetic Data Only 要求，未引入 FHIR/Synthea 以避免反向重构内部模型。
 
 ### 安装与启动（M1/M2 已验证）
@@ -737,7 +758,7 @@ cd backend
 .venv/Scripts/python.exe -m pytest        # 覆盖第 12 节 required micro-tests
 ```
 
-> 当前进度：M1–M7、Phase C（C1+C2）与 **D1（Identity, Invite, Login and Session）** 已落地。后端全量为 **222 passed**，TypeScript/Vite production build 通过；warm-path Glance Layer A P95 ≈ 3.8 ms（`backend/docs/perf_baseline.md`）。剩余 Phase D 工作：D2 Task + Patient Experience、D3 Transcript Reliability、D4 evidence-bound Clinician Copilot、D5 TLS/at-rest 与跨角色集成。总方案见 `docs/phase_d_product_completion_plan.md`。
+> 当前进度：M1–M7、Phase C（C1+C2）、**D1 Identity** 与 **D2 Care Tasks + Patient Experience** 已落地。后端全量为 **245 passed**，TypeScript/Vite production build 通过；warm-path Glance Layer A P95 ≈ 3.8 ms（`backend/docs/perf_baseline.md`）。剩余 Phase D 工作：D3 Transcript Reliability、D4 evidence-bound Clinician Copilot、D5 TLS/at-rest 与跨角色集成。D3/D4/D5 尚未开始。
 
 架构约定（记录确切位置，随阶段更新）：
 
@@ -767,8 +788,8 @@ Admin 创建 clinic invite（一次性链接，不发送真实邮件）
 | 角色 | 邮箱 | 登录后进入 |
 |---|---|---|
 | Clinician | doctor@demo.clinic | 三栏 Clinician Workspace |
-| Staff | staff@demo.clinic | 最小临床 PatientPage |
-| Patient | alice@demo.clinic | 独立 Patient View（pat_001） |
+| Staff | staff@demo.clinic | 共用 clinic shell（RBAC 裁剪，含 Care Tasks） |
+| Patient | alice@demo.clinic | 独立四区 Patient View（pat_001） |
 | Admin | admin@demo.clinic | PatientPage + Invite 管理页（`/admin/invites`） |
 
 相关环境变量（后端）：

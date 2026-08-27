@@ -22,6 +22,7 @@ def add_audit(
     event_id: str | None = None,
     from_version: int | None = None,
     to_version: int | None = None,
+    details: dict | None = None,
 ) -> None:
     db.add(
         AuditLog(
@@ -36,6 +37,7 @@ def add_audit(
             clinic_id=clinic_id,
             patient_id=patient_id,
             event_id=event_id,
+            details=details,
             created_at=datetime.now(),
         )
     )

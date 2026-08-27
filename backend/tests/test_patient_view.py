@@ -1,9 +1,9 @@
-"""M6 required tests: Patient View server-side visibility contract.
+"""M6/D2 required tests: Patient View server-side visibility contract.
 
 Every assertion hits the API directly. The patient-view response must be a
 minimal, explicit projection of clinician-confirmed `patient_instruction`
-artifacts only — never internal clinician/staff notes, AI summaries, highlights,
-comments, provenance internals or scoring metadata.
+artifacts and patient-owned visible Tasks only — never internal clinician/staff
+notes, AI summaries, highlights, comments, provenance internals or scoring.
 """
 from __future__ import annotations
 
@@ -19,10 +19,8 @@ from seed import fixture
 
 PV_URL = f"/api/patients/{fixture.PATIENT_ID}/patient-view"
 
-TOP_KEYS = {"patient_id", "display_name", "current_summary", "instructions", "upcoming", "sessions"}
-SUMMARY_KEYS = {"source_artifact_id", "event_id", "event_time", "instruction", "follow_up"}
+TOP_KEYS = {"patient_id", "display_name", "today", "care_plan", "check_in", "visit_summaries"}
 INSTRUCTION_KEYS = {"artifact_id", "event_id", "event_time", "instruction", "follow_up"}
-UPCOMING_KEYS = {"source_artifact_id", "event_id", "event_time", "kind", "text"}
 SESSION_KEYS = {"event_id", "event_type", "started_at", "ended_at"}
 
 
@@ -77,26 +75,25 @@ def test_patient_own_view_200_and_exact_keys(patient_client):
     assert body["patient_id"] == fixture.PATIENT_ID
     assert body["display_name"] == fixture.PATIENT_NAME
 
-    cs = body["current_summary"]
-    assert cs is not None and set(cs.keys()) == SUMMARY_KEYS
+    assert set(body["today"]) == {"instruction", "tasks", "next_follow_up"}
+    cs = body["today"]["instruction"]
+    assert cs is not None and set(cs.keys()) == INSTRUCTION_KEYS
     # latest Event's instruction wins (Event 5 clinician_review, 08-26)
-    assert cs["source_artifact_id"] == fixture.ART_REVIEW_INSTRUCTION
+    assert cs["artifact_id"] == fixture.ART_REVIEW_INSTRUCTION
     assert cs["event_id"] == fixture.EVT_REVIEW_0826
 
-    assert len(body["instructions"]) == 2
-    for item in body["instructions"]:
+    assert len(body["visit_summaries"]["summaries"]) == 2
+    for item in body["visit_summaries"]["summaries"]:
         assert set(item.keys()) == INSTRUCTION_KEYS
 
-    assert len(body["upcoming"]) == 2
-    for item in body["upcoming"]:
-        assert set(item.keys()) == UPCOMING_KEYS
-        assert item["kind"] == "follow_up"
+    assert "blood test result" in body["today"]["next_follow_up"]
 
     # own AI sessions only (pre-consult + follow-up), newest first
-    assert len(body["sessions"]) == 2
-    for item in body["sessions"]:
+    sessions = body["check_in"]["sessions"]
+    assert len(sessions) == 2
+    for item in sessions:
         assert set(item.keys()) == SESSION_KEYS
-    assert [s["event_id"] for s in body["sessions"]] == [fixture.EVT_FU_0824, fixture.EVT_PRE_0820]
+    assert [s["event_id"] for s in sessions] == [fixture.EVT_FU_0824, fixture.EVT_PRE_0820]
 
 
 # --- field / content leak guards ------------------------------------------
@@ -220,7 +217,10 @@ def test_unknown_instruction_key_not_returned(patient_client, db_session):
     assert "LEAK_VALUE_SENTINEL" not in raw
 
     # The injected instruction IS returned, but with only allowed keys.
-    match = next(i for i in r.json()["instructions"] if i["artifact_id"] == "art_unknown_key")
+    match = next(
+        i for i in r.json()["visit_summaries"]["summaries"]
+        if i["artifact_id"] == "art_unknown_key"
+    )
     assert set(match.keys()) == INSTRUCTION_KEYS
     assert match["instruction"] == "Take your medication as prescribed."
     assert match["follow_up"] == "Return in one week."
@@ -253,7 +253,7 @@ def test_non_clinician_authored_instructions_are_excluded(patient_client, db_ses
     raw = json.dumps(body)
     for _, _, sentinel in cases:
         assert sentinel not in raw
-    assert body["current_summary"]["source_artifact_id"] == fixture.ART_REVIEW_INSTRUCTION
+    assert body["today"]["instruction"]["artifact_id"] == fixture.ART_REVIEW_INSTRUCTION
 
 
 # --- current_summary selection --------------------------------------------
@@ -276,8 +276,8 @@ def test_current_summary_latest_event_then_created_at_then_id(patient_client, db
 
     r = patient_client.get(PV_URL)
     assert r.status_code == 200
-    cs = r.json()["current_summary"]
-    assert cs["source_artifact_id"] == "art_created_later"
+    cs = r.json()["today"]["instruction"]
+    assert cs["artifact_id"] == "art_created_later"
     assert cs["instruction"] == "Even later instruction wins"
 
     # Same created_at => artifact_id tie-break (desc).
@@ -296,13 +296,12 @@ def test_current_summary_latest_event_then_created_at_then_id(patient_client, db
         artifact_id="art_tie_aaa2",
     )
     r = patient_client.get(PV_URL)
-    cs = r.json()["current_summary"]
-    assert cs["source_artifact_id"] == "art_tie_zzz"
+    cs = r.json()["today"]["instruction"]
+    assert cs["artifact_id"] == "art_tie_zzz"
 
 
-# --- upcoming only projects non-empty follow_up ---------------------------
-def test_upcoming_only_nonempty_follow_up(patient_client, db_session):
-    # No follow_up => not in upcoming.
+# --- Today projects only the latest non-empty follow_up -------------------
+def test_today_next_follow_up_only_projects_nonempty_string(patient_client, db_session):
     _add_instruction(db_session, fixture.EVT_REVIEW_0826, "Instruction without follow-up")
     # Non-string follow_up => not in upcoming.
     _add_artifact(
@@ -318,12 +317,10 @@ def test_upcoming_only_nonempty_follow_up(patient_client, db_session):
 
     r = patient_client.get(PV_URL)
     assert r.status_code == 200
-    texts = [u["text"] for u in r.json()["upcoming"]]
-    assert "Instruction without follow-up" not in texts
-    assert "123" not in texts
-    # fixture's two follow_up strings are present
-    assert any("blood test result" in t for t in texts)
-    assert any("few days" in t for t in texts)
+    follow_up = r.json()["today"]["next_follow_up"]
+    assert follow_up is not None
+    assert "123" not in follow_up
+    assert "blood test result" in follow_up
 
 
 # --- empty patient (no instruction) falls back to nothing -----------------
@@ -353,10 +350,10 @@ def test_no_instruction_returns_null_and_no_fallback(client, db_session):
         r = c.get(f"/api/patients/{fixture.PATIENT_B_ID}/patient-view")
     assert r.status_code == 200
     body = r.json()
-    assert body["current_summary"] is None
-    assert body["instructions"] == []
-    assert body["upcoming"] == []
-    assert body["sessions"] == []
+    assert body["today"] == {"instruction": None, "tasks": [], "next_follow_up": None}
+    assert body["care_plan"] == {"open": [], "in_progress": [], "reported_done": [], "completed": []}
+    assert body["visit_summaries"] == {"summaries": []}
+    assert body["check_in"] == {"sessions": []}
     assert "BEN_CLINICIAN_FALLBACK_SENTINEL" not in json.dumps(body)
 
 
@@ -374,7 +371,7 @@ def test_sessions_own_only_no_internal_fields(patient_client, db_session):
     )
     r = patient_client.get(PV_URL)
     assert r.status_code == 200
-    sessions = r.json()["sessions"]
+    sessions = r.json()["check_in"]["sessions"]
     assert [s["event_id"] for s in sessions] == [fixture.EVT_FU_0824, fixture.EVT_PRE_0820]
     for s in sessions:
         assert set(s.keys()) == SESSION_KEYS
@@ -443,5 +440,5 @@ def test_session_post_appears_in_next_patient_view(patient_client):
 
     rv = patient_client.get(PV_URL)
     assert rv.status_code == 200
-    session_ids = [s["event_id"] for s in rv.json()["sessions"]]
+    session_ids = [s["event_id"] for s in rv.json()["check_in"]["sessions"]]
     assert r.json()["event_id"] in session_ids

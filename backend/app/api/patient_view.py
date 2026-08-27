@@ -1,20 +1,22 @@
-"""M6 Patient View — read-only, minimal-information aggregate endpoint.
+"""M6/D2 Patient View — read-only, minimal-information aggregate endpoint.
 
 The patient never sees internal clinical workspace content. This endpoint is a
 deterministic *read-time projection* of clinician-confirmed `patient_instruction`
-artifacts only. It does NOT call an LLM, does NOT persist a second summary, and
-does NOT fall back to clinician/staff notes, transcripts, AI summaries,
-highlights or comments.
+artifacts plus patient-owned visible Tasks. It does NOT call an LLM, does NOT
+persist a second summary, and does NOT fall back to clinician/staff notes,
+transcripts, AI summaries, highlights or comments.
 
 Visibility contract (locked by tests/test_patient_view.py):
 - only `artifact_type == "patient_instruction"` with a non-empty string
   `content.instruction` is projected;
 - only `instruction` / `follow_up` fields are copied (explicit projection);
-- `current_summary` is the latest instruction by Event.started_at, then
+- `today.instruction` is the latest instruction by Event.started_at, then
   Artifact.created_at, then artifact_id;
-- `upcoming` contains only non-empty `content.follow_up` strings;
-- `sessions` lists only this patient's own AI-session Events (those with a
+- `today.next_follow_up` is the latest explicit non-empty follow_up;
+- `check_in.sessions` lists only this patient's own AI-session Events (those with a
   `raw_conversation` authored by this patient).
+- Task rows are allowlisted and never expose description, assignment,
+  provenance, audit, scoring or clinical risk metadata.
 """
 from __future__ import annotations
 
@@ -24,14 +26,19 @@ from sqlalchemy.orm import Session
 
 from ..authz import authorize, require_auth, resource_not_found
 from ..db import get_db
-from ..models import Artifact, Event, Patient, User
+from ..models import Artifact, Event, Patient, Task, User
 from ..role_context import RoleContext
 from ..schemas import (
     PatientViewInstruction,
+    PatientTaskOut,
+    PatientViewCarePlan,
+    PatientViewCheckIn,
     PatientViewOut,
     PatientViewSession,
     PatientViewSummary,
     PatientViewUpcoming,
+    PatientViewToday,
+    PatientViewVisitSummaries,
 )
 
 router = APIRouter(prefix="/api", tags=["patient-view"])
@@ -107,23 +114,11 @@ def get_patient_view(
         for a, e, instruction, follow_up in projected
     ]
 
-    upcoming = [
-        PatientViewUpcoming(
-            source_artifact_id=a.artifact_id,
-            event_id=e.event_id,
-            event_time=e.started_at,
-            kind="follow_up",
-            text=follow_up,
-        )
-        for a, e, instruction, follow_up in projected
-        if follow_up is not None
-    ]
-
-    current_summary = None
+    current_instruction = None
     if projected:
         a, e, instruction, follow_up = projected[0]
-        current_summary = PatientViewSummary(
-            source_artifact_id=a.artifact_id,
+        current_instruction = PatientViewInstruction(
+            artifact_id=a.artifact_id,
             event_id=e.event_id,
             event_time=e.started_at,
             instruction=instruction,
@@ -160,11 +155,50 @@ def get_patient_view(
     ]
     sessions.sort(key=lambda s: (s.started_at, s.event_id), reverse=True)
 
+    # --- patient-safe Tasks ------------------------------------------------
+    # Explicitly filter by all three patient authority conditions. No internal
+    # description, assignee metadata, provenance or audit reaches this schema.
+    patient_tasks = db.scalars(
+        select(Task).where(
+            Task.patient_id == patient_id,
+            Task.clinic_id == patient.clinic_id,
+            Task.patient_visible.is_(True),
+            Task.assigned_role == "patient",
+            Task.assigned_user_id == ctx.user_id,
+        )
+    ).all()
+    patient_tasks.sort(
+        key=lambda task: (
+            task.due_at is None,
+            task.due_at or task.created_at,
+            task.created_at,
+            task.task_id,
+        )
+    )
+    safe_tasks = [PatientTaskOut.model_validate(task) for task in patient_tasks]
+    by_status = {
+        status: [task for task in safe_tasks if task.status == status]
+        for status in ("open", "in_progress", "reported_done", "completed")
+    }
+    today_tasks = [
+        task
+        for task in safe_tasks
+        if task.status in {"open", "in_progress", "reported_done"}
+    ]
+    next_follow_up = next(
+        (follow_up for _a, _e, _instruction, follow_up in projected if follow_up),
+        None,
+    )
+
     return PatientViewOut(
         patient_id=patient.patient_id,
         display_name=patient.name,
-        current_summary=current_summary,
-        instructions=instructions,
-        upcoming=upcoming,
-        sessions=sessions,
+        today=PatientViewToday(
+            instruction=current_instruction,
+            tasks=today_tasks,
+            next_follow_up=next_follow_up,
+        ),
+        care_plan=PatientViewCarePlan(**by_status),
+        check_in=PatientViewCheckIn(sessions=sessions),
+        visit_summaries=PatientViewVisitSummaries(summaries=instructions),
     )

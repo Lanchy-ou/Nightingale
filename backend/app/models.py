@@ -1,8 +1,8 @@
-"""M1 data model. Only the five tables required for M1.
+"""Nightingale relational model.
 
-Span is NOT a table — it is expressed as a JSON pointer inside
-Artifact.provenance_pointer. Comment / Version / Task / AuditLog arrive in
-Phase 3 and are deliberately absent here.
+Span is NOT a table — it is expressed as a JSON pointer inside Artifact,
+Highlight and Task provenance fields. Task is a first-class D2 entity; its
+status history is metadata-only AuditLog data rather than a second authority.
 
 Field names intentionally leave room for later encryption of content columns
 (content / provenance_pointer are large JSON/Text fields).
@@ -61,7 +61,13 @@ AUDIT_ACTIONS = (
     "login_failure",
     "logout",
     "session_revoked",
+    # D2 care-task lifecycle (metadata-only status history).
+    "task_create",
+    "task_transition",
 )
+
+TASK_STATUSES = ("open", "in_progress", "reported_done", "completed", "cancelled")
+TASK_ASSIGNED_ROLES = ("patient", "staff", "clinician")
 
 
 class Clinic(Base):
@@ -221,7 +227,54 @@ class AuditLog(Base):
     clinic_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     patient_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     event_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Structured metadata only. D2 uses this for task status history; raw task
+    # descriptions and clinical content are never copied here.
+    details: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class Task(Base):
+    """First-class, provenance-linked care action (D2)."""
+
+    __tablename__ = "tasks"
+
+    task_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    patient_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("patients.patient_id"), nullable=False, index=True
+    )
+    clinic_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("clinics.clinic_id"), nullable=False, index=True
+    )
+    event_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("events.event_id"), nullable=False, index=True
+    )
+    source_artifact_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("artifacts.artifact_id"), nullable=True
+    )
+    source_span: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(String(4000), nullable=False)
+    assigned_role: Mapped[str] = mapped_column(String(32), nullable=False)
+    assigned_user_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("users.user_id"), nullable=True
+    )
+    patient_visible: Mapped[bool] = mapped_column(nullable=False, default=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    due_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_by: Mapped[str] = mapped_column(
+        String(64), ForeignKey("users.user_id"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    reported_done_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    completed_by: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("users.user_id"), nullable=True
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    cancelled_by: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("users.user_id"), nullable=True
+    )
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class Invite(Base):

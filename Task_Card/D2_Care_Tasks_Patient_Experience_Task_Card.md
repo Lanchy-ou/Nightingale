@@ -1,6 +1,6 @@
 # D2 任务卡 - Care Task Lifecycle + Patient Experience
 
-> 状态：**BLOCKED BY D1**
+> 状态：**COMPLETE（2026-08-27）**
 >
 > 对应总计划：`docs/phase_d_product_completion_plan.md`
 >
@@ -197,3 +197,17 @@ tests/test_task_glance_integration.py
 - patient 能直接完成临床确认事项 -> 停止；
 - Task 没有 Event 来源或跨 clinic scope -> 停止；
 - 为 Patient UI 方便而返回完整 Artifact/Audit -> 停止并改成显式 projection。
+
+---
+
+## 10. Implementation Evidence（2026-08-27）
+
+- 一等 `Task` 表、状态机与 API 已实现于 `backend/app/models.py`、`backend/app/tasks.py`、`backend/app/api/tasks.py`；`event_id` 必填，Artifact/Span 必须成对出现并通过严格 in-bounds resolver。
+- transition 使用 `UPDATE ... WHERE task_id=? AND status=?`；`expected_status` stale write 稳定返回 409。`completed|cancelled` 无出边，恢复只能新建 Task。
+- server-side 权限集中在 `backend/app/authz.py`；scope 先于 body/status/assignment/provenance 分支。patient 只可操作本人、patient-visible、assigned-patient Task，并且只能 Start/Report done。
+- `AuditLog.details` 是 Task 状态历史的唯一权威来源，只记录 metadata；create/transition/conflict 不复制 title/description 或原始临床内容。
+- `unresolved_task` 在 Task create/transition 写路径按 Event/Artifact/Span 精确匹配并重算 Highlight score；Glance read path 保持零计算、零 LLM。
+- Patient aggregate 已重构为 `Today | Care Plan | Check-in | Visit Summaries`，Task 使用显式 allowlist；staff 与 clinician 共用 clinic shell 的 Care Tasks 能力，没有新增 Nurse Workspace。
+- canonical fixture 包含一个当前 open blood-test Task，以及一个 `open -> reported_done -> completed` symptom-diary 故事（AuditLog 保留全历史）。
+- 新增 5 个 D2 测试文件、23 个测试；backend 全量 **245 passed**，frontend TypeScript/Vite production build 通过。本地浏览器 QA 覆盖 patient report done → clinic verify → Glance refresh 与 staff shell，console 无 error/warn。
+- 未实现且未冒充：appointment、lab order、billing、recurrence、notification provider、patient direct chat。D3/D4/D5 未开始。

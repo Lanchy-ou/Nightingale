@@ -20,6 +20,7 @@ from .api import (
     patient_view,
     patients,
     sources,
+    tasks,
 )
 from .db import get_db
 from .errors import error_response
@@ -42,6 +43,7 @@ app.include_router(notes.router)
 app.include_router(comments.router)
 app.include_router(audit.router)
 app.include_router(sources.router)
+app.include_router(tasks.router)
 
 
 @app.exception_handler(HTTPException)

@@ -536,3 +536,51 @@ mark { background: #fde047; padding: 0 2px; border-radius: 2px; }
 .sidebar-logout:hover { background: #f0f7f4; }
 .pv-logout { margin-left: auto; }
 .pv-header { display: flex; align-items: center; gap: 12px; }
+
+/* --- D2 Care Tasks + Patient Experience -------------------------------- */
+.pv-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin: 8px 0 14px; padding: 4px; border-radius: 11px; background: #eef4f1; }
+.pv-tabs button { padding: 8px 5px; border: 0; border-radius: 8px; color: #63766f; background: transparent; cursor: pointer; font-size: 11px; font-weight: 650; }
+.pv-tabs button.active { color: #fff; background: var(--clinical-brand); }
+.pv-notice { padding: 10px 11px; color: #52645e; background: #f1f7f4; border-radius: 8px; font-size: 12px; line-height: 1.5; }
+.pv-task-group + .pv-task-group { margin-top: 15px; padding-top: 12px; border-top: 1px solid #edf2f0; }
+.pv-task-group h3 { margin: 0 0 7px; color: #52645e; font-size: 12px; }
+.pv-task { margin: 7px 0; padding: 10px 11px; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; border: 1px solid #dbe6e1; border-radius: 10px; background: #fff; }
+.pv-task > div:first-child { min-width: 170px; margin-right: auto; display: flex; flex-direction: column; gap: 2px; }
+.pv-task strong { color: #20332d; font-size: 13px; }
+.pv-task small { color: #81918b; font-size: 10px; }
+.pv-task button { color: var(--clinical-brand); border-color: #b9d0c7; }
+.pv-task-reported_done { border-color: #f0d49a; background: #fffbeb; }
+.pv-task-completed { background: #f1f7f4; }
+.pv-waiting { color: #92400e; font-size: 11px; font-weight: 650; }
+.pv-complete { color: #166534; font-size: 11px; font-weight: 650; }
+
+.task-create-card, .clinical-task, .task-provenance { margin: 10px 0; padding: 14px; border: 1px solid var(--clinical-border); border-radius: 13px; background: #fff; }
+.task-create-card > h3, .event-task-composer h3 { margin: 0 0 9px; color: #20332d; font-size: 14px; }
+.task-create-card > select { width: 100%; padding: 8px 9px; border: 1px solid #cbdad4; border-radius: 8px; }
+.task-create-form { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.task-create-form label { display: flex; flex-direction: column; gap: 4px; color: #52645e; font-size: 11px; font-weight: 650; }
+.task-create-form input, .task-create-form textarea, .task-create-form select { box-sizing: border-box; width: 100%; padding: 8px 9px; border: 1px solid #cbdad4; border-radius: 8px; color: #20332d; background: #fff; }
+.task-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.task-source-line { display: flex; gap: 6px; flex-wrap: wrap; color: #71827c; font-size: 10px; }
+.task-source-line strong { color: var(--clinical-brand); }
+.clinical-task-list { display: grid; gap: 9px; }
+.clinical-task { margin: 0; }
+.clinical-task header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.clinical-task header h3 { margin: 4px 0 0; color: #20332d; font-size: 14px; }
+.clinical-task header small { color: #81918b; font-size: 10px; }
+.clinical-task > p { margin: 8px 0; color: #52645e; font-size: 11px; }
+.task-status { padding: 2px 6px; color: #315e50; background: #eaf5f1; border-radius: 999px; font-size: 9px; font-weight: 700; text-transform: uppercase; }
+.task-reported_done { border-color: #efd69f; }
+.task-completed { opacity: .78; }
+.task-meta { color: #81918b; font-size: 9px; overflow-wrap: anywhere; }
+.verification-callout { margin: 8px 0; padding: 7px 9px; color: #92400e; background: #fffbeb; border-radius: 7px; font-size: 10px; }
+.task-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 9px; }
+.task-actions button { padding: 5px 8px; color: #315e50; border: 1px solid #cbdad4; border-radius: 7px; background: #fff; cursor: pointer; font-size: 10px; }
+.task-provenance { display: flex; flex-direction: column; gap: 5px; color: #52645e; font-size: 11px; }
+.task-provenance blockquote { margin: 5px 0 0; padding: 9px 10px; border-left: 3px solid var(--clinical-brand); background: #eaf5f1; }
+.event-task-composer { margin-top: 18px; padding-top: 14px; border-top: 1px solid #e3ece8; }
+
+@media (max-width: 620px) {
+  .pv-tabs { grid-template-columns: repeat(2, 1fr); }
+  .task-form-row { grid-template-columns: 1fr; }
+}

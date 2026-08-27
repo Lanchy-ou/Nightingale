@@ -23,6 +23,8 @@ PERMISSIONS: dict[str, dict[str, bool]] = {
         "read_artifacts": True,
         "read_patient_view": True,
         "create_patient_session": True,
+        "read_tasks": True,
+        "transition_task": True,
     },
     "staff": {
         "read_patient": True,
@@ -39,6 +41,10 @@ PERMISSIONS: dict[str, dict[str, bool]] = {
         "list_clinic_patients": True,
         "comment": True,
         "highlight_status": True,
+        "read_tasks": True,
+        "read_task_provenance": True,
+        "create_task": True,
+        "transition_task": True,
     },
     "clinician": {
         "read_patient": True,
@@ -56,6 +62,10 @@ PERMISSIONS: dict[str, dict[str, bool]] = {
         "list_clinic_patients": True,
         "comment": True,
         "highlight_status": True,
+        "read_tasks": True,
+        "read_task_provenance": True,
+        "create_task": True,
+        "transition_task": True,
     },
     "admin": {
         # Read-only oversight, clinic-scoped. No note/comment/highlight writes.
@@ -71,6 +81,8 @@ PERMISSIONS: dict[str, dict[str, bool]] = {
         # D1: clinic-scoped invite administration (no cross-clinic invites).
         "create_invite": True,
         "list_invites": True,
+        "read_tasks": True,
+        "read_task_provenance": True,
     },
 }
 

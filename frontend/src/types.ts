@@ -124,6 +124,7 @@ export interface AuditLog {
   clinic_id: string;
   patient_id: string;
   event_id: string | null;
+  details: Record<string, string> | null;
   created_at: string;
 }
 
@@ -201,29 +202,13 @@ export interface RegisterResult {
   clinic_id: string;
 }
 
-// --- Patient View (M6) ---
-export interface PatientViewSummary {
-  source_artifact_id: string;
-  event_id: string;
-  event_time: string;
-  instruction: string;
-  follow_up: string | null;
-}
-
+// --- D2 Care Tasks + Patient Experience ---
 export interface PatientViewInstruction {
   artifact_id: string;
   event_id: string;
   event_time: string;
   instruction: string;
   follow_up: string | null;
-}
-
-export interface PatientViewUpcoming {
-  source_artifact_id: string;
-  event_id: string;
-  event_time: string;
-  kind: 'follow_up';
-  text: string;
 }
 
 export interface PatientViewSession {
@@ -233,11 +218,62 @@ export interface PatientViewSession {
   ended_at: string | null;
 }
 
+export type TaskStatus = 'open' | 'in_progress' | 'reported_done' | 'completed' | 'cancelled';
+
+export interface PatientTask {
+  task_id: string;
+  title: string;
+  status: TaskStatus;
+  due_at: string | null;
+  updated_at: string;
+  reported_done_at: string | null;
+  completed_at: string | null;
+  patient_visible: boolean;
+}
+
+export interface ClinicalTask extends PatientTask {
+  patient_id: string;
+  clinic_id: string;
+  event_id: string;
+  source_artifact_id: string | null;
+  source_span: Span | null;
+  description: string;
+  assigned_role: 'patient' | 'staff' | 'clinician';
+  assigned_user_id: string | null;
+  created_by: string;
+  created_at: string;
+  completed_by: string | null;
+  cancelled_by: string | null;
+  cancelled_at: string | null;
+}
+
+export interface TaskProvenance {
+  task_id: string;
+  event: {
+    event_id: string;
+    event_type: string;
+    started_at: string;
+    ended_at: string | null;
+  };
+  source_artifact: Artifact | null;
+  span: Span | null;
+  quote: string | null;
+}
+
 export interface PatientView {
   patient_id: string;
   display_name: string;
-  current_summary: PatientViewSummary | null;
-  instructions: PatientViewInstruction[];
-  upcoming: PatientViewUpcoming[];
-  sessions: PatientViewSession[];
+  today: {
+    instruction: PatientViewInstruction | null;
+    tasks: PatientTask[];
+    next_follow_up: string | null;
+  };
+  care_plan: {
+    open: PatientTask[];
+    in_progress: PatientTask[];
+    reported_done: PatientTask[];
+    completed: PatientTask[];
+  };
+  check_in: { sessions: PatientViewSession[] };
+  visit_summaries: { summaries: PatientViewInstruction[] };
 }

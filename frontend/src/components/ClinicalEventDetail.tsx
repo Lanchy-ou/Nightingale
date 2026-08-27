@@ -5,6 +5,7 @@ import type { Artifact, AuditLog, Comment, Event } from '../types';
 import ArtifactContent from './ArtifactContent';
 import ArtifactEdit from './ArtifactEdit';
 import NoteComposer from './NoteComposer';
+import { TaskCreateForm } from './ClinicalTasksView';
 
 export interface EventContextState {
   artifacts: Artifact[];
@@ -27,6 +28,7 @@ export default function ClinicalEventDetail({
   onBack,
   onChanged,
   onContextState,
+  role,
 }: {
   event: Event;
   initialArtifactId: string | null;
@@ -34,6 +36,7 @@ export default function ClinicalEventDetail({
   onBack: () => void;
   onChanged: () => void;
   onContextState: (state: EventContextState) => void;
+  role: string;
 }) {
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
   const [comments, setComments] = useState<Comment[]>([]);
@@ -182,7 +185,7 @@ export default function ClinicalEventDetail({
                 <div className="reader-scroll">
                   <ArtifactContent artifact={selectedArtifact} />
                 </div>
-                {selectedArtifact.artifact_type === 'clinician_note' && (
+                {selectedArtifact.artifact_type === `${role}_note` && (
                   <div className="reader-actions">
                     <ArtifactEdit artifact={selectedArtifact} onSaved={onChanged} />
                     <span className="muted">Version {selectedArtifact.version}</span>
@@ -196,9 +199,14 @@ export default function ClinicalEventDetail({
               <div className="empty-state"><h3>No artifacts</h3><p>Add a clinician note or ingest a source for this Event.</p></div>
             )}
             <div className="event-note-composer">
-              <h3>Formal assessment / plan</h3>
-              <p className="panel-help">Creates a separate clinician-owned note; it never overwrites AI or raw source.</p>
-              <NoteComposer eventId={event.event_id} artifactType="clinician_note" onSaved={onChanged} />
+              <h3>{role === 'clinician' ? 'Formal assessment / plan' : 'Staff supplement'}</h3>
+              <p className="panel-help">Creates a separate role-owned note; it never overwrites AI or raw source.</p>
+              <NoteComposer eventId={event.event_id} artifactType={role === 'clinician' ? 'clinician_note' : 'staff_note'} onSaved={onChanged} />
+            </div>
+            <div className="event-task-composer">
+              <h3>Create care Task</h3>
+              <p className="panel-help">Uses this Event and, when resolvable, the selected Artifact's exact first source span.</p>
+              <TaskCreateForm event={event} sourceArtifact={selectedArtifact} onCreated={onChanged} />
             </div>
           </div>
         </div>

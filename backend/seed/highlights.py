@@ -2,7 +2,8 @@
 
 M5 contract (does NOT adjust frozen weights):
 - explicit `as_of` computes `recency` (never hand-filled);
-- `unresolved_task` is always False (no Task/status model);
+- `unresolved_task` comes from a real, non-terminal Task with matching
+  Event/source provenance;
 - `repeated_mentions` is computed from the SAME exact `entity_key` appearing in
   >=2 distinct Events (both sides recomputed);
 - quotes anchor via deterministic string matching; a failed match drops the
@@ -17,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from app.highlights import compute_score, locate_span
 from app.models import Artifact, Event, Highlight
+from app.tasks import unresolved_task_exists
 
 from . import fixture
 
@@ -68,7 +70,13 @@ def generate_highlights(db: Session) -> list[str]:
         flags = {
             "recency": recency,
             "explicit_risk": bool(cand["feature_flags"].get("explicit_risk")),
-            "unresolved_task": False,
+            "unresolved_task": unresolved_task_exists(
+                db,
+                patient_id=fixture.PATIENT_ID,
+                event_id=event.event_id,
+                source_artifact_id=cand["source_artifact_id"],
+                source_span=span,
+            ),
             "clinician_confirmed": False,
             "symptom_change": bool(cand["feature_flags"].get("symptom_change")),
             "repeated_mentions": repeated,

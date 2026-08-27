@@ -24,6 +24,7 @@ from app.models import (
     Highlight,
     Invite,
     Patient,
+    Task,
     User,
     UserCredential,
 )
@@ -68,6 +69,7 @@ def seed(db: Session) -> None:
     db.execute(delete(Comment))
     db.execute(delete(ArtifactVersion))
     db.execute(delete(Highlight))
+    db.execute(delete(Task))
     db.execute(delete(Artifact))
     db.execute(delete(Event))
     db.execute(delete(User))
@@ -80,6 +82,8 @@ def seed(db: Session) -> None:
     db.add_all(fixture.build_credentials())
     db.add_all(fixture.build_events())
     db.add_all(fixture.build_artifacts())
+    db.add_all(fixture.build_tasks())
+    db.add_all(fixture.build_task_audits())
     db.commit()
 
     generate_highlights(db)

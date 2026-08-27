@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from app.models import Artifact, Clinic, Event, Patient, User, UserCredential
+from app.models import Artifact, AuditLog, Clinic, Event, Patient, Task, User, UserCredential
 from app.auth_security import hash_password
 
 # ---------------------------------------------------------------------------
@@ -92,6 +92,9 @@ ART_FU_SUMMARY = "art_fu_summary"
 ART_REVIEW_NOTE = "art_review_note"
 ART_REVIEW_INSTRUCTION = "art_review_instruction"
 
+TASK_BLOOD_TEST = "task_blood_test"
+TASK_SYMPTOM_DIARY = "task_symptom_diary"
+
 # ---------------------------------------------------------------------------
 # Canonical facts (single source of truth)
 # ---------------------------------------------------------------------------
@@ -103,6 +106,7 @@ FACTS = {
     "blood_test": "ordered 2026-08-21, still pending as of 2026-08-26",
     "follow_up": "scheduled during 2026-08-21 doctor consult",
     "review_0826": "clinician review 2026-08-26: severity improved to ~3/10, frequency not re-assessed, nausea persists, continue propranolol 20 mg daily, chase blood test result",
+    "care_tasks": "blood test task remains open; symptom diary task created 2026-08-21, patient reported done 2026-08-24, clinic verified completed 2026-08-26",
 }
 
 # Hand-written C1/C2 paste demo. It adds no facts beyond FACTS and already uses
@@ -520,5 +524,115 @@ def build_artifacts() -> list[Artifact]:
                 "follow_up": "Follow-up scheduled after the blood test result returns.",
             },
             created_at=datetime(2026, 8, 26, 9, 35), version=1, provenance_pointer=None,
+        ),
+    ]
+
+
+def build_tasks() -> list[Task]:
+    """D2 canonical longitudinal actions; descriptions remain clinic-internal."""
+    return [
+        Task(
+            task_id=TASK_BLOOD_TEST,
+            patient_id=PATIENT_ID,
+            clinic_id=CLINIC_ID,
+            event_id=EVT_DOC_0821,
+            source_artifact_id=ART_DOC_TRANSCRIPT,
+            source_span={"kind": "segment", "index": 16, "offset": [0, 61]},
+            title="Complete the blood test",
+            description="Confirm the patient attends for the ordered blood test; result review remains a separate clinic action.",
+            assigned_role="patient",
+            assigned_user_id=USER_PATIENT_ID,
+            patient_visible=True,
+            status="open",
+            due_at=datetime(2026, 8, 28, 17, 0),
+            created_by=USER_CLINICIAN_ID,
+            created_at=datetime(2026, 8, 21, 10, 56),
+            updated_at=datetime(2026, 8, 21, 10, 56),
+            reported_done_at=None,
+            completed_by=None,
+            completed_at=None,
+            cancelled_by=None,
+            cancelled_at=None,
+        ),
+        Task(
+            task_id=TASK_SYMPTOM_DIARY,
+            patient_id=PATIENT_ID,
+            clinic_id=CLINIC_ID,
+            event_id=EVT_DOC_0821,
+            source_artifact_id=ART_DOC_INSTRUCTION,
+            source_span={"kind": "section", "index": "instruction", "offset": [110, 160]},
+            title="Keep a headache and nausea symptom diary",
+            description="Review diary pattern at the next clinical follow-up.",
+            assigned_role="patient",
+            assigned_user_id=USER_PATIENT_ID,
+            patient_visible=True,
+            status="completed",
+            due_at=datetime(2026, 8, 24, 18, 0),
+            created_by=USER_CLINICIAN_ID,
+            created_at=datetime(2026, 8, 21, 10, 57),
+            updated_at=datetime(2026, 8, 26, 9, 40),
+            reported_done_at=datetime(2026, 8, 24, 11, 20),
+            completed_by=USER_CLINICIAN_ID,
+            completed_at=datetime(2026, 8, 26, 9, 40),
+            cancelled_by=None,
+            cancelled_at=None,
+        ),
+    ]
+
+
+def build_task_audits() -> list[AuditLog]:
+    """AuditLog is the single authoritative seeded Task status history."""
+    return [
+        AuditLog(
+            audit_id="aud_task_diary_create",
+            actor_id=USER_CLINICIAN_ID,
+            actor_role="clinician",
+            action="task_create",
+            target_type="task",
+            target_id=TASK_SYMPTOM_DIARY,
+            clinic_id=CLINIC_ID,
+            patient_id=PATIENT_ID,
+            event_id=EVT_DOC_0821,
+            details={"status": "open"},
+            created_at=datetime(2026, 8, 21, 10, 57),
+        ),
+        AuditLog(
+            audit_id="aud_task_diary_reported",
+            actor_id=USER_PATIENT_ID,
+            actor_role="patient",
+            action="task_transition",
+            target_type="task",
+            target_id=TASK_SYMPTOM_DIARY,
+            clinic_id=CLINIC_ID,
+            patient_id=PATIENT_ID,
+            event_id=EVT_DOC_0821,
+            details={"from_status": "open", "to_status": "reported_done"},
+            created_at=datetime(2026, 8, 24, 11, 20),
+        ),
+        AuditLog(
+            audit_id="aud_task_diary_completed",
+            actor_id=USER_CLINICIAN_ID,
+            actor_role="clinician",
+            action="task_transition",
+            target_type="task",
+            target_id=TASK_SYMPTOM_DIARY,
+            clinic_id=CLINIC_ID,
+            patient_id=PATIENT_ID,
+            event_id=EVT_DOC_0821,
+            details={"from_status": "reported_done", "to_status": "completed"},
+            created_at=datetime(2026, 8, 26, 9, 40),
+        ),
+        AuditLog(
+            audit_id="aud_task_blood_create",
+            actor_id=USER_CLINICIAN_ID,
+            actor_role="clinician",
+            action="task_create",
+            target_type="task",
+            target_id=TASK_BLOOD_TEST,
+            clinic_id=CLINIC_ID,
+            patient_id=PATIENT_ID,
+            event_id=EVT_DOC_0821,
+            details={"status": "open"},
+            created_at=datetime(2026, 8, 21, 10, 56),
         ),
     ]

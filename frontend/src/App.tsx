@@ -46,7 +46,7 @@ function DemoApp() {
       <div className="product-root" key={roleKey}>
         {selected.role === 'patient' ? (
           <PatientViewPage patientId={PATIENT_ID} roleKey={roleKey} />
-        ) : selected.role === 'clinician' ? (
+        ) : selected.role === 'clinician' || selected.role === 'staff' ? (
           <ClinicianWorkspacePage roleKey={roleKey} />
         ) : (
           <PatientPage patientId={PATIENT_ID} roleKey={roleKey} role={selected.role} />
@@ -155,7 +155,17 @@ function SessionApp() {
     );
   }
 
-  // staff | admin: retained minimal clinical demo path (C2 contract).
+  if (role === 'staff') {
+    return (
+      <div className="app" key={productKey}>
+        <div className="product-root">
+          <ClinicianWorkspacePage roleKey={productKey} onLogout={logout} />
+        </div>
+      </div>
+    );
+  }
+
+  // Admin retains the clinic-scoped oversight/invite path.
   if (role === 'admin' && path.startsWith('/admin/invites')) {
     return (
       <div className="app" key={productKey}>

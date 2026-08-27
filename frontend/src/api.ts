@@ -13,9 +13,13 @@ import type {
   InviteInfo,
   InvitePreview,
   Patient,
+  ClinicalTask,
+  PatientTask,
   PatientView,
   ProvenanceResult,
   RegisterResult,
+  Span,
+  TaskProvenance,
 } from './types';
 
 // ---------------------------------------------------------------------------
@@ -156,6 +160,26 @@ export const api = {
   getClinicPatients: (signal?: AbortSignal) => get<Patient[]>(`/api/patients`, signal),
   getPatient: (id: string, signal?: AbortSignal) => get<Patient>(`/api/patients/${id}`, signal),
   getPatientView: (id: string) => get<PatientView>(`/api/patients/${id}/patient-view`),
+  getTasks: (id: string, signal?: AbortSignal) => get<ClinicalTask[]>(`/api/patients/${id}/tasks`, signal),
+  createTask: (
+    eventId: string,
+    payload: {
+      title: string;
+      description: string;
+      assigned_role: 'patient' | 'staff' | 'clinician';
+      assigned_user_id: string | null;
+      patient_visible: boolean;
+      due_at: string | null;
+      source_artifact_id: string | null;
+      source_span: Span | null;
+    },
+  ) => post<ClinicalTask>(`/api/events/${eventId}/tasks`, payload),
+  transitionTask: (taskId: string, expectedStatus: string, status: string) =>
+    post<ClinicalTask | PatientTask>(`/api/tasks/${taskId}/transition`, {
+      expected_status: expectedStatus,
+      status,
+    }),
+  getTaskProvenance: (taskId: string) => get<TaskProvenance>(`/api/tasks/${taskId}/provenance`),
   getEvents: (id: string, signal?: AbortSignal) => get<Event[]>(`/api/patients/${id}/events`, signal),
   getArtifacts: (eventId: string, signal?: AbortSignal) => get<Artifact[]>(`/api/events/${eventId}/artifacts`, signal),
   getGlance: (patientId: string, signal?: AbortSignal) => get<{ highlights: Highlight[] }>(`/api/patients/${patientId}/glance`, signal),
