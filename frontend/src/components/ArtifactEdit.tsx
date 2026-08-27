@@ -37,7 +37,7 @@ export default function ArtifactEdit({
       onSaved();
     } catch (e: any) {
       if (e instanceof ApiError && e.status === 409) {
-        setError(`他人已修改（当前 v${e.body?.error?.current_version}），刷新后重试`);
+        setError(`Another user already updated this artifact (current v${e.body?.error?.current_version}). Refresh and retry.`);
         onSaved(); // refresh to pick up the latest version
       } else {
         setError(String(e.message ?? e));

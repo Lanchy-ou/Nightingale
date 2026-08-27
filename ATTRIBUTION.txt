@@ -79,3 +79,13 @@ Declared in `frontend/package.json`:
 - The `anthropic` Python SDK is a declared backend dependency (see above).
 - Synthetic demo data is authored in-repo (`backend/seed/fixture.py`); no external
   dataset is used.
+- The requirements source `2026 72 Hour Build_ Nightingale Candidate Brief 2.pdf`
+  was supplied for this project by Nightingale. It is retained as a requirements
+  input; no public redistribution license is asserted by this repository.
+- The Technical Brief uses only ReportLab built-in Helvetica/Helvetica-Bold and
+  code-drawn vector shapes. It contains no external image, icon, font, or stock
+  asset.
+- D3 bilingual/Chinese cases are hand-authored synthetic adversarial test inputs,
+  not an external clinical dataset and not real patient data.
+- No Caddy binary, model weights, Provider key, private database/backup, local CA
+  private key, or raw recording is included in tracked submission files.

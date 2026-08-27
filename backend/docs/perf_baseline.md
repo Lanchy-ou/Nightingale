@@ -1,6 +1,6 @@
 # Glance warm-path performance baseline
 
-> Generated 2026-08-28T00:21:06 by `backend/scripts/measure_glance.py`.
+> Generated 2026-08-28T03:01:15 by `backend/scripts/measure_glance.py`.
 
 ## Environment
 
@@ -24,24 +24,24 @@
 
 | Endpoint | P50 | P95 | Mean | Max |
 |---|---|---|---|---|
-| glance | 3.814 | 4.429 | 3.868 | 4.668 |
-| events | 6.374 | 7.096 | 6.416 | 7.523 |
-| patient-view | 5.284 | 6.078 | 5.32 | 6.672 |
+| glance | 4.026 | 4.626 | 4.068 | 7.148 |
+| events | 7.289 | 8.03 | 7.313 | 8.373 |
+| patient-view | 5.867 | 6.521 | 5.822 | 6.87 |
 
 ### Layer B — HTTP round trip (local)
 
 | Endpoint | P50 | P95 | Mean | Max |
 |---|---|---|---|---|
-| glance | 3.872 | 4.447 | 3.877 | 4.994 |
-| events | 6.335 | 7.025 | 6.386 | 7.335 |
-| patient-view | 5.394 | 6.094 | 5.392 | 6.324 |
+| glance | 4.402 | 5.115 | 4.381 | 5.484 |
+| events | 7.155 | 8.189 | 7.241 | 9.488 |
+| patient-view | 5.727 | 6.434 | 5.712 | 6.65 |
 
 ## E2 / E3 Glance comparison
 
 | Run | Layer A Glance P50 | Layer A Glance P95 |
 |---|---:|---:|
 | E2 baseline (2026-08-27) | 3.978 | 4.515 |
-| E3 (current run) | 3.814 | 4.429 |
+| E3 (current run) | 4.026 | 4.626 |
 
 These are separate local runs. The difference is reported, not
 attributed to E3 as a causal performance effect. Both remain far

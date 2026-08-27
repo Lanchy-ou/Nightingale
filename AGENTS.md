@@ -948,7 +948,7 @@ Permanent Phase D decisions:
 
 ---
 
-## 24. D1 Implementation Status（2026-08-27 审查修复后重验）
+## 24. D1 Implementation Status (re-verified after review fixes, 2026-08-27)
 
 D1 (Identity, Invite, Login and Session) is complete. D2 is the next task card. Conventions added:
 
@@ -967,7 +967,7 @@ D1 (Identity, Invite, Login and Session) is complete. D2 is the next task card. 
 
 ---
 
-## 25. D2 Implementation Status（2026-08-27 审查修复后重验）
+## 25. D2 Implementation Status (re-verified after review fixes, 2026-08-27)
 
 D2 (Care Task Lifecycle + Patient Experience) is complete. At D2 close, D3/D4/D5 remained untouched; D3 has since completed under the separate authorization recorded in §26.
 
@@ -1004,7 +1004,7 @@ D3 (Transcript Import, Normalization and Reliability Evaluation) is complete. D4
 
 ---
 
-## 27. D4 Implementation Status（2026-08-27 审查阻断项修复后重验）
+## 27. D4 Implementation Status (re-verified after blocking review fixes, 2026-08-27)
 
 D4 (Evidence-Bound Clinician Copilot) is complete. D5 automated security + owner-revised product-journey gate is complete (see §28).
 
@@ -1093,3 +1093,14 @@ The bounded Patient Multi-turn Check-in is complete after an independent adversa
 - **Visibility/RBAC**: active, awaiting-confirmation and abandoned drafts are patient-only and hidden from every generic Event read/write path. Submitted and safety-escalated Events are readable only within clinic scope. Admin receives no clinical authoring capability.
 - **Frontend**: Patient View supports start/resume, free answer/supplement/correction/skip/no-more, finish, abandon, confirmation, history and persistent safety guidance. Synchronous in-flight and request-generation guards prevent rapid double actions and stale identity-boundary updates. Clinical Event Detail separates patient originals, AI messages, AI Summary, safety state and exact sources.
 - **Verification**: backend 509 passed / 2 explicit local-ASR-input skips; 29 Check-in tests; security/integration 22 passed; frontend three Node checks and 59-module production build passed; D3/D4, SQLCipher init/backup/restore, Caddy validation, dependencies, secret scan and diff check passed. Current DeepSeek smoke verified the live turn only; strict Summary validation fell back, so the complete live journey is `LIVE_NOT_VERIFIED_CURRENT`.
+
+---
+
+## 33. E5 Final Submission Package Status (2026-08-28)
+
+E5 has completed every repository-local packaging action that does not require owner identity, media, external sharing, or recipient-account access. The English README, attribution, 3-page rendered Technical Brief, dated evidence manifest, Demo Video runbook, email draft, security/performance evidence, and final verification commands are present.
+
+- **Capability freeze**: E1/E2/E3 and Patient Multi-turn Check-in are `IMPLEMENTED_AND_VERIFIED`; E4 Voice is `IMPLEMENTED_WITH_LIMITS`; E5 is not complete while owner inputs are absent.
+- **Permanent non-claim**: no final Demo Video exists in the workspace, so E5 and the overall submission are `NOT SUBMISSION READY`. Browser runtime QA and a runbook are not video evidence.
+- **Access boundary**: the configured GitHub URL returned 404 to an unauthenticated check. Do not change repository visibility, publish, upload/share files, or send email without a separate owner instruction.
+- **NEEDS_OWNER_INPUT**: exact submitter name; actual 6–9 minute product-mode Demo Video and end-to-end playback; recipient-accessible repository/zip and video delivery; final attachment/link check from the intended submitter context; separate authorization for external actions.

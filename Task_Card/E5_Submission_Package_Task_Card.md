@@ -1,36 +1,28 @@
 # E5 Task Card — Final Submission Package
 
-> 状态：**PLANNED — IMPLEMENTATION NOT STARTED**
+> Status: **IN PROGRESS — EXECUTABLE GATES COMPLETE; OWNER INPUTS REMAIN (2026-08-28)**
 >
-> 对应总计划：`docs/phase_e_capability_enhancement_plan.md`
+> Baseline: merged Patient Multi-turn Check-in on `main` (`25a1dc9` before E5 documentation changes)
 >
-> 依赖：E1–E4 的最终提交范围、状态与观察证据已经冻结。
+> E5 adds no business functionality and performs no last-minute refactor.
 
----
+## 1. Objective
 
-## 1. 目标
+Package the verified Nightingale synthetic-data prototype into a concise, reproducible submission without converting expected behavior, historical evidence, mock output, fallback output, or missing manual artifacts into observed results.
 
-把 Nightingale 的实际实现收口为完整、简洁、可复现、无夸大声明的候选提交包：
+Required deliverables:
 
-```text
-working repository
-+ automated tests
-+ README
-+ 2-3 page Technical Brief
-+ ATTRIBUTION.txt
-+ Demo Video
-+ final evidence manifest
-```
+- English README aligned with the current implementation;
+- strict 2–3 page Technical Brief PDF with rendered-page inspection;
+- complete `ATTRIBUTION.txt`;
+- dated final evidence manifest;
+- 6–9 minute real Demo Video plus playback/access verification;
+- formal submission-email draft and final attachment/link checklist;
+- final repository hygiene, security, build, test, and access checks.
 
-E5 不新增业务功能，不在提交文档中替未完成实现“补故事”。
+## 2. Frozen capability labels
 
----
-
-## 2. 开工 Decision Gates
-
-### DG1 — Submission scope freeze
-
-逐项标记：
+Every E1–E4 capability and Patient Multi-turn Check-in must use exactly one label:
 
 ```text
 IMPLEMENTED_AND_VERIFIED
@@ -39,283 +31,129 @@ DESIGN_ONLY
 NOT_INCLUDED
 ```
 
-特别冻结：
+E5 itself is not complete while a required owner-supplied identity, link, or independently recorded/played video is absent.
 
-- E1 Nurse/Admin 的实际完成范围；
-- E2 Self-Learning 是否达到 future similar candidate；
-- E3 Data Decay 是否只有 policy、是否含 shadow archive；
-- E4 是 interface/mock、local ASR 还是 live provider；
-- DeepSeek/live provider 当前是否实测；
-- 哪些结果来自 synthetic fixture、mock、fallback、local deployment。
+## 3. Identity and external-action gate
 
-### DG2 — Candidate identity
+Before calling the package Submission Ready, confirm the submitter's exact name, final repository/zip link, Technical Brief attachment, Demo Video link and playback, email recipients/subject, and attachment access. Do not leave `<Your Name>`, fake URLs, test links, or invented evidence. Missing values are `NEEDS_OWNER_INPUT`.
 
-确认提交者姓名、repo/zip link、Video link 与邮件字段。不得保留 `<Your Name>`、placeholder、Group XX 或测试地址。
+E5 is not authorized to send email, upload/share files, publish a repository, or change access/visibility. Those actions require a separate owner instruction.
 
-### DG3 — Final claim vocabulary
+## 4. Claim boundary
 
-允许：
+Allowed claims must match current evidence:
 
-- synthetic-data product Demo；
-- server-enforced RBAC；
-- locally verified TLS/SQLCipher；
-- observed local P95；
-- mock/fallback/live 分层结果；
-- controlled synthetic Self-Learning/Data Decay evidence。
+- synthetic-data prototype, not a production medical system;
+- server-side RBAC and exact clinic/patient scope;
+- explicit Event → Artifact → Span provenance;
+- local synthetic performance only;
+- current local TLS/SQLCipher results only;
+- mock, DeepSeek, deterministic fallback, ASR, and `NOT_RUN` results reported separately;
+- Voice described only to the extent currently observed;
+- Patient Multi-turn Check-in described as bounded non-emergency information collection;
+- high-risk rules are transparent rules, not formal medical triage;
+- self-learning is bounded interaction weighting, not clinical learning;
+- data decay is a verified shadow-payload policy, not demonstrated total storage savings.
 
-禁止：
+Forbidden claims include production readiness, clinical validation, formal triage, clinic notification, production capacity, regulatory compliance, external ASR privacy, diarization, real-clinician usability, or a successful full live Provider journey without matching evidence.
 
-- production medical system；
-- production capacity；
-- real clinician usability validated；
-- real patient data；
-- live AI/ASR（无当前证据）；
-- storage savings（shadow copy 仍保留）；
-- learned clinical correctness（仅 synthetic interaction test）。
+## 5. File allowlist
 
----
-
-## 3. Repository Gate
-
-最终仓库必须：
-
-- working tree clean；
-- clear, scoped commit history；
-- 无 secret、token、key、`.env.local`、private DB、recording 或 unlicensed dataset；
-- `.gitignore` 覆盖 runtime/private artifacts；
-- README 命令从 clean environment 可复现；
-- Task Card/AGENTS/README 状态与实现一致；
-- 没有 stale file reference、missing test 或不存在的 Bonus claim；
-- `git diff --check`、secret scan、dependency/license check 通过。
-
-任何 merge/rebase/push/tag/remote upload 需要 owner 明确授权；E5 文档完成不自动授权发送或发布。
-
----
-
-## 4. Automated Evidence Manifest
-
-新增 dated final evidence，例如：
+E5 may update or add only final documentation/evidence/packaging files and mechanical English-language cleanup:
 
 ```text
-docs/final_submission_evidence_2026-08-28.md
+README.md
+AGENTS.md
+ATTRIBUTION.txt
+backend/requirements.txt
+backend/docs/perf_baseline.md
+Task_Card/E5_Submission_Package_Task_Card.md
+Task_Card/*.md
+docs/*.md
+Nightingale_72H_Development_Plan.md
+frontend/src/components/ArtifactEdit.tsx
+output/pdf/Nightingale_Technical_Brief.pdf
+tmp/pdfs/*
 ```
 
-记录实际命令、环境和结果：
+Any source-code or business-behavior change is a stop condition.
 
-- commit hash / working tree；
-- backend test count；
-- required micro-tests；
-- E1 role tests；
-- E2 Self-Learning bonus test；
-- E3 Data Decay/archive tests；
-- E4 Voice tests（若纳入）；
-- D3 corpus/runtime results 与 hashes；
-- D4 Copilot frozen eval；
-- frontend production build；
-- Glance warm-path P50/P95；
-- D5 SQLCipher/TLS/security/integration evidence；
-- secret/dependency/license scan；
-- Demo fixture IDs 与 synthetic status。
+## 6. README gate
 
-命令失败、NOT_RUN、mock、fallback 与 live 必须原样保留，不选择性隐藏。
+README must state actual setup, architecture, Candidate Brief mapping, RBAC, redaction, the single `LLMClient` exit, Provider/fallback status, provenance, performance, Voice, Check-in, known limits, and final evidence paths.
 
----
+## 7. Technical Brief PDF gate
 
-## 5. README Final Pass
+The PDF must be exactly 2–3 pages and contain:
 
-PDF 所需内容必须容易找到：
+1. problem framing, user journeys, architecture diagram, and trust boundaries;
+2. comprehensive schema linking Brief `Entry` to Event/Artifact, Comments, Versions, Highlights, Provenance, AI-scribed notes, Tasks, identity, E2, E3, E4, and Check-in;
+3. measured evidence, security/Provider boundaries, trade-offs, status table, and known limits.
 
-- project goal 与 three views；
-- setup/install/run；
-- demo accounts 与 synthetic warning；
-- automated tests；
-- architecture；
-- where redaction happens；
-- how server-side RBAC works；
-- AI provider/fallback behavior；
-- provenance chain；
-- performance measurement；
-- E2/E3/E4 actual status 与限制；
-- D5 secure Demo reproduction；
-- known non-goals/trade-offs。
+All pages must be rendered to images and visually inspected. No clipped text, overflow, broken characters, or unsupported numbers are allowed.
 
-README 不代替 2–3 page Technical Brief，不应继续无限扩张。长实现细节可链接到 docs/task cards。
+## 8. Demo Video gate
 
----
+The real 6–9 minute video must use product session mode, not the demo role selector. It must show login/context, Glance in under 10 seconds, exact Highlight source, longitudinal Timeline, Patient Multi-turn Check-in, clinician Check-in review and exact message source, Task authority, collaboration/audit, and explicit known limits.
 
-## 6. 2–3 Page Technical Brief
+The file must be played from start to finish. Record duration, resolution, audio intelligibility, and link access. A script, storyboard, screenshots, seed rows, or browser QA is not a substitute for an actual video.
 
-最终 PDF 必须严格 2–3 页，建议 3 页：
+## 9. Attribution gate
 
-### Page 1 — Product and Architecture
+List all actual libraries, deployment tools, Providers, models, data/requirement sources, and licenses. Do not attribute unused experiments as runtime components. Confirm that no model weights, Caddy binary, secret, private database, raw recording, real patient data, or unlicensed asset is committed.
 
-- clinical problem；
-- Glance / Timeline / Patient View；
-- architecture diagram；
-- Brief Entry -> Event + Artifacts mapping；
-- Patient -> Event -> Artifact -> Span；
-- Nurse/Clinician/Admin authority boundary。
+## 10. Final evidence manifest
 
-### Page 2 — Collaboration, AI, Provenance, Security
+Create `docs/final_submission_evidence_2026-08-28.md` containing final local/remote commit ids, environment, exact commands and counts, D3/D4 output, E1–E4/Check-in status, SQLCipher/Caddy/performance/dependency/security results, Provider/ASR separation, PDF rendering, video/access status, failures/skips, limitations, and `NEEDS_OWNER_INPUT`.
 
-- AI-scribed notes 与 human notes 分离；
-- Highlight -> Summary -> Raw Source -> Exact Span；
-- Comments/Versions/Revert/Audit；
-- Task lifecycle；
-- PHI-before-LLM；
-- server-side RBAC；
-- TLS/encryption at rest；
-- warm-path P95 方法与限制。
-
-### Page 3 — Capability Enhancement and Trade-offs
-
-- Self-Learning feedback -> future similar priority；
-- `base + adaptive + decay = final`；
-- hard protection/caps/clinic isolation；
-- Hot/Warm/Cold policy；
-- archive recovery/provenance；
-- Voice Adapter 实际状态；
-- assumptions、first principles、scope decisions、non-production limits。
-
-Brief 中每个数字必须链接到 evidence 文件/测试，不使用 expected metric 或占位符。
-
----
-
-## 7. Demo Video
-
-建议 6–9 分钟，按真实用户旅程而非功能清单：
-
-```text
-0:00  Login and clinic identity
-0:30  Glance in under ten seconds
-1:15  Exact source and provenance chain
-2:00  Timeline and longitudinal context
-2:45  Event detail: Transcript / AI Summary / human Note
-3:30  Comment / mention / version diff / revert / audit
-4:30  Nurse/Staff role and Nurse Consult
-5:15  Patient View anti-leak and Task journey
-6:00  Self-Learning: feedback -> future similar candidate
-6:45  Data Decay: Hot/Warm/Cold -> cold exact source
-7:30  Voice Adapter (only if actually implemented)
-8:15  Security/performance/trade-off limits
-```
-
-录制要求：
-
-- 使用真实 Session，不用 Role selector/demo header；
-- 使用 synthetic patient/audio/transcript；
-- 不显示 API key、env、token、private path 或 raw secret；
-- 新输入产生新的 Event，不写固定 seed Event；
-- AI/ASR 显示 generation method 与 fallback；
-- Self-Learning 展示 future candidate，不用 current pin 冒充；
-- Data Decay 展示 protected exception 与 exact provenance；
-- 未实现内容不通过 Figma/文案冒充 runtime；
-- 画面、字体、光标、音量、停顿和讲解清晰。
-
----
-
-## 8. ATTRIBUTION and Data Licenses
-
-最终 `ATTRIBUTION.txt` 必须包括：
-
-- backend/frontend libraries；
-- LLM/ASR providers/models；
-- Caddy/SQLCipher；
-- audio codec/recording library；
-- external synthetic datasets；
-- dataset owner、official URL、license；
-- 是否只用于 evaluation；
-- 未打包的 runtime provider 也需说明。
-
-许可证不清或 source 不明的数据不得进入最终 repo/Video/Brief。
-
----
-
-## 9. Final Verification Matrix
-
-必须运行并记录：
+## 11. Final verification matrix
 
 ```text
 backend full pytest
-required micro-tests by name
-E1-E4 targeted tests
-D3 corpus validation/runtime evaluation
-D4 Copilot frozen evaluation
+required RBAC/revision/provenance/concurrency tests
+Patient Multi-turn Check-in targeted tests
+security/integration tests
+E1–E4 targeted regression
+D3 corpus validation + deterministic runtime
+D4 frozen Copilot eval
+frontend Node interaction checks
 frontend production build
-frontend interaction tests
-Glance performance measurement
-D5 security/integration subset
-SQLCipher init/backup/restore
-Caddy validate / secure Demo verification
-secret scan
-dependency check
+Glance performance harness
+E3 storage-policy harness
+SQLCipher init + separate-key backup + rotated-key restore
+Caddy validate + secure Demo verification
+pip check + npm ls --depth=0
+secret scan + tracked/untracked asset audit
 git diff --check
+PDF page count + render + visual inspection
+Demo Video full playback + access check
+repo/zip and attachment/link access check
 ```
 
-另做人工只读检查：
+## 12. Git gate
 
-- Technical Brief PDF render，无 overflow/裁切/乱码；
-- Demo Video 从头到尾播放；
-- 所有文档/视频链接可访问；
-- zip/repo clone 后命令路径正确；
-- PDF 页数 2–3；
-- 邮件 To/CC/Subject/附件清单正确。
+After E5 files are complete:
 
----
+1. create `docs(submission): finalize Nightingale submission package`;
+2. rerun final verification on that commit;
+3. ensure evidence refers to the commit actually verified;
+4. fetch and compare `origin/main` again;
+5. if no unknown drift, push normally to `origin/main`;
+6. verify local main, remote main, and final evidence hash alignment;
+7. never rebase, force-push, amend, or rewrite history.
 
-## 10. Submission Bundle
+If the manifest must be updated with a post-commit hash, use an additional evidence-only commit and proportionate rerun rather than rewriting history.
 
-最终清单：
+## 13. Stop conditions
 
-```text
-Repository link or verified zip
-Technical Brief PDF
-Demo Video link/file
-README
-ATTRIBUTION.txt
-Automated tests
-Final evidence record
-```
+Stop and report if E5 would require a business feature, fabricated identity/link/metric/video/Provider/ASR evidence, deleting failures/skips, committing private assets, unauthorized external actions, rebase/force push, or claiming Submission Ready without full video playback and verified access.
 
-正式邮件：
+## 14. Current status (2026-08-28)
 
-```text
-Due: Friday, 28 August 2026, 17:30 SGT/MYT
-To: irakumar@ntngale.com
-CC: frank.ng@ntu.edu.sg, carrene.teo@ntu.edu.sg
-Subject: Nightingale 72HR Build -- <Your Name>
-```
+Executable repository, security, performance, PDF, English-documentation, and packaging gates are being completed. These inputs remain `NEEDS_OWNER_INPUT`:
 
-E5 可以准备邮件草稿，但不得在未获 owner 明确授权时发送、上传、共享或改变 repository visibility。
+- exact submitter name;
+- actual 6–9 minute Demo Video file/link and full-playback evidence;
+- final attachment/link confirmation from the submitter's intended email/account context.
 
----
-
-## 11. Exit Gate — Submission Ready
-
-1. 仓库 clean、可运行、commit history 清晰；
-2. required tests 与 E1–E4 纳入范围的 gates 全绿；
-3. README setup/redaction/RBAC/limits 与实际实现一致；
-4. Technical Brief 为 2–3 页，render QA 通过；
-5. Demo Video 清楚完成选定 scenarios 并从头播放验证；
-6. ATTRIBUTION 与 data/provider licenses 完整；
-7. evidence record 没有伪造、合并或隐藏 NOT_RUN/failure；
-8. repo/zip/links 从提交者视角可访问；
-9. email fields、subject、附件/link 清单正确；
-10. 明确保留 synthetic Demo、非生产医疗、非真人 usability 限制；
-11. owner 完成最终人工确认；
-12. 只有在 owner 明确授权后才执行发送/上传/公开。
-
----
-
-## 12. 非目标与停止条件
-
-非目标：E5 新增功能、最后一分钟重构、隐藏失败、制作虚假 provider/usability/storage 证据、未经授权发送邮件或公开仓库。
-
-停止条件：
-
-- Brief/README/Video 声称实现但测试/runtime 不存在 -> 停止并修正；
-- PDF 超过 3 页或关键图不可读 -> 停止提交并重排；
-- Demo 只展示 seed AI 却声称 live generation -> 停止；
-- repo/zip 包含 secret、private DB/audio 或无许可证数据 -> 停止并清理；
-- 最终测试与录制使用的 commit 不一致 -> 停止并重新验证；
-- owner 尚未授权 external send/upload -> 不执行外部动作。
+Until those inputs are supplied and verified, E5 and the overall submission remain **NOT SUBMISSION READY**.

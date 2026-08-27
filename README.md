@@ -1,1064 +1,312 @@
-# Nightingale 72 Hour Build — Project README
+# Nightingale 72 Hour Build
 
-## 1. 项目目标
+Nightingale is a synthetic-data prototype for one shared longitudinal patient record. It connects patient updates, consults, AI-scribed artifacts, clinician and staff work, tasks, collaboration, audit history, and exact provenance without treating AI output as clinical authority.
 
-本项目要构建的不是一个普通 EHR 页面，也不是一个单独的 AI 问诊机器人，而是一套围绕患者长期诊疗过程运行的 **shared longitudinal care record system**。
+> Prototype boundary: this is not a production medical system. It does not diagnose, prescribe, adjust medication, replace emergency services, notify a clinic about emergencies, or prove clinical safety, usability, capacity, or regulatory compliance.
 
-核心目标：
+## Product model
 
-- 将患者、医生、护士、staff、AI scribe 在不同时间产生的信息统一组织起来；
-- 保留每条信息的来源、作者、时间、类型和版本；
-- 让医生在进入患者页面后 **10 秒内理解当前最重要的问题、风险和未完成事项**；
-- 让患者看到自己真正需要知道和执行的内容，而不是医生内部工作记录；
-- 所有 AI 生成内容都必须可追溯、可核查，不能冒充 clinician-authored information。
+The application has three deliberately different projections of one record:
 
-一句话概括：
+- **Timeline**: what happened, ordered by real-world Event time.
+- **Clinical Overview (Glance)**: what matters now, using precomputed deterministic ranking.
+- **Patient View**: what the patient needs to know or do, using an explicit patient-safe projection.
 
-> 我们维护的是一份不断演化的患者状态；Timeline 记录“发生了什么”，Glance View 负责“医生现在最该关注什么”，Patient View 负责“患者现在需要知道和做什么”。
-
----
-
-## 2. 核心使用流程
-
-### 2.1 预约后：患者预问诊
-
-患者预约后进入系统，首先完成一次 AI pre-consult session。
-
-患者可以回答：
-
-- 当前主要症状；
-- 症状什么时候开始；
-- 最近有没有变化；
-- 严重程度；
-- 当前用药；
-- 希望医生知道的其他背景。
-
-系统同时保存：
-
-1. **Raw Patient-AI Session**
-   - 完整对话；
-   - 时间戳；
-   - session_id；
-   - 原始 source。
-
-2. **AI Patient Session Summary**
-   - 对本次患者输入的结构化总结；
-   - 与 raw session 关联；
-   - 进入患者 Timeline。
-
-医生默认首先看 summary；需要核实时可跳转到原始对话中的具体片段。
-
----
-
-### 2.2 正式问诊：Doctor / Nurse Consult
-
-正式问诊产生一个新的 **Encounter Event**。
-
-一个 Encounter 可以同时产生多个彼此关联的 Artifact：
-
-- Raw audio / recording；
-- Transcript；
-- AI Doctor Consult Summary；
-- AI Nurse Consult Summary；
-- Clinician Note；
-- Staff Note；
-- Tasks / instructions。
-
-这些内容不是互相覆盖，而是同一个事件的不同 representation。
-
-示例：
-
-```text
-Encounter #001 — 2026-08-26 10:00
-│
-├── Raw Recording
-├── Transcript
-├── AI Doctor Consult Summary
-└── Clinician Note
-```
-
-AI summary 只负责描述和整理；**Clinician Note 才代表医生正式的 clinical assessment / plan**。
-
----
-
-### 2.3 离院后：Patient Follow-up
-
-患者离院后，在 Patient View 中看到：
-
-- 当前 care plan；
-- 自己需要完成的事项；
-- follow-up 时间；
-- patient-facing instructions；
-- 必要风险提醒。
-
-患者仍然可以继续与 AI 交流并报告恢复情况。
-
-新的 Patient-AI follow-up 会再次产生：
-
-- Raw session；
-- AI follow-up summary；
-- 新 Timeline Event。
-
-医生之后再次打开页面时，应能从 Glance View 快速看到状态变化，例如：
-
-- Headache 7/10 → 3/10；
-- Nausea persists；
-- BP still elevated；
-- Blood test pending；
-- Follow-up due tomorrow。
-
-这一过程循环，直到该 care episode 结束。
-
----
-
-## 3. 信息架构
-
-### 3.1 Timeline 是主轴，但不是唯一物理存储
-
-系统在产品语义上使用一条统一的 **Longitudinal Timeline** 组织患者历史。
-
-Timeline 展示现实世界中发生的 Event：
-
-```text
-2025-04-15  Primary Care Review（初次头痛主诉，历史事件）
-2026-02-06  Medication Review（历史事件）
-2026-08-20  Patient AI Pre-consult（症状加重，新的 care episode）
-2026-08-21  Nurse Consultation
-2026-08-21  Doctor Consultation
-2026-08-24  Patient Follow-up
-2026-08-29  Doctor Review
-```
-
-但并不意味着所有数据都必须塞在同一张数据库表里。
-
-底层可以分别存在：
-
-- events
-- artifacts
-- sessions
-- transcripts
-- clinician_notes
-- comments
-- versions
-- highlights
-- tasks
-- audit_logs
-
-Timeline 是信息组织主轴，而不是物理数据库结构的限制。
-
----
-
-### 3.2 三层核心模型
-
-#### Event
-
-代表现实中发生的一件事情，例如：
-
-- patient_ai_preconsult
-- nurse_consult
-- doctor_consult
-- patient_followup
-- doctor_review
-
-#### Artifact
-
-代表该 Event 产生的内容，例如：
-
-- raw_conversation
-- recording
-- transcript
-- ai_summary
-- clinician_note
-- staff_note
-- patient_instruction
-
-#### Span
-
-代表 Artifact 内部的具体片段，例如：
-
-- transcript 第 14 段；
-- AI summary 第 2 条；
-- clinician note 的 Assessment section；
-- 录音 08:31–08:47。
-
-推荐的关系：
+The canonical internal model is:
 
 ```text
 Patient
-  ↓
-Optional Care Episode（可选的纵向分组，例如一次持续数周的 headache workup）
-  ↓
-Event
-  ↓
-Artifact
-  ↓
-Span
+  -> Event
+      -> Artifact
+          -> exact Span
+      -> Comments
+      -> Tasks
+      -> Audit / Versions
+
+Highlight
+  -> AI Summary Artifact
+  -> raw source Artifact
+  -> exact source Span
 ```
 
-#### 多尺度 longitudinal 时间模型（设计原则）
+The Candidate Brief's broad `Entry` maps to an Event plus its parallel Artifacts. AI summaries, raw conversations/transcripts, clinician notes, staff notes, patient instructions, and Tasks remain separate records. Later comments, edits, and audit actions stay attached to the original Event and do not become new medical Events.
 
-> The patient record is a multi-scale longitudinal structure. The main Timeline organizes real-world clinical Events, while each Event preserves the chronological lifecycle of its artifacts, collaboration, tasks, revisions, and provenance.
+## Main user journeys
 
-- `Event` 仍然是主 Timeline 的核心展示单位；`Care Episode` 只是可选的上层 grouping，不得因此强制扩大当前 MVP；
-- 一个 Event 内部按时间保留完整生命周期：raw consult / transcript、AI summary、clinician note、staff/nurse supplement、comments / thread、tasks、revisions / revert、later review actions；
-- 明确区分两类时间：
-  - `event_time / started_at / ended_at`：现实医疗事件何时发生；
-  - `created_at / updated_at`：围绕该事件的信息何时产生或修改；
-- 后续修改仍属于原 Event，不应因为修改发生在另一天就被错误展示为新的医疗事件；
-- UI 使用 progressive disclosure，而不是无限嵌套 Timeline：
-  - longitudinal history / episode → Event detail → Artifact / thread / revision detail → provenance source span；
-- 数据模型可以支持更细粒度时间结构，但 UI 不得把所有 audit / activity 全部 flatten 到患者主 Timeline。
+### Clinician and staff workspace
 
----
+Clinician and staff users share a clinic-scoped shell with `Clinic Patients`, `Clinical Overview`, `Timeline`, `Notes`, and `Tasks`. Doctor and Nurse Consults remain separate Events even when they share an explicit encounter id. Manual transcripts must be reviewed into continuous, role-bounded speaker segments before confirmation.
 
-### 3.3 Metadata / ID / Provenance
+Clinical Event Detail separates immutable raw material, AI summaries, role-authored notes, comments, versions, audit history, and source evidence. A clinician can open a Highlight or Copilot citation and resolve it to the exact raw source span.
 
-每条核心内容至少需要明确：
+### Patient workspace
 
-- patient_id
-- event_id
-- artifact_id
-- author_role
-- author_id
-- timestamp
-- type
-- tags
-- risk_level
-- version
-- provenance_pointer
+Patient View contains only `Today`, `Care Plan`, `Check-in`, and `Visit Summaries`. It does not call clinical Timeline, Glance, Comment, Audit, revision, or internal-note endpoints.
 
-我们使用三个概念区分不同需求：
+Patients may start or report a visible Task as done. `reported_done` always waits for clinic verification; it never becomes `completed` because of patient text, AI output, or a Check-in.
 
-- **Metadata / Type**：它是什么；
-- **Reference / ID**：它在哪里；
-- **Provenance Pointer**：这条信息究竟来源于哪里。
+### Bounded Patient Multi-turn Check-in
 
-例如 Glance View 上的一条信息：
+Check-in is a non-emergency information-collection assistant, not an open medical chatbot.
+
+- One patient user can have one active or awaiting-confirmation session.
+- Nightingale asks one question at a time from five types: severity, change, associated symptoms, Task progress, or patient concern.
+- A maximum of four clarification questions is enforced by the server.
+- The patient may answer freely, supplement, correct, skip, choose "nothing else", finish, abandon, return to correct, or confirm.
+- Diagnosis, medicine start/stop, dose changes, and test-result interpretation receive a deterministic refusal.
+- Transparent high-risk phrases run after raw persistence and before any Provider call. Clear matches stop ordinary questions and show urgent-help guidance without claiming formal triage or clinic notification. Narrow explicit negations are tested to avoid obvious false escalation.
+- Rapid duplicate actions, refresh recovery, stale responses, role/session switches, and concurrent API requests are covered by deterministic guards and tests.
+
+The persistent flow is:
 
 ```text
-"Headache frequency increased significantly over 2 weeks"
+Patient
+  -> patient_checkin Event
+  -> raw_conversation
+       - stable patient messages
+       - separately marked Nightingale AI messages
+  -> ai_patient_session_summary (only after confirmation)
+  -> candidate Highlight
+  -> exact patient message_id + quote + offset
 ```
 
-理想 provenance chain：
+The frontend saves each patient message first, then asks the server to process it. A retry reuses the same `message_id`. Provider or network failure cannot erase or replace the patient's original words. Active, awaiting-confirmation, and abandoned Events are hidden from every clinical Event read/write path; submitted and safety-escalated Events become visible to same-clinic clinical readers.
+
+## AI and Provider boundary
+
+`backend/app/llm_client.py` is the only LLM egress. Supported modes are:
+
+- `mock`: deterministic, key-free test/demo Provider;
+- `deepseek`: live adapter using an environment key;
+- `deterministic_fallback`: server-owned fallback for missing keys, network/protocol failure, invalid schema, invalid provenance, or bounded medical requests.
+
+There is no second Provider exit. Before egress, recursive redaction removes known names, IC/ID patterns, and phone numbers. Placeholder mappings remain in memory. Logs, audit rows, and error bodies store metadata rather than patient text or raw Provider payloads.
+
+Provider output never decides authorization, safety escalation, question caps, session state, Task state, authorship, care-plan changes, or exact provenance. Strict schemas and server validation reject unknown fields, invalid actions, stale patient references, repeated question types, unsafe language, altered redaction placeholders, and non-exact quotes.
+
+Current evidence distinguishes the layers:
+
+- mock: full journeys verified;
+- deterministic fallback: full bounded journeys verified;
+- DeepSeek: a current synthetic Check-in turn completed live, but the strict final Summary failed validation and fell back; therefore a complete live Check-in journey is not claimed;
+- D3 frozen Provider layer: `NOT_RUN` by design.
+
+## Provenance and authority
+
+Every suggested Highlight stores its Event, AI Summary Artifact, raw source Artifact, and exact source Span. A failed quote restore or span resolution drops the candidate. Fuzzy matching is prohibited.
+
+For Patient Check-in, candidate facts must name one patient `message_id` and copy a verbatim quote from that message. AI questions and acknowledgements can never become patient facts, Highlights, or Copilot evidence. AI summaries are system-authored and clearly separated from clinician/staff-authored material.
+
+If patient/AI-derived content conflicts with a clinician-authored record, the clinician artifact remains authoritative or the candidate is marked for review. AI never overwrites a clinician note, staff note, patient instruction, or raw source.
+
+## RBAC and identity
+
+Roles are `patient`, `staff`, `clinician`, and `admin`. Authorization is server-side in `backend/app/authz.py`; the database User is authoritative for role, clinic, and patient binding.
+
+- Patient: own patient-safe view, own visible Tasks, own Check-in and permitted Voice capture; no internal comments, raw clinical AI notes, clinical authoring, or another patient's record.
+- Staff: same-clinic staff notes, Nurse Consult, Tasks, Comments, and permitted review; cannot author/edit as clinician.
+- Clinician: same-clinic clinician notes, Doctor Consult, Copilot, Tasks, Comments, provenance, and review; cannot author/edit as staff.
+- Admin: clinic-scoped identity/session/invite/access-audit oversight; no clinical Note, Copilot, Task, or plan authoring.
+
+Cross-clinic and not-own-patient resources return the same generic 404. Same-scope missing permission returns 403. Product mode uses invite, Argon2id registration/login, an HttpOnly session cookie, server session restore, and logout revocation. Legacy identity headers and the role selector exist only when both frontend and backend demo-auth flags are explicitly enabled.
+
+Patient, role, auth-session, and patient-record changes remount or reset sensitive UI state. Pending requests are aborted and stale responses are ignored.
+
+## Revision, collaboration, Tasks, and importance
+
+Editable notes use full version snapshots. Edits use optimistic compare-and-swap; stale same-section writes return 409. Revert creates a new version and never rewrites history. Comments support Event/Artifact anchors, replies, mentions, and resolve/unresolve. Audit rows are metadata-only.
+
+Tasks are first-class, clinic-scoped records with an Event origin and optional exact Artifact/Span source. Patients only Start or Report done. Staff/clinicians verify completion or cancel. A Check-in Task statement remains evidence awaiting human review.
+
+Glance ranking is precomputed and deterministic. E2's bounded "self-learning" uses only controlled same-clinic interaction signals keyed by entity type. It does not learn clinical truth, use raw text/PHI as a feature, train a model, or bypass protections for risk, unresolved Tasks, clinician-confirmed, pinned, or review-needed content.
+
+## E3 data-decay boundary
+
+`decay-v1` is a protection-first maintenance policy. It assigns hot/warm/cold shadow state and may create a verified compressed JSON shadow payload for an old low-priority Artifact. Authoritative Artifact content and provenance are never removed or overwritten. Voice recording BLOBs are not compressed by E3.
+
+Current local synthetic evidence is maintenance timing and one shadow compression ratio only. It is not a claim of production retention policy, clinical forgetting, or total database storage savings.
+
+## E4 Voice boundary
+
+Voice is default-off. The local adapter uses pinned `Systran/faster-whisper-base`, CPU int8, `local_files_only=True`, and in-memory PyAV container validation. Audio stays in an encrypted SQLCipher BLOB and never enters `LLMClient` or E3 compression.
+
+The adapter does not perform diarization and does not invent confidence. Machine segments begin with unknown speaker and require role-bounded human review, explicit issue resolution, and continuous canonical indexes before confirmation. Physical-microphone capture, noisy/code-switching accuracy, clinical accuracy, and production throughput are not claimed.
+
+The current final regression environment does not contain the ignored local model/audio inputs, so two real-local-ASR tests are explicitly skipped. Historical dated evidence records one observed synthetic local slice; current E4 status is therefore implemented with limits, not a fresh end-to-end ASR rerun.
+
+## Security and deployment
+
+Unit tests use disposable plain SQLite. The single-machine product demo uses SQLCipher whole-database encryption with separate database, backup, and restored-database keys. Existing targets are never overwritten. Caddy terminates local TLS, redirects HTTP to HTTPS, serves the built SPA, and proxies `/api/*` to loopback FastAPI.
+
+The current E5 secure-demo verification observed:
+
+- SQLCipher 4.12.0, 18 tables, no plaintext SQLite header, normal SQLite reader blocked;
+- separately keyed backup and rotated-key restore with the same protections;
+- Caddy TLS 1.3 with `TLS_AES_128_GCM_SHA256` and an explicitly trusted local CA file;
+- secure/HttpOnly/SameSite cookie, exact-origin CSRF/CORS, security headers, logout revocation, and anonymous denial.
+
+This is local synthetic evidence, not a public-host, production-security, penetration-test, or compliance certification.
+
+## Performance
+
+`backend/scripts/measure_glance.py` uses a throwaway seeded SQLite database, 10 warm-ups, and 100 samples per endpoint. It reports both in-process TestClient and local uvicorn/HTTP layers.
+
+Current local synthetic P95:
+
+| Endpoint | Layer A P95 | Layer B P95 |
+|---|---:|---:|
+| Glance | 4.626 ms | 5.115 ms |
+| Events | 8.030 ms | 8.189 ms |
+| Patient View | 6.521 ms | 6.434 ms |
+
+The Glance warm path is below the 300 ms requirement in this local fixture. These numbers do not establish production capacity or multi-user performance. See `backend/docs/perf_baseline.md`.
+
+## Repository layout
 
 ```text
-Glance Highlight
-    ↓
-AI Summary
-    ↓
-Patient AI Session
-    ↓
-Exact source span
-    ↓
-Patient original message
+backend/app/        FastAPI, SQLAlchemy, RBAC, pipelines and domain services
+backend/seed/       canonical synthetic longitudinal fixture
+backend/tests/      unit, regression, security and integration tests
+backend/evals/      frozen D3/D4 synthetic evaluation assets
+frontend/src/       React/TypeScript patient and clinical journeys
+deploy/             Caddy configuration and environment template (no secrets)
+Task_Card/          frozen vertical scope and Exit Gates
+docs/               decisions and dated evidence
+output/pdf/         final Technical Brief PDF
 ```
 
-医生应能从摘要直接跳到原始证据，而不是只能看到 AI 的二次描述。
+## Setup
 
-### 3.4 与 Candidate Brief 的术语映射（Brief `Entry` → 内部模型）
+Requirements: Python 3.13+, Node.js 18+, and PowerShell examples below. Use synthetic data only.
 
-内部模型使用比 Brief 更细的粒度，**不改回粗粒度 `Entry`**。最终 Technical Brief 必须显式展示以下映射，让评委能直接对应 Brief 要求的 schema（Entries ↔ Comments ↔ Versions ↔ Highlights ↔ Provenance ↔ AI_Scribed_Notes）：
-
-```text
-Brief "Entry"                    → 内部 Event（现实医疗事件）+ 其 Artifacts（并行 representation）
-Brief AI-scribed note / Entry     → AI-summary Artifact（author_role = system）
-Brief "exact source" / source 消息 → 内部 Span（Artifact 内的具体来源位置）
-Brief Comments / Thread           → 内部 Comment（挂载在 Artifact / Event 上）
-Brief Versions / Revision         → 内部 Version（可编辑 Artifact 的 snapshot / diff）
-Brief Highlights                  → 内部 Highlight（指向 Artifact + Span）
-Brief Provenance pointer          → provenance_pointer = Event → Artifact → Span
-```
-
----
-
-## 4. 三个核心视图
-
-### 4.1 Timeline View
-
-回答：
-
-> 这个患者从过去到现在发生过什么？
-
-可以按照 Event 展示，并允许展开查看 Artifact。
-
----
-
-### 4.2 Glance View
-
-回答：
-
-> 医生现在只有 10 秒，最应该注意什么？
-
-Glance View 不是新的事实库，而是对 Timeline 和当前任务状态的动态投影。
-
-优先显示：
-
-- 当前高风险问题；
-- 最近明显变化；
-- unresolved tasks；
-- clinician-confirmed items；
-- medications / allergies / chief complaint；
-- follow-up / action required。
-
-每条 highlight 都必须：
-
-- 有 risk_reason；
-- 有 provenance；
-- 可以 accept / reject / pin；
-- 可以回到 source。
-
----
-
-### 4.3 Patient View
-
-回答：
-
-> 作为患者，我现在应该知道什么、做什么、反馈什么？
-
-Patient View 不是完整医生视图的复制。
-
-患者可以看：
-
-- patient-facing summaries；
-- care instructions；
-- upcoming tasks；
-- follow-up steps；
-- recovery guidance。
-
-患者不能看：
-
-- internal clinician comments；
-- internal staff comments；
-- raw AI-scribed notes；
-- 其他不应暴露的内部 clinical reasoning。
-
-**实现（M6 + D2）**：patient 角色登录后进入独立的 `PatientViewPage`（`frontend/src/pages/PatientViewPage.tsx`），不是临床工作区的删减版。唯一聚合端点 `GET /api/patients/{id}/patient-view`（`backend/app/api/patient_view.py`）只读取 clinician-authored `patient_instruction` 与本人 patient-visible assigned Task；不调用 LLM、不从 clinician note 猜行动、不复制内部 clinical content。
-
-产品导航严格为四区：
-
-1. **Today** —— 最新明确 patient instruction、next follow-up、当前未终结 Task；
-2. **Care Plan** —— `open | in_progress | reported_done | completed` 分组，患者只能 Start/Report done；`reported_done` 明确显示等待诊所确认；
-3. **Check-in** —— 受限、真实持久化的多轮信息采集；一次只问一个问题，患者可自由回答、纠正、跳过、补充或结束；不直接修改 note、instruction、Task 或医生计划；
-4. **Visit Summaries** —— 仅 patient-facing instructions，按 `Event.started_at` 倒序。
-
-服务端合同由 `tests/test_patient_view.py` 与 `tests/test_patient_task_projection.py` 锁定：response schema `extra=forbid`，Task 只返回 `task_id/title/status/due_at/updated_at/reported_done_at/completed_at/patient_visible`；不返回 description、assignee、Artifact/Span、AuditLog、importance score 或 clinical risk reason。`sessions` 仍只含本人的 patient session Event。跨 clinic/非本人使用统一 404，匿名 401，同 scope 非 patient 403。
-
-#### 4.3.1 Persistent bounded Patient Check-in
-
-新的 Check-in 使用独立 patient-safe API，但仍写入同一纵向病历：
-
-```text
-POST /api/patients/{patient_id}/check-ins          # start or resume the single active session
-GET  /api/patients/{patient_id}/check-ins          # active + patient-safe history
-POST /api/check-ins/{id}/messages/save             # commit stable patient message first
-POST /api/check-ins/{id}/messages/{message_id}/process
-POST /api/check-ins/{id}/finish|resume|abandon|submit
-```
-
-每条患者消息使用稳定 `message_id`。前端先等待 `/messages/save` 成功，再显示“原话已保存，正在整理下一问”；process 或响应丢失后的重试继续复用同一 id，服务端返回已存在的 patient/AI message，不重复落库。状态只有 `active | awaiting_confirmation | submitted | safety_escalated | abandoned`。`active/awaiting_confirmation/abandoned` Event 不进入临床 Timeline、Copilot、Comments/Audit/Note/Task Event 路径；`submitted` 与 `safety_escalated` 才能进入同 clinic 医护旅程。
-
-Provider 仍只通过现有 `LLMClient`，仅支持 `mock`、DeepSeek 与 deterministic fallback。Turn schema 限定 acknowledgement、一个 bounded next question、question type、conversation action 与 patient message references；安全升级、轮次上限、权限、session/Task 状态全部由服务端确定。发送 Provider 前递归 redaction；audit/log/error 只存 metadata。
-
-确认前只保存 Event、raw conversation 和明确标识的 patient/AI messages，不生成正式 Summary/Highlight。确认后才形成：
-
-```text
-Patient -> patient_checkin Event -> raw_conversation
-        -> ai_patient_session_summary -> candidate Highlight
-        -> {kind: message, index: stable patient message_id, exact offset}
-```
-
-候选 quote 必须在指定 patient message 中逐字解析；AI question/acknowledgement 永远不能成为事实、Highlight 或 Copilot source。Task 进展只作为待医护核实的患者陈述，不改变 Task status。确定性高风险短语规则在 raw commit 后、LLM 前运行，停止普通追问并明确提示紧急求助；系统不会声称已正式分诊或已通知诊所。
-
-### 4.4 Care Tasks（D2）
-
-Task 是一等实体，不是 Comment、Highlight 或 pending 文本。最小 API：
-
-```text
-POST /api/events/{event_id}/tasks
-GET  /api/patients/{patient_id}/tasks
-POST /api/tasks/{task_id}/transition
-GET  /api/tasks/{task_id}/provenance
-```
-
-Task 必须有 origin Event；Artifact/Span provenance 可选但必须成对并精确解析。transition 接收 `expected_status`，以原子条件更新实现 deterministic 409。患者只能推进本人、patient-visible、assigned-patient Task 到 `in_progress|reported_done`；只有 staff/clinician 可将 `reported_done` 确认为 `completed` 或取消未终结 Task。终态不可恢复。create/transition/conflict 进入 metadata-only AuditLog。
-
-`unresolved_task` 不再是 seed 常量。Task↔Glance 映射是**显式的一对一关系**：`Highlight.task_id` 使用 Task FK + unique constraint；Task 创建时仅以条件 UPDATE/CAS 采纳 patient/event/source_artifact/source_span 完全匹配、未占用且非 rejected 的 task Highlight，竞争失败或不匹配则创建专属行。Event-only Task 不误伤同 Event 无关 Highlight；`recompute_task_highlights` 只更新对应 `task_id`，completed/cancelled 清除 unresolved 权重并为专属行写入准确终态文案。精确 provenance 只有用户**明确选择 quote 并确认**后才保存，否则为 Event-level；Glance 的 Open Task 定位到具体 Task。`resolve_exact_span` 对任意异常结构 fail closed（422/404，绝不 500）。clinician/staff 共用 clinic shell 的 `Tasks` tab；E1 只增加同 shell 的 Nurse/Staff 角色呈现，不创建平行 Nurse App、假 appointment 或 assignment 状态。
-
----
-
-### 4.5 Clinician New Consult + Transcript Reliability（Phase C + D3）
-
-> 状态：**Phase C、M7 与 D3 Complete。** D3 frozen corpus、runtime baseline 与复现命令见 `backend/docs/transcript_reliability_baseline.md`。
-
-系统没有另建 transcript 数据孤岛，而是在现有 Event / Artifact / AI / provenance / comment 能力上完成医生端真实工作流：
-
-```text
-Clinician Workspace
-→ New Consult
-→ new Doctor Consult Event
-→ Paste raw transcript
-→ deterministic normalization preview（不持久化、不调用 LLM）
-→ Review / resolve unknown / split / merge
-→ Confirm canonical Transcript
-→ AI Doctor Summary + Highlights
-→ Event Detail / exact source
-→ Clinician Note / Comment
-→ Timeline + Glance refresh
-```
-
-`New Consult` 的语义是创建主 Timeline 上新的 `doctor_consult` Event，不再把输入写入固定的 demo Event。
-
-同一次现实到院允许在 UI 中显示为一个 `Clinic Visit`：
-
-```text
-Clinic Visit（相同且非空 encounter_id）
-  ├─ Nurse Consult Event
-  └─ Doctor Consult Event
-```
-
-Nurse/Doctor Event、Artifact、作者和权限始终独立。系统不得因为两个 Event 发生在同一天就自动合并。C1 只增加 optional `Event.encounter_id` 字符串，不新增 Encounter 表。
-
-输入严格限定为 manual text；不接受 audio、ASR、OCR 或 EHR import：
-
-```text
-DOCTOR: How has your headache changed?
-PATIENT: It is better, but I still feel nauseous in the morning.
-```
-
-- normalize 支持冻结的 `DOCTOR/PATIENT`、大小写与 `Dr/Pt` 映射、合理 continuation；
-- preview 返回 `speaker_candidate|text|source_start|source_end|confidence_marker|issues`；
-- `ACCEPT` 仍需 review；`NEEDS_REVIEW` 必须人工消除 unknown/empty；`REJECT` 不可 confirm；
-- unknown 永不默认成 doctor/patient；prompt injection/JSON/Markdown 只作 transcript 内容；
-- raw input 超过 4096 UTF-8 bytes 返回 413；segment >4000 chars 或 >500 segments 显式 422，不截断；
-- confirm 才产生连续 0-based `doctor|patient` canonical `segments[]`；
-- 无时间戳时不生成时间戳；
-- raw Transcript 先保存且不可覆盖；
-- AI Summary 独立保存为 system Artifact；
-- 正式 assessment/plan 只能由 clinician-owned note 承载；
-- 修正或澄清通过 Comment + Clinician Note，不改写 raw source。
-
-**C1 已实现的 API handoff：**
-
-```text
-POST /api/patients/{patient_id}/doctor-consults
-POST /api/transcripts/normalize                 # clinician-only；无 DB patient read / 无持久化 / 无 LLM
-GET  /api/me
-GET  /api/patients
-GET  /api/patients/{patient_id}/events   # Event 含 encounter_id
-```
-
-Doctor Consult 请求为 strict `consult_id + ingestion_key + started_at/ended_at + content.segments[]`；segment 必须从 0 连续编号，speaker 仅 `doctor|patient`，未知字段/空文本/时间倒置均返回 422。响应显式返回新 Event、encounter、raw/summary/highlight IDs、`generation_method/degraded/fallback_reason` 和 replay 状态。Event + immutable Transcript 先 commit，再复用唯一 `LLMClient` pipeline；相同 consult/ingestion 重放不重复创建数据。
-
-Phase C 两张任务卡均已完成：
-
-1. `Task_Card/C1_Task_Card.md`：Encounter/Transcript schema、clinician-only Doctor Consult endpoint、raw-first/AI/provenance/RBAC 测试；
-2. `Task_Card/C2_Task_Card.md`：三栏 Clinician Shell、New Consult UI、Clinic Visit/Timeline master-detail、Source Viewer、Comment/Revision/Audit 集成。
-
-**C2 + D2 + E1 实现**：clinician/staff 登录后进入同一 factual Clinic dashboard，可从左栏 `Clinic Patients` 搜索/切换患者；产品 shell 为左侧 identity/directory、中间 `Glance | Timeline | Notes | Tasks`、右侧 Source/Comments/Versions/Audit。E1 让 staff 以 `Registered Nurse` professional title 进入轻度差异化的 Nurse workspace，可创建 Nurse Consult；其权限仍由 backend RBAC 裁剪，不能创建 Doctor Consult、Clinician Note、clinician confirmation 或使用 clinician-only Copilot。patientId、role 与 session 都是 remount boundary；patient 仍只挂载独立 `PatientViewPage`。
-
-`New Consult` 已是 `Paste transcript → Review segments → Confirm and process` 三步流程。原文与 preview 并排；unknown 明显阻断；speaker/text 可修正，segment 可拆分/合并且 index 自动重排。patient/session change 清除 raw draft、preview、operation identity 和 pending response。提交保留 stable consult/ingestion identity，成功后进入新 Event Detail，并明确显示 raw saved、AI generated 或 deterministic fallback。Timeline 只按非空相同 `encounter_id` 组成 `Clinic Visit`；Event Detail 将 Transcript/AI Summary/Clinician Note 与 Comment/Revision/Audit 保持为 Event 内 lifecycle，不制造新医疗 Event。
-
-D3 frozen evaluation 包含 40 个 synthetic cases（development 26 / frozen_holdout 14）。normalizer 在首次 holdout 前以 SHA-256 冻结；holdout outcome 14/14、speaker 12/12、ambiguous blocking 8/8，silent invention/truncation 为 0。frozen runner **不调用 provider/network**；provider 层明确 `NOT_RUN`，deterministic fallback 单独报告（development exact entity precision 0.888889 / recall 0.571429，task precision 1.0 / recall 0.5）。不得把两层合并为一个成绩。
-
-仍明确后置：平行 Nurse App、录音/ASR、外部 dataset ingestion、复杂 care-team assignment、appointment/billing/notification。Phase C、M7、D1–D5 与 E1 Exit Gate 已通过；5-8 位独立观察者要求由 owner 取消，不作真人 usability claim。
-
-### 4.6 E1 Role Workspaces（2026-08-27）
-
-> 状态：**E1 COMPLETE。** Phase E 后续 E2–E5 未因本节自动开始。
-
-Nurse/Staff 继续使用 `staff` RBAC role；`professional_title=Registered Nurse` 只负责真实身份呈现，不参与授权。Doctor 与 Staff 使用同一三栏 clinical shell，但 Staff 采用相关的 teal accent、Nurse identity、`Record nurse consultation` 主操作和 Staff authority 文案。Nurse transcript 使用独立 `/api/transcripts/nurse-normalize`，只接受 `nurse|patient`；冻结的 Doctor normalizer 文件及 SHA-256 `1ac0e01e92401b1728e7b938541e71f8d95e81cca137376004953eb2cd371476` 未改变。确认后：
-
-```text
-POST /api/patients/{patient_id}/nurse-consults
-  -> new nurse_consult Event
-  -> immutable system Transcript committed first
-  -> existing redaction / LLMClient / fallback pipeline
-  -> independent ai_nurse_consult_summary
-  -> exact-span-resolving Highlights only
-```
-
-Clinic Visit 只能由用户显式选择既有非空 `encounter_id` 组成；Nurse/Doctor Event、Artifact 与 authority 始终分离。相同 consult/ingestion replay 幂等，不同 identity 返回 409；provider failure 保留 raw source。
-
-Admin 登录后进入独立 `AdminWorkspacePage`，沿用现有字体、间距、卡片、按钮、状态标签与品牌色，只提供 Users/Invites/Sessions/Access Audit。Admin API 为 `GET /api/admin/users`、`PATCH /api/admin/users/{user_id}/status`、`POST /api/admin/users/{user_id}/revoke-sessions`、`GET /api/admin/access-audit`；全部 clinic-scoped、strict response、metadata-only，并使用 compare-and-set。禁止 self-disable 和 last-active-admin disable；disable 会在同一 transaction 撤销 active sessions。Admin 页面没有 Note、Copilot、Glance confirmation 或 clinical Task controls。
-
-E1 增加 `User.professional_title` nullable column。合并后的 E1–E4 可使用 `scripts/migrate_phase_e_schema.py` 对现有 synthetic SQLite/SQLCipher Demo 做显式幂等升级；新 Demo 仍由 seed 直接创建完整 schema。E1 本身没有新增 dependency、provider、外部数据或需追加的 attribution。
-
-### 4.7 E2 Self-Learning Importance（2026-08-27）
-
-> 状态：**E2 COMPLETE（synthetic evaluation）**。这不是模型训练、真实医生偏好验证或 learned clinical correctness 证明；E3/E4 的实现见后续小节，E5 不在本次范围。
-
-E2 只学习未来相似 AI-derived Glance candidate 的软排序：成功的 clinician/staff Highlight status compare-and-set 才能在 append-only `importance_feedback` 中留下 metadata-only 反馈；no-op、409、patient/admin action、非 AI Summary 或缺少 strict exact source 的 row 都不训练。反馈资格使用非空、结构严格、带显式 in-bounds offset 的 Span，并拒绝 AI Summary 自我引用或与 Summary provenance pointer 不一致的 source。学习键由服务端把 `entity_type` 映射到 `symptom|medication|task|risk|allergy|follow_up|other`，不保存或使用 raw text、姓名、quote、risk reason、Comment、Note 或 embedding；`other` 只记录，不跨不相关概念泛化。
-
-```text
-clinician: accepted +1 / pinned +2 / rejected -1
-staff:     accepted +1 / pinned +1 / rejected -1
-
-final importance
-  = base_importance_score
-  + adaptive_adjustment  # same clinic, latest actor/highlight only, cap [-2,+3]
-  + decay_adjustment     # E2 基线为 0；E3 maintenance write path 写入 0/-1/-2
-```
-
-每个 `(actor_id, highlight_id)` 只取最新有效反馈，防止 toggle inflation。`explicit_risk`、`unresolved_task`、`clinician_confirmed`、`pinned`、`needs_review` 遇到负向 adaptive 值时强制归零；staff review 永不成为 clinician confirmation。新候选在 AI persistence write path 聚合并写入 base/adaptive/final 与 counts-only explanation，GET Glance 仍只读取预计算 Highlight，不查询 feedback、不扫描 Artifact/全历史、不调用 LLM。UI 仅在非零调整时显示 `Learned priority`、base/adaptive/final 与同院 review count，不暴露 actor 或其他患者内容。
-
-现有 SQLite/SQLCipher synthetic Demo 可用显式、幂等的 E2 migration 升级；它把旧 `importance_score` 回填为 base 并添加 feedback table，而不是假设 `create_all` 会修改旧表：
+### Development/demo mode
 
 ```powershell
-cd backend
-.venv/Scripts/python.exe -c "from app.db import migrate_e2_schema; migrate_e2_schema()"
+Set-Location backend
+python -m venv .venv
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+
+# Rebuild and seed the local synthetic development database.
+.venv\Scripts\python.exe -c "from app.db import engine, SessionLocal; from seed.seed import create_schema, seed; create_schema(engine); db=SessionLocal(); seed(db); db.close()"
+
+$env:NANTINGALE_DEMO_AUTH='true'
+$env:NANTINGALE_LLM_PROVIDER='mock'
+.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-新 Demo 仍由 seed / SQLCipher init 直接创建完整 schema。E2 没有新增 dependency、provider、dataset 或 attribution 条目。
-
-### 4.8 E3 Hybrid Storage / Data Decay（2026-08-28）
-
-> 状态：**E3 COMPLETE（synthetic shadow-archive proof）**。没有删除、覆盖或外置任何 authoritative clinical record；E4 已在下一节完成，E5 不在本次范围。
-
-E3 的 `decay-v1` 只在显式 maintenance/write path 上运行。`--as-of 2026-08-26` 被解析为当日 `23:59:59`，避免依赖机器当前日期：0–30 天为 Hot，超过 30 天至 365 天为 Warm，超过 365 天才可成为 Cold；普通 tier 对应 `decay_adjustment = 0/-1/-2`。保护事实先于 age rule：explicit risk、真实 `Task.status in open|in_progress|reported_done`、clinician-confirmed、pinned、needs-review、当前有效 patient instruction、provenance 未验证或 archive integrity 失败全部强制 Hot / decay 0。Task 保护只读取 Task row，不从自由文本或孤立 `feature_flags.unresolved_task` 猜测。
-
-新增 `artifact_storage_state` 保存 `tier`、受控 `reason_codes`、policy/as-of/evaluation metadata、canonical SHA-256、`zlib-json-v1` payload、size 与 round-trip timestamp。canonical JSON 固定 UTF-8、sorted keys 与 compact separators。Cold payload 必须解压、canonicalize 并 hash-equivalent 后才写入；损坏 payload 下一次 apply 会 fail closed 为 Hot 并清除不可用 shadow payload。`Artifact.content` 始终是 authoritative copy，Artifact/Version/Comment/AuditLog/Task/Highlight/Span 均不删除或覆盖。
-
-```bash
-cd backend
-
-# 只读；不会自动 migration 或写 policy state/score
-.venv/Scripts/python.exe scripts/apply_storage_policy.py --as-of 2026-08-26 --dry-run
-
-# 显式、幂等迁移 E2 SQLite/SQLCipher schema，并在一个 DB transaction 内写 state/final score
-.venv/Scripts/python.exe scripts/apply_storage_policy.py --as-of 2026-08-26 --apply
-```
-
-也可只执行 schema migration：
-
-```bash
-.venv/Scripts/python.exe -c "from app.db import migrate_e3_schema; migrate_e3_schema()"
-```
-
-canonical fixture 的观察结果为 Hot 12 / Warm 1 / Cold 1 / protected 7；唯一 Cold candidate 的 canonical JSON 为 235 bytes，shadow payload 为 180 bytes（ratio 0.766），round-trip 通过。该数字只描述一个 synthetic Artifact 的压缩副本；authoritative content 仍在同一数据库，因此**不是数据库总字节节省，更不是生产对象存储或长期 retention 验证**。Glance GET 仍只读预计算 Highlight final score，不查询 storage state、不执行 policy/decompression、不扫描 Artifact/全历史、不调用 LLM。Patient View schema 没有 tier/hash/codec/payload/reason/size 字段。
-
-实现与证据说明见 `docs/e3_data_decay_evidence.md`。E3 没有新增 dependency、provider、dataset 或 attribution 条目。
-
-### 4.9 E4 Ambient Voice Capture（local ASR，2026-08-28）
-
-> 状态：**E4 COMPLETE — local synthetic vertical slice**。这不是生产医疗录音、说话人分离、真人 usability 或真实临床准确率证明；E5 不在本次范围。
-
-E4 使用一个共享 Voice Adapter 完成 `Recording → local ASR → visible human review → confirmed Transcript → existing AI/provenance pipeline`。功能默认关闭；只有 `NANTINGALE_VOICE_ENABLED=true`、provider 为 `faster_whisper` 且固定模型目录就绪时，Clinician、Staff/Nurse 与 Patient Check-in 才显示各自允许的入口。角色与 Event 归属始终由服务器 Session/DB User 决定。
+In another terminal:
 
 ```powershell
-cd backend
+Set-Location frontend
+npm install
+$env:VITE_DEMO_AUTH='true'
+npm run dev
+```
 
-# 一次性下载固定 revision 到 gitignored 私有目录
-.venv/Scripts/python.exe scripts/prepare_local_asr.py
+Demo mode exposes a role selector and legacy identity headers. Do not use it as deployment evidence.
 
-# 现有 E1–E3 Demo 的显式幂等升级
-.venv/Scripts/python.exe scripts/migrate_phase_e_schema.py
-.venv/Scripts/python.exe scripts/migrate_patient_checkin_schema.py
+### Product identity mode
 
-# 运行时环境；模型不会在请求期间下载
+Leave `VITE_DEMO_AUTH` and `NANTINGALE_DEMO_AUTH` unset/false. Open the frontend, log in with a seeded synthetic account, and let the server-side session cookie determine the role and patient binding. The canonical seeded password is documented in `backend/seed/fixture.py` for local synthetic demonstration only.
+
+### Existing schema migration
+
+```powershell
+Set-Location backend
+.venv\Scripts\python.exe scripts\migrate_phase_e_schema.py
+.venv\Scripts\python.exe scripts\migrate_patient_checkin_schema.py
+```
+
+Migrations are explicit and idempotent. `create_all` is not presented as an old-schema migration.
+
+### SQLCipher + Caddy single-machine demo
+
+Copy `deploy/.env.example` to an untracked private environment file or provide the variables through a secret manager/process environment. Replace every placeholder with three independent 32+ character keys and private absolute paths. The backend does not load `.env` files automatically.
+
+```powershell
+Set-Location backend
+.venv\Scripts\python.exe scripts\init_encrypted_demo.py
+.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --no-access-log
+```
+
+Build the frontend, then run from `deploy` with private `XDG_DATA_HOME` and `XDG_CONFIG_HOME`:
+
+```powershell
+caddy validate --config Caddyfile --adapter caddyfile
+caddy run --config Caddyfile --adapter caddyfile
+```
+
+Verify without bypassing TLS:
+
+```powershell
+Set-Location backend
+.venv\Scripts\python.exe scripts\verify_secure_demo.py --ca-file <private-caddy-root.crt>
+```
+
+Detailed commands and boundaries are in `docs/d5_deployment_security_decisions.md`.
+
+### Optional local Voice preparation
+
+Voice is not required for Patient Multi-turn Check-in and remains default-off.
+
+```powershell
+Set-Location backend
+.venv\Scripts\python.exe scripts\prepare_local_asr.py --output <private-model-directory>
 $env:NANTINGALE_VOICE_ENABLED='true'
 $env:NANTINGALE_ASR_PROVIDER='faster_whisper'
-$env:NANTINGALE_ASR_MODEL_PATH='E:\private\models\faster-whisper-base'
+$env:NANTINGALE_ASR_MODEL_PATH='<private-model-directory>'
 ```
 
-后端接受经过真实容器检查的 WAV/WebM/Ogg，限制为 8 MiB、120 秒、单音轨、1–2 声道；原始字节作为 immutable SQLCipher BLOB 保存并进入加密 backup/restore。PyAV 在内存中解码，不创建原始音频临时文件。`faster-whisper==1.2.1` 使用 multilingual Base、CPU int8 与 `local_files_only=True`；它不进行 diarization，所以 speaker 永远先为 unknown，用户必须在允许的角色集合中明确分配并解决问题后才能确认。Patient 不能把本地录音标记成 AI/system speaker。
+The runtime never downloads a model during a request.
 
-已观察的固定 synthetic WAV 为 14.470 秒，项目正式环境离线转录耗时 1.565 秒，输出 2 个非空时间片段；speaker/confidence 分别保持 unknown/null。完整证据、哈希和限制见 `docs/e4_voice_capture_evidence.md`。
-
----
-
-## 5. AI 的职责边界
-
-AI 不应该拥有唯一的 clinical authority。
-
-### 5.1 LLM 适合负责
-
-- 非结构化文本理解；
-- symptom / medication / task / risk candidate extraction；
-- patient-facing summary；
-- AI scribe summary；
-- transcript summarization；
-- candidate highlight generation；
-- provenance linking suggestions。
-
-### 5.2 不应该完全交给 LLM 的部分
-
-Glance View 排序不能只依赖：
-
-> “让大模型判断最重要的五件事。”
-
-第一版应使用透明、可解释的 importance logic。
-
-概念示例：
-
-```text
-importance_score =
-    recency
-  + clinical_risk
-  + unresolved_task
-  + clinician_confirmed
-  + symptom_change
-  + repeated_mentions
-  - stale_information
-  - resolved_task
-```
-
-初期可以完全 rule-based。
-
----
-
-## 6. Self-Learning Importance
-
-当前没有真实 clinician interaction dataset，因此 MVP **不需要先训练模型**。
-
-更合理的路线：
-
-### Phase 1 — 可运行原型
-
-- LLM extraction；
-- rule-based ranking；
-- synthetic data；
-- clinician accept / reject / pin / edit。
-
-### Phase 2 — Adaptive weights
-
-记录医生行为：
-
-- accept；
-- reject；
-- pin；
-- edit；
-- comment。
-
-然后简单更新 importance feature 权重。
-
-例如：
-
-```text
-pin unresolved_task
-→ unresolved_task_weight + 0.1
-```
-
-这已经可以展示“系统会学习”。
-
-### Phase 3 — Learned Ranking
-
-真实交互数据足够后，再考虑：
-
-- Logistic Regression；
-- GBDT；
-- small MLP；
-- Learning-to-Rank model。
-
-不要为了“有模型”而对 synthetic labels 做无意义 fine-tuning。
-
----
-
-## 7. RBAC
-
-最低角色：
-
-- Patient
-- Staff
-- Clinician
-- Admin
-
-核心原则：
-
-- Patient 只能查看 patient-facing information；
-- Staff 不得覆盖 clinician notes；
-- Clinician 不得覆盖 staff notes；
-- Clinician 可以查看 staff notes 和 AI-scribed notes；
-- 访问必须 clinic-scoped；
-- 权限必须 server-side enforced；
-- UI 隐藏按钮不能作为安全控制。
-
-**D1 身份进入（2026-08-26）**：产品模式下的身份完全来自 server-side session
-（HttpOnly cookie），不再接受 `X-User-Id/X-Role` 头。见 §15.4 Demo auth 与生产身份边界。
-
----
-
-## 8. Revision / Collaboration
-
-系统至少应支持：
-
-- note edits；
-- version increment；
-- full revision history（full snapshots 或 diffs，架构选择）；
-- revert 到任意历史版本；
-- diff / "view changes since X"（查看自指定版本以来的变更）；
-- audit metadata；
-- comments；
-- resolve / unresolve；
-- optional @mention；
-- concurrent editing 不互相覆盖。
-
-同一区域冲突必须有 deterministic resolution strategy。
-
----
-
-## 9. Privacy / Security
-
-当前 challenge 使用 synthetic data。
-
-即使是 synthetic prototype，也必须体现真实系统的安全架构：
-
-- PHI redaction before LLM；
-- redaction names；
-- redaction IC / ID numbers；
-- redaction phone numbers；
-- TLS in transit；
-- encryption at rest；
-- clean logs；
-- no raw sensitive content in logs。
-
----
-
-## 10. 性能
-
-Consult Glance View：
-
-- warm path P95 ≤ 300 ms；
-- 需要说明测量方法或近似方法。
-
-因此 Glance View 不应在每次页面加载时重新把全部病历扔给 LLM。
-
-更合理的设计：
-
-- Event 创建后异步生成 candidate highlights；
-- importance score 预计算或增量更新；
-- 页面读取预计算结果。
-
-### 10.1 M7 实测基线（`backend/docs/perf_baseline.md`）
-
-`backend/scripts/measure_glance.py` 在一次性 reseed 的 SQLite 上，对 glance / events / patient-view 三个读端点分别采样 100 次（前 10 次 warm-up 丢弃），输出 Layer A（TestClient in-process，应用逻辑 + SQLite 查询）与 Layer B（真实 uvicorn + 本地 HTTP 往返）两层 P50/P95/Mean/Max。
-
-E1 基线 Layer A Glance P50/P95 为 **3.233/3.926 ms**；E2 后同方法重测为 **3.978/4.515 ms**（远低于 300 ms）。E2 Layer B P50/P95 为 **3.998/4.613 ms**。这是两次独立本地运行，不把差异解释为因果性能结论。排序确定性（`highlight_id` tiebreak）、写后读一致与 highlight 状态并发乐观锁由 `tests/test_glance_ordering.py` 锁定；读路径零-LLM、零 feedback aggregation 由 `tests/test_read_path_no_llm.py` 与 E2 SQL capture probe 证明。
-
-> 诚实条款：单用户本地 SQLite 数字只证明 warm read path 不含同步 LLM / 全量历史扫描，不代表分布式或生产级容量。
-
----
-
-## 11. MVP 构建优先级
-
-当前目标不是训练出最强模型，而是先构建一个 **安全、完整、可以演示真实工作流的运行系统**。
-
-优先级：
-
-1. Event / Artifact / Provenance 数据模型；
-2. Longitudinal Timeline；
-3. Glance View；
-4. Patient View；
-5. RBAC；
-6. AI Scribe / AI Patient Summary；
-7. Revision + audit；
-8. Required tests；
-9. Adaptive importance bonus；
-10. Ambient voice capture bonus。
-
-不要在核心链路完成前投入大量时间：
-
-- fine-tuning；
-- complex agent framework；
-- advanced voice pipeline；
-- sophisticated learning model；
-- generic UI polish。
-
----
-
-## 12. Required Tests
-
-至少实现：
-
-- `test_rbac_scope.py`
-- `test_revision_history.py`
-- `test_highlight_provenance.py`
-- `test_concurrent_edits.py`
-- `test_task_lifecycle.py`
-- `test_task_rbac_scope.py`
-- `test_task_provenance.py`
-- `test_patient_task_projection.py`
-- `test_task_glance_integration.py`
-
-Bonus：
-
-- `test_self_learning_importance.py`
-
-这些测试不是附属内容，而是 MVP 的组成部分。
-
----
-
-## 13. 最终 Demo 应展示的故事
-
-### Scenario A — Glance + Provenance
-
-- 打开患者页面；
-- 10 秒内理解当前问题；
-- 点击某条 highlight；
-- 跳回 AI summary；
-- 再查看原始 source/span。
-
-### Scenario B — Collaboration + Audit + Importance Learning
-
-- Staff 添加 note，并添加一条带 `@clinician` mention 的 comment；
-- Clinician 在一条 AI-scribed note 中手动 highlight 某个短语，并编辑 patient plan 的某个 section；
-- 该人工 highlight / pin / edit 行为被记录为 self-learning importance 的 feedback signal；
-- 展示 revision history + diff（view changes since X）；
-- revert 到之前版本；
-- 展示 audit trail。
-
-### Scenario C — Longitudinal Care
-
-- 展示跨日期、跨月份的 Event（至少包含 1–2 条较早历史事件，例如 2025-04-15 的初次头痛就诊与 2026-02-06 的用药复查，再连接到 2026-08 的当前 care episode）；
-- patient follow-up；
-- status change；
-- importance ranking；
-- unresolved task；
-- clinician-confirmed information。
-
----
-
-## 14. 当前项目判断
-
-现阶段没有真实临床训练数据，因此第一目标不是“训练模型”，而是：
-
-> **创造一套完整可运行的信息闭环，并使用 synthetic data 验证产品、权限、provenance、AI extraction 和 importance logic。**
-
-如果这个闭环能够成立，那么后续真实 clinician interaction data 才有意义；届时再讨论 learned ranking、个性化 prioritization 或 post-training。
-
-
----
-
-## 15. Setup / Run / Tests
-
-**技术栈（D5 部署选择更新于 2026-08-27）**：
-
-- 后端：Python 3.13 + FastAPI + Uvicorn + SQLAlchemy 2.x + Pydantic v2；plain SQLite 用于 unit tests/development，SQLCipher 用于单机加密 Demo
-- 前端：React 18 + Vite + TypeScript（SPA，调用 FastAPI JSON API）
-- LLM：DeepSeek（经 anthropic SDK，base_url / key 用环境变量注入）；deterministic stub 兜底，demo / 测试不依赖外部 API 实时可用
-- 测试：pytest（required tests 均为 `.py`）
-- 身份：D1 真实 Demo 身份流程（invite → register → login → HttpOnly session → logout）；密码 Argon2id 哈希，invite/session token 只存 SHA-256 哈希；D5 部署使用 Caddy HTTPS + SQLCipher 整库/备份加密（不做字段级加密声明）
-- 角色：产品模式不再接受 `X-User-Id/X-Role` 头；RBAC 服务端强制
-
-### 目录结构
-
-```text
-backend/    FastAPI + SQLAlchemy + SQLite/SQLCipher（app/ 代码，seed/ fixture，tests/ pytest）
-frontend/   Vite + React 18 + TS（clinician/staff 共用三栏 clinic shell + 独立四区 PatientViewPage）
-deploy/     D5 Caddy HTTPS 与单机 Demo 环境模板（无密钥、证书或数据库入库）
-```
-
-### Demo data（canonical fixture）
-
-一条跨 15 个月的纵向病历（`backend/seed/fixture.py` 是唯一事实源），reseed 命令见上（`python -m seed.seed`）：
-
-```text
-2025-04-15  historical_review   初次头痛评估（once weekly，无 red flag）
-2026-02-06  historical_review   药物复查（频率上升→启动 propranolol 20 mg daily）
-2026-08-20  patient_ai_preconsult  频率 near-daily、严重度 7/10、晨起恶心
-2026-08-21  nurse_consult          BP 158/96 升高
-2026-08-21  doctor_consult         blood test 开具、follow-up 预约
-2026-08-24  patient_followup       严重度降至 3/10、恶心持续、blood test pending
-2026-08-26  clinician_review       更新计划：继续 propranolol、催 blood test 结果
-```
-
-- 两个历史事件与当前 episode 形成真实跨年/跨月呼应；历史 highlight 低分（无 recency），自然让位于当前 episode。
-- C1 已为 2026-08-21 Nurse/Doctor Consult 增加同一显式 `encounter_id=enc_visit_20260821`，使 C2 可将它们显示为一个 `Clinic Visit`；底层仍是两个独立 Event，且不得按日期自动分组。
-- `recency` 由 seed 冻结的 `as_of=2026-08-26 12:00` 计算；`repeated_mentions` 按相同 `entity_key` 的 distinct Event 分组（`symptom:headache frequency` 跨 3 个事件、`task:blood test` 跨 2 个事件），新旧两侧分数都重算。
-- D2 fixture 另含真实 Task 故事：blood-test Task 当前 `open`；symptom-diary Task 保留 `open -> reported_done -> completed` 的 metadata-only AuditLog 历史。
-- **Synthea 决策：不采用**。手写 canonical fixture 已完全满足 Candidate Brief 的 Synthetic Data Only 要求，未引入 FHIR/Synthea 以避免反向重构内部模型。
-
-### 安装与启动（M1/M2 已验证）
-
-```bash
-# 后端（Python 3.13+）
-cd backend
-python -m venv .venv
-.venv/Scripts/python.exe -m pip install -r requirements.txt    # Windows；Linux/macOS 用 .venv/bin/pip
-
-# seed synthetic demo data（可重复执行：先清库再灌入）
-.venv/Scripts/python.exe -m seed.seed
-
-# 启动后端（默认 http://localhost:8000）
-.venv/Scripts/python.exe -m uvicorn app.main:app --reload
-```
-
-```bash
-# 前端（Node 18+）
-cd frontend
-npm install
-npm run dev -- --host --port 5173    # Vite dev server，代理 /api 到 :8000
-```
-
-### 运行自动化测试
-
-```bash
-cd backend
-.venv/Scripts/python.exe -m pytest        # 覆盖第 12 节 required micro-tests
-.venv/Scripts/python.exe scripts/evaluate_transcripts.py --validate-corpus
-.venv/Scripts/python.exe scripts/evaluate_transcripts.py --evaluate-runtime
-.venv/Scripts/python.exe -B scripts/evaluate_copilot.py
-```
-
-> 当前进度：M1–M7、Phase C、D1–D5 与 Phase E 的 E1–E4 已完成；E5 未开始且不在本次范围。D5 达到 **D5_AUTOMATED_SECURITY_COMPLETE**。E2/E3/E4 分别只证明受控 synthetic learning、shadow archive 和 local synthetic voice vertical slice，不代表真实医生偏好、生产存储节省、真人 usability、生产 ASR 容量或临床准确率。详见各 E1–E4 Task Card、`docs/e3_data_decay_evidence.md`、`docs/e4_voice_capture_evidence.md` 与 D5 evidence。
-
-架构约定（记录确切位置，随阶段更新）：
-
-- **PHI redaction 发生位置**：`backend/app/redaction.py`（`redact_content` / `restore_placeholders`）。在 `backend/app/ai_pipeline.py` 中，所有文本在进入 provider 之前先经 `redact_content`（姓名 / IC·ID / 手机号）；`placeholder_mapping` 仅存在于单次 pipeline 内存，不进 LLM / 日志 / DB。AI summary 与 highlights 由 `persist_derived` 原子写入（raw source 先落库、永不被覆盖）。
-- **RBAC 强制点**：所有权限判断在 server-side 完成，集中在 `backend/app/authz.py`（`authorize(action, resource)` + `PERMISSIONS` 矩阵）与 `backend/app/role_context.py`（DB 为身份/角色唯一权威，`X-Role` 只能作 demo 一致性断言，不一致即拒绝，不可提权）。每个端点经 `require_auth`（401）+ `authorize`（同院无权限 403 / 跨院或非本人 404）；不存在、跨院和非本人资源使用相同 404 body，避免存在性探测。UI 只做展示裁剪，不作为安全边界，角色切换会重新挂载整个 patient workspace 以清除敏感状态。
-- **LLM 客户端出口**：`backend/app/llm_client.py`（`LLMClient` protocol）是唯一 provider 出口，只能接收 `RedactedContent`。实际仅支持 `mock`（无 key、确定性）与 `deepseek`（live adapter）两个 provider；`NANTINGALE_LLM_PROVIDER` 默认 `deepseek`。`deepseek` 缺 key / provider 出错 / schema 非法时明确降级到 deterministic fallback；key 只从环境变量读取，永不打印/入库。
-- **D4 Copilot 边界**：`POST /api/patients/{patient_id}/copilot/query` 只对同 clinic 的 clinician 开放。Provider 只接收最多 12 个脱敏 exact-span cards，且不拥有 draft type/Event/patient/visibility/endpoint；AI Summary 必须继续解析到 raw source 才能成为 source fact。`Find evidence` 先在当前授权 patient 全历史做服务器端匹配，再限制 provider egress；`What changed` 返回两个 Event source facts + 显式 comparison inference。Copilot 不直接写记录；可编辑 Preview 由服务端签发 5 分钟 HMAC token，绑定 actor/clinic/patient/Event/type/evidence，既有 Note/Task API 验证成功后才记录 `draft_origin=copilot`。Patient instruction 必须改成有效 patient-facing 内容；Patient View 从不加载 Copilot。
-- **E2 importance learning 边界**：`backend/app/importance_learning.py` 只在成功 status CAS 与候选 persistence write path 工作。受控 entity type、server-derived role/status signal、同院 latest-only aggregation 和 `[-2,+3]` cap 共同产生 adaptive adjustment；raw clinical text/PHI 不进入 key/table/metadata。GET Glance 继续只按已存 final score 排序，hard-risk/Task/clinician-confirmed/pinned/needs-review 不受负向学习削弱。
-- **E3 storage/decay 边界**：`backend/app/data_decay.py` 只由显式 maintenance runner 使用，基于注入 `as_of`、Event time、真实 Task 与 server-side protection facts 写入 Hot/Warm/Cold 和 bounded `0/-1/-2` decay。Cold 只是 canonical hash + `zlib-json-v1` shadow payload；`Artifact.content` 始终 authoritative。Glance GET 不 import/query policy 或 storage table，Patient View 不投影 tier/hash/codec/payload/reason/size。
-- **E4 voice 边界**：`backend/app/voice/` + `/api/voice/*` 是唯一 Recording/ASR 生命周期；raw audio 不进入 `LLMClient`。功能默认关闭，本地模型必须预先准备。machine Transcript 保留 provider/model/version/time observations，speaker/confidence 不存在时保持 null；人工 review 通过后才把 immutable canonical Transcript 交给既有 ingestion pipeline。Recording BLOB 独立于 E3 Artifact shadow archive，并由 SQLCipher backup/restore 覆盖。
-
-### Demo auth（D1）：Invite → Register → Login → Session → Logout
-
-产品模式的进入流程是真实身份流程（`backend/app/api/auth.py` + `backend/app/auth_security.py`）：
-
-```text
-Admin 创建 clinic invite（一次性链接，不发送真实邮件）
-  -> 被邀请者打开 /register?token=…（只预览掩码邮箱/角色/clinic，无存在性枚举）
-  -> 注册：invite 消耗 + User + UserCredential 在同一 transaction；
-     注册者不能覆盖 invite 的 role/clinic/patient binding；
-     patient invite 只能把新登录绑定到既有 Patient 记录，绝不创建第二条纵向记录
-  -> 登录：Argon2id 校验（argon2-cffi），未知邮箱/错误密码/禁用账号返回同一 401 body
-  -> 会话：256-bit 随机 token 只存 SHA-256 哈希，HttpOnly + SameSite=Lax cookie
-     （D5 production gate 强制 NANTINGALE_SECURE_COOKIES=true，并加 Secure）
-  -> 每次请求都重新解析 cookie → DB User（role/clinic/patient 全来自 DB）
-  -> 登出：条件 UPDATE 原子 revoke，客户端 cookie 同时清除
-```
-
-内置 Demo 账号（synthetic，密码相同 `nightingale-demo`；见 `backend/seed/fixture.py`）：
-
-| 角色 | 邮箱 | 登录后进入 |
-|---|---|---|
-| Clinician | doctor@demo.clinic | 三栏 Clinician Workspace |
-| Staff / Nurse | staff@demo.clinic | 同一 clinical shell 的 Nurse workspace（Nurse Consult、Staff Note、Care Tasks、Comments） |
-| Patient | alice@demo.clinic | 独立四区 Patient View（pat_001） |
-| Admin | admin@demo.clinic | 独立 Admin Workspace（Users、Invites、Sessions、Access Audit；无 clinical authoring） |
-
-相关环境变量（后端）：
-
-```text
-NANTINGALE_DEMO_AUTH=true          # 显式开启 legacy X-User-Id/X-Role 头模式（默认关闭；测试/开发专用）
-NANTINGALE_SESSION_TTL_HOURS=12    # session 有效期（默认 12 小时）
-NANTINGALE_INVITE_TTL_DAYS=7       # invite 有效期（默认 7 天）
-NANTINGALE_SECURE_COOKIES=true     # HTTPS 部署后开启 cookie Secure 标志
-NANTINGALE_ENV=production           # 启用 D5 production fail-closed 配置门
-NANTINGALE_SECURITY_MODE=strict     # exact-Origin CSRF/CORS、限流和 HSTS
-NANTINGALE_DATABASE_MODE=sqlcipher  # D5 单机加密部署；plain SQLite 仅 test/dev
-NANTINGALE_DB_PATH=<private path>   # gitignored/private SQLCipher 文件
-NANTINGALE_DB_KEY=<32+ char secret> # 只从环境/secret manager 注入
-NANTINGALE_BACKUP_KEY=<different 32+ char secret>
-NANTINGALE_RESTORED_DB_KEY=<third different 32+ char secret>
-NANTINGALE_FRONTEND_ORIGIN=https://127.0.0.1:8443
-NANTINGALE_COPILOT_CONFIRMATION_SECRET=<shared secret>  # 多 worker 必配；单进程未配置时使用进程随机 secret
-```
-
-前端环境变量（`frontend/.env`）：
-
-```text
-VITE_DEMO_AUTH=true                # 前端与后端 demo 模式需同时开启；默认关闭
-```
-
-**Demo auth 与生产身份验证的边界（诚实声明）**：
-
-- 密码哈希（Argon2id）、token 哈希、server-side session、revoke/expiry、cookie 标志、单次 invite、注册绑定和 AuditLog 都是真实实现，不以明文落库/入日志；
-- 属于 Demo 的：不发真实邮件/SMS（admin 复制一次性链接）、无 MFA/SSO/OAuth、无 forgot-password（可 admin 重新邀请）、无跨 clinic membership、无生产 KYC/执照校验；
-- 已实证：D5 本机 Caddy TLS、secure cookie/security headers、SQLCipher database + separately keyed backup + rotated-key restore；普通 sqlite3 无法读取三者。
-- 仍未做/未宣称：生产 PostgreSQL、多进程/容量证明、真实 PHI、公众可信域名证书。当前本地 CA 必须由用户显式信任；不得绕过浏览器证书警告。
-
-### D5 加密单机 Demo
-
-完整的 Decision Gates、密钥/备份/恢复边界、Caddy 拓扑与复现命令见
-`docs/d5_deployment_security_decisions.md`。最短路径：
-
-```text
-1. 从 deploy/.env.example 将独立随机密钥注入当前进程环境（不要提交 .env）
-2. frontend: npm run build
-3. backend: .venv/Scripts/python.exe scripts/init_encrypted_demo.py
-4. backend: .venv/Scripts/python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --no-access-log
-5. deploy: caddy run --config Caddyfile --adapter caddyfile
-6. backend: .venv/Scripts/python.exe scripts/verify_secure_demo.py --ca-file <Caddy root.crt>
-```
-
-database/backup/restore 三把 key 必须 32+ 字符且两两不同。加密备份与恢复分别由
-`backup_encrypted_db.py` 和 `restore_encrypted_backup.py` 完成；两者拒绝覆盖已有目标。`check_no_secrets.py`
-检查 tracked/untracked-but-not-ignored 文件中的高置信 secret。该部署只使用 synthetic
-data，是单进程产品 Demo，不是 production medical system。
-
-后端不会自动加载 `.env`。PowerShell 必须在每个运行进程所在终端显式执行
-以下导入命令（不需要修改或绕过 PowerShell execution policy）：
+## Verification commands
 
 ```powershell
-Set-Location E:\桌面\Nantingale\deploy
-$d5EnvFile = (Resolve-Path -LiteralPath .\.env.local).Path
-Get-Content -LiteralPath $d5EnvFile | ForEach-Object {
-    $line = $_.Trim(); if (-not $line -or $line.StartsWith('#')) { return }
-    if ($line -notmatch '^([A-Z][A-Z0-9_]*)=(.*)$') { throw 'Invalid NAME=value line' }
-    $name = $Matches[1]; $value = $Matches[2].Trim()
-    if (-not ($name.StartsWith('NANTINGALE_') -or $name -in @('XDG_DATA_HOME','XDG_CONFIG_HOME'))) { throw "Variable outside D5 allowlist: $name" }
-    if (-not $value -or $value.Contains('<') -or $value.Contains('>')) { throw "Replace placeholder: $name" }
-    [Environment]::SetEnvironmentVariable($name, $value, 'Process')
-}
+Set-Location backend
+.venv\Scripts\python.exe -m pytest
+.venv\Scripts\python.exe -m pytest tests\security tests\integration -q
+.venv\Scripts\python.exe scripts\evaluate_transcripts.py --validate-corpus
+.venv\Scripts\python.exe scripts\evaluate_transcripts.py --evaluate-runtime
+.venv\Scripts\python.exe -B scripts\evaluate_copilot.py
+.venv\Scripts\python.exe scripts\measure_glance.py
+.venv\Scripts\python.exe scripts\measure_storage_policy.py
+.venv\Scripts\python.exe -m pip check
+.venv\Scripts\python.exe scripts\check_no_secrets.py
+
+Set-Location ..\frontend
+node tests\transcriptRange.test.mjs
+node tests\voiceCapture.test.mjs
+node tests\patientCheckIn.test.mjs
+npm run build
+npm ls --depth=0
+
+Set-Location ..
+git diff --check
 ```
 
-`.env.example` 同时要求显式设置 `XDG_DATA_HOME` / `XDG_CONFIG_HOME`，使
-Caddy CA/config/runtime state 落在用户选择的 private、gitignored 路径，而不是依赖隐含默认目录。
+Current pre-E5 evidence: backend 509 passed / 2 explicit real-local-ASR-input skips; security/integration 22 passed; Patient Check-in 29 passed; D3 corpus/runtime and D4 frozen eval passed; three frontend Node checks and the 59-module production build passed. The dated final manifest records the final-commit rerun and any later changes.
 
-### DeepSeek API key 放在哪里
+## Known limits
 
-不要把 key 写入源码、JSON、测试 fixture 或提交到 Git。后端按顺序从环境变量 `DEEPSEEK_API_KEY` → legacy alias `Natingale_API_KEY` 读取；推荐只使用标准名 `DEEPSEEK_API_KEY`。Windows PowerShell 中可只为当前终端设置：
+- Synthetic-data prototype only; no real PHI or production medical use.
+- Local single-process/single-machine architecture, not distributed deployment.
+- DeepSeek full Patient Check-in journey is not currently verified because the strict live Summary failed and fell back.
+- D3 frozen Provider layer is `NOT_RUN`; deterministic fallback results are separate.
+- E4 is default-off and currently lacks the ignored model/audio inputs needed to rerun two real-local-ASR tests.
+- Voice has no diarization and no physical-microphone evidence in the final run.
+- Self-learning is bounded interaction weighting, not clinical learning.
+- Data decay is a shadow payload policy, not demonstrated total storage reduction.
+- Copilot confirmation tokens are short-lived but not persisted as one-time records; a multi-worker deployment needs a shared confirmation secret.
+- No independent clinical usability study, production load test, public hosting, penetration test, or regulatory assessment was performed.
+- E5 cannot be called Submission Ready until a real 6–9 minute Demo Video is recorded and played end-to-end, the submitter name is supplied, and final attachment/link access is verified.
 
-```powershell
-$env:DEEPSEEK_API_KEY = "你的 DeepSeek API key"
-$env:NANTINGALE_LLM_PROVIDER = "deepseek"
-cd backend
-.venv\Scripts\python.exe -m uvicorn app.main:app --reload
-```
+## Evidence and deliverables
 
-若希望以后新开的终端也能读取，可写入当前 Windows 用户的环境变量（执行后需**重新打开终端**，已运行的进程不会自动刷新）：
+- Candidate requirements: `2026 72 Hour Build_ Nightingale Candidate Brief 2.pdf`
+- Attribution: `ATTRIBUTION.txt`
+- Final evidence: `docs/final_submission_evidence_2026-08-28.md`
+- Demo runbook: `docs/demo_video_runbook_2026-08-28.md`
+- Submission email draft: `docs/submission_email_draft_2026-08-28.md`
+- Technical Brief: `output/pdf/Nightingale_Technical_Brief.pdf`
 
-```powershell
-[Environment]::SetEnvironmentVariable("DEEPSEEK_API_KEY", "你的 DeepSeek API key", "User")
-```
-
-项目 `.gitignore` 已排除 `.env`，但当前后端没有加载 `.env` 文件，因此仅创建 `.env` **不会生效**。`deepseek-v4-flash` 曾于 2026-08-26 完成一次无 PHI 的日期化 smoke check（记录在 `backend/docs/gate0_provider_status.md`）；这不是当前 provider uptime 或 production-readiness 证明。D3/D4 frozen eval 在无 key 时把 live provider 层明确报告为 `NOT_RUN`，运行时无 key 或调用失败仍会显式降级到 deterministic fallback。
-
----
-
-## 16. Bonus: Hybrid Storage / Data Decay
-
-> 明确标记为 Bonus，不改变第 11 节的 MVP 优先级。
-
-设计方向：
-
-- recent / clinically important information 保持高可访问性（热路径，直接参与 Glance 计算）；
-- older low-value data 可以 summary / compress / archive（冷路径）；
-- raw source 与 provenance chain **不得因 compression 丢失**——压缩的是展示与索引成本，不是可追溯性；
-- clinician-confirmed / unresolved / high-risk information 不参与简单 decay；
-- data decay 只降低旧数据的呈现优先级，不得删除仍被 provenance 引用的 source span。
-
----
-
-## 17. Bonus: Ambient Voice Capture
-
-> 已实现 E4 local synthetic vertical slice；仍明确标记为 Bonus，不构成生产医疗或真人准确率证明。
-
-边界约束：
-
-- **Patient voice capture**：仅 patient view 可用。PWA on mobile；录音 → redact PHI before LLM → transcribe → 提取结构化事实 → 生成 patient consult session summary。
-- **Clinical / staff voice capture**：仅 clinical view 可用。PWA on mobile 或 laptop。
-
-架构描述至少覆盖：
-
-- speaker-labelled transcript；
-- timestamps；
-- confidence markers；
-- code-switching support；
-- clinical summary；
-- provenance back to source segments。
-
-Extra bonus（加分项，非当前优先级）：noisy environment、diarization、overlap handling、multilingual medical terminology、multi-device capture。
-
-当前实现使用固定 multilingual Base local ASR，支持浏览器 WAV/WebM/Ogg、可见时间范围、unknown-speaker 阻断、split/merge/reindex 和角色限定确认。自动 diarization、真实 noisy/code-switching accuracy、物理麦克风真人录音与生产容量均未评估。
+The final evidence manifest is authoritative for commit hashes, exact command outcomes, Provider/ASR status, missing owner inputs, and Submission Ready status.
