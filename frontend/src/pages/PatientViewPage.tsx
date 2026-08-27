@@ -3,18 +3,31 @@ import { api } from '../api';
 import type { PatientTask, PatientView, TaskStatus } from '../types';
 
 const EVENT_TYPE_LABELS: Record<string, string> = {
-  patient_ai_preconsult: 'AI 预问诊',
-  patient_followup: '随访对话',
+  patient_ai_preconsult: 'AI pre-consult',
+  patient_followup: 'Recovery check-in',
 };
 
-function fmtDate(iso: string | null): string {
+function fmtLongDate(iso: string | null): string {
   if (!iso) return '';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  return `${d.getFullYear()}-${mm}-${dd}`;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
+
+function greeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 18) return 'Good afternoon';
+  return 'Good evening';
+}
+
+const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
+  open: 'Not started',
+  in_progress: 'In progress',
+  reported_done: 'Awaiting clinic confirmation',
+  completed: 'Clinic confirmed',
+  cancelled: 'Cancelled',
+};
 
 export default function PatientViewPage({
   patientId,
@@ -32,6 +45,7 @@ export default function PatientViewPage({
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitSuccess, setSubmitSuccess] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [pendingTaskId, setPendingTaskId] = useState<string | null>(null);
   const [taskError, setTaskError] = useState<string | null>(null);
@@ -66,6 +80,7 @@ export default function PatientViewPage({
     // error and pending response even if a host reuses this component.
     setMessage('');
     setSubmitError(null);
+    setSubmitSuccess(false);
     setTaskError(null);
     setPendingTaskId(null);
     setTab('today');
@@ -75,6 +90,7 @@ export default function PatientViewPage({
     if (!message.trim()) return;
     setBusy(true);
     setSubmitError(null);
+    setSubmitSuccess(false);
     try {
       await api.createSession(
         patientId,
@@ -84,6 +100,7 @@ export default function PatientViewPage({
         { messages: [{ id: 'm1', speaker: 'patient', text: message.trim() }] },
       );
       setMessage('');
+      setSubmitSuccess(true);
       setRefreshKey((k) => k + 1);
     } catch (e: any) {
       setSubmitError(String(e.message ?? e));
@@ -100,7 +117,7 @@ export default function PatientViewPage({
       setRefreshKey((key) => key + 1);
     } catch (e: any) {
       setTaskError(e?.status === 409
-        ? '这项任务已在别处更新。我们正在刷新最新状态。'
+        ? 'This care action changed elsewhere. We are refreshing the latest status.'
         : String(e.message ?? e));
       if (e?.status === 409) setRefreshKey((key) => key + 1);
     } finally {
@@ -108,122 +125,152 @@ export default function PatientViewPage({
     }
   }
 
-  if (error) return <div className="error">无法加载你的信息：{error}</div>;
-  if (!view || loading) return <div className="patient-view"><div className="loading-card">正在加载你的照护计划…</div></div>;
+  if (error) return <div className="patient-app-state"><div className="form-error">We could not load your care plan: {error}</div></div>;
+  if (!view || loading) return <div className="patient-app-state"><div className="loading-card">Loading your care plan…</div></div>;
 
   const taskGroups: { key: keyof PatientView['care_plan']; label: string }[] = [
-    { key: 'open', label: '待开始' },
-    { key: 'in_progress', label: '进行中' },
-    { key: 'reported_done', label: '等待诊所确认' },
-    { key: 'completed', label: '已由诊所确认' },
+    { key: 'open', label: 'Not started' },
+    { key: 'in_progress', label: 'In progress' },
+    { key: 'reported_done', label: 'Awaiting clinic confirmation' },
+    { key: 'completed', label: 'Completed' },
   ];
 
+  const navigation = [
+    ['today', 'Today', '⌂'],
+    ['care', 'Care Plan', '✓'],
+    ['checkin', 'Check-in', '✦'],
+    ['summaries', 'Visit Summaries', '▤'],
+  ] as const;
+
   return (
-    <div className="patient-view">
-      <header className="pv-header">
-        <div className="avatar">{view.display_name.slice(0, 1).toUpperCase()}</div>
-        <div>
-          <h1>你好，{view.display_name}</h1>
-          <div className="meta">你的个人照护说明</div>
+    <div className="patient-app-shell">
+      <header className="patient-topbar">
+        <div className="patient-brand" aria-label="Nightingale patient portal">
+          <span className="patient-brand-mark" aria-hidden="true">N</span>
+          <span><strong>Nightingale</strong><small>My care</small></span>
         </div>
-        {onLogout && (
-          <button className="secondary-button pv-logout" onClick={onLogout}>退出登录</button>
-        )}
+        <nav className="patient-navigation" aria-label="Patient experience sections">
+          {navigation.map(([key, label, icon]) => (
+            <button key={key} className={tab === key ? 'active' : ''} aria-current={tab === key ? 'page' : undefined} onClick={() => setTab(key)}>
+              <span aria-hidden="true">{icon}</span>{label}
+            </button>
+          ))}
+        </nav>
+        <div className="patient-profile">
+          <div className="patient-profile-avatar">{view.display_name.slice(0, 1).toUpperCase()}</div>
+          <div><strong>{view.display_name}</strong><small>My profile</small></div>
+          {onLogout && <button className="patient-logout" onClick={onLogout}>Log out</button>}
+        </div>
       </header>
 
-      <nav className="pv-tabs" aria-label="Patient experience sections">
-        {([
-          ['today', 'Today'],
-          ['care', 'Care Plan'],
-          ['checkin', 'Check-in'],
-          ['summaries', 'Visit Summaries'],
-        ] as const).map(([key, label]) => (
-          <button key={key} className={tab === key ? 'active' : ''} onClick={() => setTab(key)}>
-            {label}
-          </button>
-        ))}
-      </nav>
+      <main className={`patient-main patient-main-${tab}`}>
+        {taskError && <div className="form-error">{taskError}</div>}
 
-      {taskError && <div className="form-error">{taskError}</div>}
+        {tab === 'today' && (
+          <>
+            <header className="patient-welcome">
+              <div><p>{new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}</p><h1>{greeting()}, {view.display_name}</h1><span>Here is what you need to know and do next.</span></div>
+            </header>
 
-      {tab === 'today' && (
-        <>
-          <section className="pv-card pv-primary">
-            <h2>今天需要知道的事</h2>
-            {view.today.instruction ? (
-              <>
-                <p className="pv-lead">{view.today.instruction.instruction}</p>
-                <div className="pv-date muted">更新于 {fmtDate(view.today.instruction.event_time)}</div>
-              </>
-            ) : <p className="muted">暂时没有新的医生说明。</p>}
-            {view.today.next_follow_up && <p className="pv-followup">后续安排：{view.today.next_follow_up}</p>}
-          </section>
-          <section className="pv-card">
-            <h2>最近需要行动</h2>
-            {view.today.tasks.length === 0
-              ? <p className="muted">目前没有待处理的照护任务。</p>
-              : view.today.tasks.map((task) => (
-                <PatientTaskCard key={task.task_id} task={task} pending={pendingTaskId === task.task_id} onTransition={transition} />
-              ))}
-          </section>
-        </>
-      )}
-
-      {tab === 'care' && (
-        <section className="pv-card">
-          <h2>你的照护计划</h2>
-          {taskGroups.map(({ key, label }) => (
-            <div className="pv-task-group" key={key}>
-              <h3>{label}</h3>
-              {view.care_plan[key].length === 0
-                ? <p className="muted">没有项目</p>
-                : view.care_plan[key].map((task) => (
-                  <PatientTaskCard key={task.task_id} task={task} pending={pendingTaskId === task.task_id} onTransition={transition} />
-                ))}
+            <div className="patient-focus-grid">
+              <section className="patient-current-summary">
+                <div className="patient-section-kicker"><span aria-hidden="true">i</span>What you need to know</div>
+                {view.today.instruction ? (
+                  <><h2>{view.today.instruction.instruction}</h2><p>Follow your current care instructions and use Check-in if anything changes.</p><small>Updated {fmtLongDate(view.today.instruction.event_time)}</small></>
+                ) : <><h2>There are no new care instructions today.</h2><p>Your clinic will update this page when there is something you need to know.</p></>}
+              </section>
+              <section className="patient-followup-card">
+                <span>Upcoming follow-up</span>
+                {view.today.next_follow_up ? <><h2>Next step</h2><p>{view.today.next_follow_up}</p></> : <><h2>No follow-up listed</h2><p>Your clinic has not added a new follow-up instruction.</p></>}
+                <div className="patient-care-team"><span aria-hidden="true">＋</span><div><strong>Your care team</strong><small>Nightingale Demo Clinic</small></div></div>
+              </section>
             </div>
-          ))}
-        </section>
-      )}
 
-      {tab === 'checkin' && (
-        <section className="pv-card">
-          <h2>提交近况</h2>
-          <p className="pv-notice">发送后会保存为新的患者对话记录，并由 AI 整理给照护团队查看；不会直接修改医生记录或任务状态。</p>
-          <textarea value={message} onChange={(e) => setMessage(e.target.value)} placeholder="例如：这周头痛好多了，但早上还是有点恶心…" rows={4} />
-          <div className="inline-actions">
-            <button onClick={send} disabled={busy || !message.trim()}>{busy ? '正在发送…' : submitError ? '重试发送' : '发送近况'}</button>
-            {busy && <span className="muted">正在安全保存你的原始输入…</span>}
-          </div>
-          {submitError && <div className="form-error">发送失败：{submitError}。你的文字仍保留，可重试。</div>}
-          <div className="pv-sessions">
-            <h3 className="pv-subhead">过往 Check-in</h3>
-            {view.check_in.sessions.length === 0 ? <p className="muted">还没有提交记录。</p> : (
-              <ul className="pv-list">
-                {view.check_in.sessions.map((session) => (
-                  <li key={session.event_id} className="pv-session"><span className="pv-date muted">{fmtDate(session.started_at)}</span><span>{EVENT_TYPE_LABELS[session.event_type] ?? session.event_type}</span></li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </section>
-      )}
+            <div className="patient-action-grid">
+              <section className="patient-surface patient-next-steps">
+                <div className="patient-surface-head"><div><p>Care actions</p><h2>Your next steps</h2></div><span>{view.today.tasks.length} active</span></div>
+                {view.today.tasks.length === 0
+                  ? <div className="patient-empty-compact">You have no care actions to complete right now.</div>
+                  : view.today.tasks.map((task) => <PatientTaskCard key={task.task_id} task={task} pending={pendingTaskId === task.task_id} onTransition={transition} />)}
+              </section>
+              <section className="patient-checkin-cta">
+                <div className="patient-checkin-icon" aria-hidden="true">✦</div>
+                <h2>How are you feeling today?</h2>
+                <p>Share what has changed. Your update will be organised for your care team without changing your clinical plan.</p>
+                <button onClick={() => setTab('checkin')}>Start a Check-in <span aria-hidden="true">→</span></button>
+              </section>
+            </div>
 
-      {tab === 'summaries' && (
-        <section className="pv-card">
-          <h2>就诊说明</h2>
-          {view.visit_summaries.summaries.length === 0 ? <p className="muted">暂时没有患者可见的就诊说明。</p> : (
-            <ul className="pv-list">
-              {view.visit_summaries.summaries.map((summary) => (
-                <li key={summary.artifact_id} className="pv-instruction">
-                  <div className="pv-date muted">{fmtDate(summary.event_time)}</div>
-                  <p>{summary.instruction}</p>
-                  {summary.follow_up && <p className="pv-followup">后续安排：{summary.follow_up}</p>}
-                </li>
+            <section className="patient-surface patient-instructions-preview">
+              <div className="patient-surface-head"><div><p>Patient-facing information</p><h2>Instructions from your care team</h2></div><button onClick={() => setTab('summaries')}>View all →</button></div>
+              {view.visit_summaries.summaries.length === 0 ? <div className="patient-empty-compact">No visit summaries are available yet.</div> : (
+                <div className="patient-instruction-list">
+                  {view.visit_summaries.summaries.slice(0, 2).map((summary) => (
+                    <button key={summary.artifact_id} onClick={() => setTab('summaries')}><span>{fmtLongDate(summary.event_time)}</span><div><strong>Care instruction</strong><p>{summary.instruction}</p></div><span aria-hidden="true">›</span></button>
+                  ))}
+                </div>
+              )}
+            </section>
+          </>
+        )}
+
+        {tab === 'care' && (
+          <>
+            <header className="patient-view-heading"><p>Your care</p><h1>Care Plan</h1><span>Start your assigned actions, report when you are done, and wait for the clinic to confirm completion.</span></header>
+            <div className="patient-care-grid">
+              {taskGroups.map(({ key, label }) => (
+                <section className={`patient-surface patient-care-group patient-care-${key}`} key={key}>
+                  <div className="patient-surface-head"><h2>{label}</h2><span>{view.care_plan[key].length}</span></div>
+                  {view.care_plan[key].length === 0 ? <div className="patient-empty-compact">No items</div> : view.care_plan[key].map((task) => (
+                    <PatientTaskCard key={task.task_id} task={task} pending={pendingTaskId === task.task_id} onTransition={transition} />
+                  ))}
+                </section>
               ))}
-            </ul>
-          )}
-        </section>
-      )}
+            </div>
+          </>
+        )}
+
+        {tab === 'checkin' && (
+          <section className="patient-checkin-layout">
+            <aside className="patient-checkin-history">
+              <button className="patient-back-home" onClick={() => setTab('today')}>← Back to Today</button>
+              <h2>Check-in</h2>
+              <p>Your updates become patient conversation records for the care team. They do not change your doctor’s plan or complete a task.</p>
+              <h3>Previous Check-ins</h3>
+              {view.check_in.sessions.length === 0 ? <span className="patient-empty-compact">No previous updates</span> : view.check_in.sessions.map((session) => (
+                <div className="patient-session-row" key={session.event_id}><strong>{fmtLongDate(session.started_at)}</strong><span>{EVENT_TYPE_LABELS[session.event_type] ?? 'Patient update'}</span></div>
+              ))}
+            </aside>
+            <div className="patient-checkin-main">
+              <header><span className="patient-online-dot" aria-hidden="true" /><div><strong>Nightingale Check-in</strong><small>For non-emergency recovery updates</small></div></header>
+              <div className="patient-checkin-conversation" aria-live="polite">
+                <div className="patient-assistant-message">Hi {view.display_name}. What has changed since your last update?</div>
+                <div className="patient-quick-prompts">
+                  {['My symptoms are improving', 'I still feel nauseous', 'I have a new symptom'].map((prompt) => <button key={prompt} onClick={() => { setMessage(prompt); setSubmitSuccess(false); }}>{prompt}</button>)}
+                </div>
+                {submitSuccess && <div className="patient-success-message">Your update was saved and is available for your care team to review.</div>}
+              </div>
+              <div className="patient-checkin-composer">
+                <textarea value={message} onChange={(event) => { setMessage(event.target.value); setSubmitSuccess(false); }} placeholder="Tell us how you are feeling…" rows={4} />
+                <div><span>Do not use this for emergencies.</span><button onClick={send} disabled={busy || !message.trim()}>{busy ? 'Saving…' : submitError ? 'Retry' : 'Send update'} <span aria-hidden="true">↑</span></button></div>
+                {busy && <small>Safely saving your original update…</small>}
+                {submitError && <div className="form-error">Send failed: {submitError}. Your words are still here, so you can retry.</div>}
+              </div>
+            </div>
+          </section>
+        )}
+
+        {tab === 'summaries' && (
+          <>
+            <header className="patient-view-heading"><p>Your record</p><h1>Visit Summaries</h1><span>Only patient-facing instructions from your care team appear here.</span></header>
+            {view.visit_summaries.summaries.length === 0 ? <div className="patient-surface patient-empty-state">No patient-facing visit summaries are available yet.</div> : (
+              <div className="patient-summary-list">{view.visit_summaries.summaries.map((summary) => (
+                <article className="patient-surface patient-summary-card" key={summary.artifact_id}><time>{fmtLongDate(summary.event_time)}</time><div><h2>Care instruction</h2><p>{summary.instruction}</p>{summary.follow_up && <div className="patient-followup-note"><strong>Follow-up</strong><span>{summary.follow_up}</span></div>}</div></article>
+              ))}</div>
+            )}
+          </>
+        )}
+      </main>
     </div>
   );
 }
@@ -234,12 +281,19 @@ function PatientTaskCard({ task, pending, onTransition }: {
   onTransition: (task: PatientTask, status: TaskStatus) => void;
 }) {
   return (
-    <article className={`pv-task pv-task-${task.status}`}>
-      <div><strong>{task.title}</strong>{task.due_at && <small>截止 {fmtDate(task.due_at)}</small>}</div>
-      {task.status === 'open' && <button disabled={pending} onClick={() => onTransition(task, 'in_progress')}>{pending ? '更新中…' : '开始'}</button>}
-      {(task.status === 'open' || task.status === 'in_progress') && <button disabled={pending} onClick={() => onTransition(task, 'reported_done')}>报告已完成</button>}
-      {task.status === 'reported_done' && <span className="pv-waiting">已报告完成 · 等待诊所确认</span>}
-      {task.status === 'completed' && <span className="pv-complete">诊所已确认完成</span>}
+    <article className={`patient-task patient-task-${task.status}`}>
+      <div className="patient-task-state" aria-hidden="true">{task.status === 'completed' ? '✓' : task.status === 'reported_done' ? '…' : '○'}</div>
+      <div className="patient-task-copy">
+        <span className="patient-task-status">{TASK_STATUS_LABELS[task.status]}</span>
+        <strong>{task.title}</strong>
+        {task.due_at && <small>Due {fmtLongDate(task.due_at)}</small>}
+      </div>
+      <div className="patient-task-actions">
+        {task.status === 'open' && <button disabled={pending} onClick={() => onTransition(task, 'in_progress')}>{pending ? 'Updating…' : 'Start'}</button>}
+        {(task.status === 'open' || task.status === 'in_progress') && <button className="patient-task-primary" disabled={pending} onClick={() => onTransition(task, 'reported_done')}>Report done</button>}
+        {task.status === 'reported_done' && <span className="patient-task-waiting">Waiting for clinic review</span>}
+        {task.status === 'completed' && <span className="patient-task-complete">Confirmed</span>}
+      </div>
     </article>
   );
 }
