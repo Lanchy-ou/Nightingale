@@ -105,6 +105,7 @@ class ReviewedSegment(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
     index: int = Field(ge=0)
+    source_machine_segment_ids: list[str] = Field(default_factory=list, max_length=500)
     speaker: str | None = Field(default=None, max_length=32)
     text: str = Field(max_length=4000)
     source_start_ms: int | None = Field(default=None, ge=0)

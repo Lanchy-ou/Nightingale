@@ -28,6 +28,7 @@ from .api import (
     sources,
     tasks,
     transcripts,
+    voice,
 )
 from .db import get_db
 from .errors import error_response
@@ -83,6 +84,7 @@ app.include_router(audit.router)
 app.include_router(sources.router)
 app.include_router(tasks.router)
 app.include_router(transcripts.router)
+app.include_router(voice.router)
 
 
 @app.exception_handler(HTTPException)

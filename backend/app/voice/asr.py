@@ -46,3 +46,15 @@ class DeterministicMockASRClient:
         if result is None:
             return _failure("mock_fixture_not_found")
         return result.model_copy(deep=True)
+
+
+def build_asr_client(provider: str = "mock") -> ASRClient:
+    """Build the approved ASR adapter.
+
+    E4 currently exposes only the deterministic contract double. It has no
+    built-in transcript fixtures, so an unknown recording fails explicitly.
+    A real local/external provider requires a separate privacy/license gate.
+    """
+    if provider == "mock":
+        return DeterministicMockASRClient({})
+    raise ValueError("Unsupported ASR provider")
