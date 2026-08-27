@@ -1,16 +1,20 @@
-"""Create only the E4 voice table in the configured existing database.
+"""Compatibility entry point for the unified E1-E4 schema migration.
 
-This is a non-destructive prototype migration: it never drops or rewrites an
-existing table. The configured SQLCipher mode/key are reused through app.db.
+The migration never drops an existing table. The configured SQLCipher mode/key
+are reused through app.db.
 """
 
-from app import models as _core_models  # noqa: F401 - register FK target tables
-from app.db import engine
-from app.voice.models import VoiceCaptureRecord
+import sys
+from pathlib import Path
+
+BACKEND = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(BACKEND))
+
+from app.db import engine, migrate_phase_e_schema  # noqa: E402
 
 
 def main() -> None:
-    VoiceCaptureRecord.__table__.create(bind=engine, checkfirst=True)
+    migrate_phase_e_schema(engine)
     print("VOICE_SCHEMA_READY")
 
 

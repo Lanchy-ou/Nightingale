@@ -21,6 +21,7 @@ import CommentThread from '../components/CommentThread';
 import CopilotPanel from '../components/CopilotPanel';
 import GlancePanel from '../components/GlancePanel';
 import NewDoctorConsult from '../components/NewDoctorConsult';
+import VoiceCapture from '../components/VoiceCapture';
 import ProvenancePanel from '../components/ProvenancePanel';
 import RevisionPanel from '../components/RevisionPanel';
 
@@ -280,6 +281,16 @@ function PatientWorkspace({
     onNavigate({ kind: 'patient', patientId, mode: 'event', eventId: result.event.event_id });
   }
 
+  async function voiceCompleted(capture: import('../types').VoiceCaptureRecord) {
+    if (!capture.event_id) return;
+    setCompletion(null);
+    const nextEvents = await api.getEvents(patientId);
+    setEvents(nextEvents);
+    setRefreshKey((value) => value + 1);
+    setContextTab('comments');
+    onNavigate({ kind: 'patient', patientId, mode: 'event', eventId: capture.event_id });
+  }
+
   const workspaceStyle = { '--context-width': `${contextWidth}px` } as CSSProperties;
 
   if (loading) {
@@ -377,21 +388,31 @@ function PatientWorkspace({
             onOpenEvent={openEvent}
           />
         )}
-        {route.mode === 'new' && identity.role === 'clinician' && (
-          <NewDoctorConsult
-            patient={patient}
-            onCancel={() => openTab('timeline')}
-            onCompleted={completed}
-          />
-        )}
-        {route.mode === 'new' && identity.role === 'staff' && (
-          <NewDoctorConsult
-            patient={patient}
-            consultKind="nurse"
-            encounterOptions={encounterOptions}
-            onCancel={() => openTab('timeline')}
-            onCompleted={completed}
-          />
+        {route.mode === 'new' && (identity.role === 'clinician' || identity.role === 'staff') && (
+          <div className="consult-input-stack">
+            <VoiceCapture
+              boundaryKey={`${identity.user_id}:${identity.role}:${patientId}:voice`}
+              patientId={patientId}
+              captureMode={identity.role === 'clinician' ? 'doctor_consult' : 'nurse_consult'}
+              onProcessed={(capture) => { void voiceCompleted(capture); }}
+            />
+            <div className="consult-input-divider"><span>or use a reviewed text transcript</span></div>
+            {identity.role === 'staff' ? (
+              <NewDoctorConsult
+                patient={patient}
+                consultKind="nurse"
+                encounterOptions={encounterOptions}
+                onCancel={() => openTab('timeline')}
+                onCompleted={completed}
+              />
+            ) : (
+              <NewDoctorConsult
+                patient={patient}
+                onCancel={() => openTab('timeline')}
+                onCompleted={completed}
+              />
+            )}
+          </div>
         )}
         {route.mode === 'event' && selectedEvent && (
           <ClinicalEventDetail

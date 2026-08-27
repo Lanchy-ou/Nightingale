@@ -18,6 +18,10 @@ os.environ["NANTINGALE_DB_URL"] = f"sqlite:///{_tmp.name}"
 # behind NANTINGALE_DEMO_AUTH (default off); the existing header-based
 # fixtures need it explicitly enabled. Session/cookie tests do not use it.
 os.environ["NANTINGALE_DEMO_AUTH"] = "true"
+# Voice is fail-closed by default in product runtime. The E4 test suite opts in
+# explicitly and uses the deterministic provider unless a test overrides it.
+os.environ["NANTINGALE_VOICE_ENABLED"] = "true"
+os.environ["NANTINGALE_ASR_PROVIDER"] = "mock"
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402

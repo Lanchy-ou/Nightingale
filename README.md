@@ -455,11 +455,11 @@ Clinic Visit 只能由用户显式选择既有非空 `encounter_id` 组成；Nur
 
 Admin 登录后进入独立 `AdminWorkspacePage`，沿用现有字体、间距、卡片、按钮、状态标签与品牌色，只提供 Users/Invites/Sessions/Access Audit。Admin API 为 `GET /api/admin/users`、`PATCH /api/admin/users/{user_id}/status`、`POST /api/admin/users/{user_id}/revoke-sessions`、`GET /api/admin/access-audit`；全部 clinic-scoped、strict response、metadata-only，并使用 compare-and-set。禁止 self-disable 和 last-active-admin disable；disable 会在同一 transaction 撤销 active sessions。Admin 页面没有 Note、Copilot、Glance confirmation 或 clinical Task controls。
 
-E1 增加 `User.professional_title` nullable column。现有本地 synthetic SQLite Demo 没有 migration runner；升级后必须重新运行 seed 命令重建 Demo schema。没有新增 dependency、provider、外部数据或需追加的 attribution。
+E1 增加 `User.professional_title` nullable column。合并后的 E1–E4 可使用 `scripts/migrate_phase_e_schema.py` 对现有 synthetic SQLite/SQLCipher Demo 做显式幂等升级；新 Demo 仍由 seed 直接创建完整 schema。E1 本身没有新增 dependency、provider、外部数据或需追加的 attribution。
 
 ### 4.7 E2 Self-Learning Importance（2026-08-27）
 
-> 状态：**E2 COMPLETE（synthetic evaluation）**。这不是模型训练、真实医生偏好验证或 learned clinical correctness 证明；E3 的实现见下一节，E4/E5 未开始。
+> 状态：**E2 COMPLETE（synthetic evaluation）**。这不是模型训练、真实医生偏好验证或 learned clinical correctness 证明；E3/E4 的实现见后续小节，E5 不在本次范围。
 
 E2 只学习未来相似 AI-derived Glance candidate 的软排序：成功的 clinician/staff Highlight status compare-and-set 才能在 append-only `importance_feedback` 中留下 metadata-only 反馈；no-op、409、patient/admin action、非 AI Summary 或缺少 strict exact source 的 row 都不训练。反馈资格使用非空、结构严格、带显式 in-bounds offset 的 Span，并拒绝 AI Summary 自我引用或与 Summary provenance pointer 不一致的 source。学习键由服务端把 `entity_type` 映射到 `symptom|medication|task|risk|allergy|follow_up|other`，不保存或使用 raw text、姓名、quote、risk reason、Comment、Note 或 embedding；`other` 只记录，不跨不相关概念泛化。
 
@@ -477,7 +477,7 @@ final importance
 
 现有 SQLite/SQLCipher synthetic Demo 可用显式、幂等的 E2 migration 升级；它把旧 `importance_score` 回填为 base 并添加 feedback table，而不是假设 `create_all` 会修改旧表：
 
-```bash
+```powershell
 cd backend
 .venv/Scripts/python.exe -c "from app.db import migrate_e2_schema; migrate_e2_schema()"
 ```
@@ -486,7 +486,7 @@ cd backend
 
 ### 4.8 E3 Hybrid Storage / Data Decay（2026-08-28）
 
-> 状态：**E3 COMPLETE（synthetic shadow-archive proof）**。没有删除、覆盖或外置任何 authoritative clinical record；E4/E5 未开始。
+> 状态：**E3 COMPLETE（synthetic shadow-archive proof）**。没有删除、覆盖或外置任何 authoritative clinical record；E4 已在下一节完成，E5 不在本次范围。
 
 E3 的 `decay-v1` 只在显式 maintenance/write path 上运行。`--as-of 2026-08-26` 被解析为当日 `23:59:59`，避免依赖机器当前日期：0–30 天为 Hot，超过 30 天至 365 天为 Warm，超过 365 天才可成为 Cold；普通 tier 对应 `decay_adjustment = 0/-1/-2`。保护事实先于 age rule：explicit risk、真实 `Task.status in open|in_progress|reported_done`、clinician-confirmed、pinned、needs-review、当前有效 patient instruction、provenance 未验证或 archive integrity 失败全部强制 Hot / decay 0。Task 保护只读取 Task row，不从自由文本或孤立 `feature_flags.unresolved_task` 猜测。
 
@@ -511,6 +511,31 @@ cd backend
 canonical fixture 的观察结果为 Hot 12 / Warm 1 / Cold 1 / protected 7；唯一 Cold candidate 的 canonical JSON 为 235 bytes，shadow payload 为 180 bytes（ratio 0.766），round-trip 通过。该数字只描述一个 synthetic Artifact 的压缩副本；authoritative content 仍在同一数据库，因此**不是数据库总字节节省，更不是生产对象存储或长期 retention 验证**。Glance GET 仍只读预计算 Highlight final score，不查询 storage state、不执行 policy/decompression、不扫描 Artifact/全历史、不调用 LLM。Patient View schema 没有 tier/hash/codec/payload/reason/size 字段。
 
 实现与证据说明见 `docs/e3_data_decay_evidence.md`。E3 没有新增 dependency、provider、dataset 或 attribution 条目。
+
+### 4.9 E4 Ambient Voice Capture（local ASR，2026-08-28）
+
+> 状态：**E4 COMPLETE — local synthetic vertical slice**。这不是生产医疗录音、说话人分离、真人 usability 或真实临床准确率证明；E5 不在本次范围。
+
+E4 使用一个共享 Voice Adapter 完成 `Recording → local ASR → visible human review → confirmed Transcript → existing AI/provenance pipeline`。功能默认关闭；只有 `NANTINGALE_VOICE_ENABLED=true`、provider 为 `faster_whisper` 且固定模型目录就绪时，Clinician、Staff/Nurse 与 Patient Check-in 才显示各自允许的入口。角色与 Event 归属始终由服务器 Session/DB User 决定。
+
+```powershell
+cd backend
+
+# 一次性下载固定 revision 到 gitignored 私有目录
+.venv/Scripts/python.exe scripts/prepare_local_asr.py
+
+# 现有 E1–E3 Demo 的显式幂等升级
+.venv/Scripts/python.exe scripts/migrate_phase_e_schema.py
+
+# 运行时环境；模型不会在请求期间下载
+$env:NANTINGALE_VOICE_ENABLED='true'
+$env:NANTINGALE_ASR_PROVIDER='faster_whisper'
+$env:NANTINGALE_ASR_MODEL_PATH='E:\private\models\faster-whisper-base'
+```
+
+后端接受经过真实容器检查的 WAV/WebM/Ogg，限制为 8 MiB、120 秒、单音轨、1–2 声道；原始字节作为 immutable SQLCipher BLOB 保存并进入加密 backup/restore。PyAV 在内存中解码，不创建原始音频临时文件。`faster-whisper==1.2.1` 使用 multilingual Base、CPU int8 与 `local_files_only=True`；它不进行 diarization，所以 speaker 永远先为 unknown，用户必须在允许的角色集合中明确分配并解决问题后才能确认。Patient 不能把本地录音标记成 AI/system speaker。
+
+已观察的固定 synthetic WAV 为 14.470 秒，项目正式环境离线转录耗时 1.565 秒，输出 2 个非空时间片段；speaker/confidence 分别保持 unknown/null。完整证据、哈希和限制见 `docs/e4_voice_capture_evidence.md`。
 
 ---
 
@@ -847,7 +872,7 @@ cd backend
 .venv/Scripts/python.exe -B scripts/evaluate_copilot.py
 ```
 
-> 当前进度：M1–M7、Phase C、D1–D5 与 Phase E 的 E1–E3 已完成；E4/E5 未开始。D5 达到 **D5_AUTOMATED_SECURITY_COMPLETE**。E2 仅通过受控 synthetic evaluation 证明同院、bounded、latest-only 的未来软排序变化；E3 仅证明 deterministic tier/decay 与可恢复 shadow archive，不代表真实医生偏好、生产存储节省、真人 usability 或长期 retention validation。详见 `Task_Card/E1_Role_Workspaces_Task_Card.md`、`Task_Card/E2_Self_Learning_Importance_Task_Card.md`、`Task_Card/E3_Data_Decay_Task_Card.md`、`docs/e3_data_decay_evidence.md`、`docs/d5_deployment_security_decisions.md` 与 `docs/d5_automated_evidence_2026-08-27.md`。
+> 当前进度：M1–M7、Phase C、D1–D5 与 Phase E 的 E1–E4 已完成；E5 未开始且不在本次范围。D5 达到 **D5_AUTOMATED_SECURITY_COMPLETE**。E2/E3/E4 分别只证明受控 synthetic learning、shadow archive 和 local synthetic voice vertical slice，不代表真实医生偏好、生产存储节省、真人 usability、生产 ASR 容量或临床准确率。详见各 E1–E4 Task Card、`docs/e3_data_decay_evidence.md`、`docs/e4_voice_capture_evidence.md` 与 D5 evidence。
 
 架构约定（记录确切位置，随阶段更新）：
 
@@ -857,6 +882,7 @@ cd backend
 - **D4 Copilot 边界**：`POST /api/patients/{patient_id}/copilot/query` 只对同 clinic 的 clinician 开放。Provider 只接收最多 12 个脱敏 exact-span cards，且不拥有 draft type/Event/patient/visibility/endpoint；AI Summary 必须继续解析到 raw source 才能成为 source fact。`Find evidence` 先在当前授权 patient 全历史做服务器端匹配，再限制 provider egress；`What changed` 返回两个 Event source facts + 显式 comparison inference。Copilot 不直接写记录；可编辑 Preview 由服务端签发 5 分钟 HMAC token，绑定 actor/clinic/patient/Event/type/evidence，既有 Note/Task API 验证成功后才记录 `draft_origin=copilot`。Patient instruction 必须改成有效 patient-facing 内容；Patient View 从不加载 Copilot。
 - **E2 importance learning 边界**：`backend/app/importance_learning.py` 只在成功 status CAS 与候选 persistence write path 工作。受控 entity type、server-derived role/status signal、同院 latest-only aggregation 和 `[-2,+3]` cap 共同产生 adaptive adjustment；raw clinical text/PHI 不进入 key/table/metadata。GET Glance 继续只按已存 final score 排序，hard-risk/Task/clinician-confirmed/pinned/needs-review 不受负向学习削弱。
 - **E3 storage/decay 边界**：`backend/app/data_decay.py` 只由显式 maintenance runner 使用，基于注入 `as_of`、Event time、真实 Task 与 server-side protection facts 写入 Hot/Warm/Cold 和 bounded `0/-1/-2` decay。Cold 只是 canonical hash + `zlib-json-v1` shadow payload；`Artifact.content` 始终 authoritative。Glance GET 不 import/query policy 或 storage table，Patient View 不投影 tier/hash/codec/payload/reason/size。
+- **E4 voice 边界**：`backend/app/voice/` + `/api/voice/*` 是唯一 Recording/ASR 生命周期；raw audio 不进入 `LLMClient`。功能默认关闭，本地模型必须预先准备。machine Transcript 保留 provider/model/version/time observations，speaker/confidence 不存在时保持 null；人工 review 通过后才把 immutable canonical Transcript 交给既有 ingestion pipeline。Recording BLOB 独立于 E3 Artifact shadow archive，并由 SQLCipher backup/restore 覆盖。
 
 ### Demo auth（D1）：Invite → Register → Login → Session → Logout
 
@@ -990,7 +1016,7 @@ cd backend
 
 ## 17. Bonus: Ambient Voice Capture
 
-> 明确标记为 Bonus，不要求当前优先实现。
+> 已实现 E4 local synthetic vertical slice；仍明确标记为 Bonus，不构成生产医疗或真人准确率证明。
 
 边界约束：
 
@@ -1007,3 +1033,5 @@ cd backend
 - provenance back to source segments。
 
 Extra bonus（加分项，非当前优先级）：noisy environment、diarization、overlap handling、multilingual medical terminology、multi-device capture。
+
+当前实现使用固定 multilingual Base local ASR，支持浏览器 WAV/WebM/Ogg、可见时间范围、unknown-speaker 阻断、split/merge/reindex 和角色限定确认。自动 diarization、真实 noisy/code-switching accuracy、物理麦克风真人录音与生产容量均未评估。

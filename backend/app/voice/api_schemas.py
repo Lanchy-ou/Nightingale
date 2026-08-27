@@ -10,6 +10,18 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from .contracts import ASRResult, ReviewedSegment
 
 
+class VoiceCapabilitiesOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool
+    provider: str
+    asr_ready: bool
+    allowed_modes: list[str]
+    accepted_mime_types: list[str]
+    max_bytes: int
+    max_duration_ms: int
+
+
 class VoiceCaptureCreate(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 

@@ -988,6 +988,26 @@ button.lifecycle-item.active { background: #eaf5f1; border-radius: 8px; }
 .patient-session-row { margin: 6px 0; padding: 10px; display: flex; flex-direction: column; gap: 3px; border-radius: 9px; color: #315e50; background: #e1efe9; }
 .patient-session-row strong { font-size: 11px; }
 .patient-session-row span { color: #71827c; font-size: 10px; }
+
+/* E4 local voice adapter */
+.consult-input-stack { display: grid; gap: 18px; }
+.consult-input-divider { display: flex; align-items: center; gap: 12px; color: #71827c; font-size: 12px; }
+.consult-input-divider::before, .consult-input-divider::after { content: ''; height: 1px; flex: 1; background: #dbe5e1; }
+.voice-capture-product { display: grid; gap: 14px; padding: 20px; border: 1px solid #cfe1da; border-radius: 14px; background: #f7fbf9; }
+.voice-capture-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.voice-capture-heading h2 { margin: 2px 0 0; }
+.voice-capture-heading > span { padding: 5px 9px; border-radius: 999px; background: #e1efe9; color: #315e50; font-size: 11px; }
+.voice-consent { display: flex; align-items: flex-start; gap: 8px; font-weight: 600; }
+.voice-actions, .voice-segment-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.voice-capture-product audio { width: 100%; }
+.voice-review { display: grid; gap: 12px; padding-top: 14px; border-top: 1px solid #dbe5e1; }
+.voice-review header h3 { margin: 0; }
+.voice-segment { display: grid; gap: 10px; padding: 14px; border: 1px solid #dbe5e1; border-radius: 10px; background: #fff; }
+.voice-segment-meta { display: flex; flex-wrap: wrap; gap: 10px; color: #71827c; font-size: 11px; }
+.voice-segment label { display: grid; gap: 5px; font-size: 12px; font-weight: 600; }
+.voice-segment select, .voice-segment textarea { width: 100%; padding: 9px; border: 1px solid #c7d8d1; border-radius: 8px; font: inherit; background: #fff; }
+.voice-segment fieldset { display: grid; gap: 6px; border: 1px solid #e2d3ae; border-radius: 8px; background: #fffaf0; }
+.voice-segment fieldset label { display: flex; align-items: center; gap: 7px; font-weight: 500; }
 .patient-checkin-main { min-width: 0; display: flex; flex-direction: column; }
 .patient-checkin-main > header { padding: 18px 23px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--clinical-border); }
 .patient-online-dot { width: 8px; height: 8px; border-radius: 50%; background: #53b490; }

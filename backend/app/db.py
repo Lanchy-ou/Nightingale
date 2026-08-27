@@ -161,6 +161,28 @@ def migrate_e3_schema(target_engine: Engine = engine) -> None:
         )
 
 
+def migrate_phase_e_schema(target_engine: Engine = engine) -> None:
+    """Idempotently upgrade an existing synthetic Demo through E1-E4."""
+    with target_engine.begin() as connection:
+        inspector = inspect(connection)
+        if "users" not in inspector.get_table_names():
+            raise RuntimeError("users table is missing; initialize the demo schema first")
+        user_columns = {column["name"] for column in inspector.get_columns("users")}
+        if "professional_title" not in user_columns:
+            connection.execute(
+                text("ALTER TABLE users ADD COLUMN professional_title VARCHAR(128)")
+            )
+
+    migrate_e3_schema(target_engine)
+
+    # Import only after Base exists so all FK target tables and the E4 table
+    # are registered without creating a second metadata registry.
+    from . import models as _core_models  # noqa: F401
+    from .voice.models import VoiceCaptureRecord
+
+    VoiceCaptureRecord.__table__.create(bind=target_engine, checkfirst=True)
+
+
 def get_db():
     db = SessionLocal()
     try:

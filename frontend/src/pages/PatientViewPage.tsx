@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api';
 import type { PatientTask, PatientView, TaskStatus } from '../types';
+import VoiceCapture from '../components/VoiceCapture';
 
 const EVENT_TYPE_LABELS: Record<string, string> = {
   patient_ai_preconsult: 'AI pre-consult',
@@ -250,6 +251,16 @@ export default function PatientViewPage({
                 </div>
                 {submitSuccess && <div className="patient-success-message">Your update was saved and is available for your care team to review.</div>}
               </div>
+              <VoiceCapture
+                boundaryKey={`${roleKey}:${patientId}:voice-checkin`}
+                patientId={patientId}
+                captureMode="patient_session"
+                patientEventType="patient_followup"
+                onProcessed={() => {
+                  setSubmitSuccess(true);
+                  setRefreshKey((key) => key + 1);
+                }}
+              />
               <div className="patient-checkin-composer">
                 <textarea value={message} onChange={(event) => { setMessage(event.target.value); setSubmitSuccess(false); }} placeholder="Tell us how you are feeling…" rows={4} />
                 <div><span>Do not use this for emergencies.</span><button onClick={send} disabled={busy || !message.trim()}>{busy ? 'Saving…' : submitError ? 'Retry' : 'Send update'} <span aria-hidden="true">↑</span></button></div>

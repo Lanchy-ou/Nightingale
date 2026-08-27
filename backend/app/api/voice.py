@@ -17,13 +17,14 @@ from ..models import Patient
 from ..role_context import RoleContext
 from ..voice.api_schemas import (
     VoiceAudioMetadataOut,
+    VoiceCapabilitiesOut,
     VoiceCaptureCreate,
     VoiceCaptureOut,
     VoiceCommand,
     VoiceProcessingOut,
     VoiceReviewPatch,
 )
-from ..voice.asr import build_asr_client
+from ..voice.asr import asr_runtime_ready, build_asr_client, configured_asr_provider
 from ..voice.audio import AudioPolicy, AudioValidationError, inspect_audio
 from ..voice.contracts import (
     ASRResult,
@@ -66,9 +67,45 @@ _MODE_SPEAKERS = {
     "patient_session": {"patient", "ai", "system"},
 }
 
+ACCEPTED_AUDIO_MIME_TYPES = ["audio/webm", "audio/ogg", "audio/wav"]
+
+
+def _voice_enabled() -> bool:
+    return os.environ.get("NANTINGALE_VOICE_ENABLED", "false").strip().lower() == "true"
+
+
+def _require_voice_enabled() -> None:
+    if not _voice_enabled():
+        raise resource_not_found()
+    provider = _asr_provider()
+    if provider not in {"mock", "faster_whisper"}:
+        raise HTTPException(status_code=503, detail="Voice transcription is unavailable")
+    if provider == "faster_whisper" and not asr_runtime_ready("faster_whisper"):
+        raise HTTPException(status_code=503, detail="Local voice transcription is unavailable")
+
 
 def _asr_provider() -> str:
-    return os.environ.get("NANTINGALE_ASR_PROVIDER", "mock").strip().lower()
+    return configured_asr_provider()
+
+
+@router.get("/capabilities", response_model=VoiceCapabilitiesOut)
+def voice_capabilities(ctx: RoleContext = Depends(require_auth)):
+    provider = _asr_provider()
+    enabled = _voice_enabled()
+    allowed_modes = [
+        mode for mode, role in _MODE_ROLE.items() if role == ctx.role
+    ] if enabled else []
+    # The mock remains an automated-test adapter and never exposes product UI.
+    asr_ready = provider == "faster_whisper" and asr_runtime_ready(provider)
+    return VoiceCapabilitiesOut(
+        enabled=enabled,
+        provider=provider,
+        asr_ready=asr_ready,
+        allowed_modes=allowed_modes,
+        accepted_mime_types=ACCEPTED_AUDIO_MIME_TYPES,
+        max_bytes=MAX_AUDIO_BYTES,
+        max_duration_ms=MAX_AUDIO_DURATION_MS,
+    )
 
 
 def _state(capture: VoiceCaptureRecord) -> CaptureState:
@@ -203,6 +240,7 @@ def create_capture(
     db: Session = Depends(get_db),
     ctx: RoleContext = Depends(require_auth),
 ):
+    _require_voice_enabled()
     patient = db.get(Patient, body.patient_id)
     if patient is None:
         raise resource_not_found()
@@ -283,6 +321,7 @@ def get_capture(
     db: Session = Depends(get_db),
     ctx: RoleContext = Depends(require_auth),
 ):
+    _require_voice_enabled()
     capture = _get_capture(db, capture_id)
     _authorize_capture(capture, ctx, "read_voice_capture")
     return _capture_out(capture)
@@ -294,6 +333,7 @@ def get_capture_audio(
     db: Session = Depends(get_db),
     ctx: RoleContext = Depends(require_auth),
 ):
+    _require_voice_enabled()
     capture = _get_capture(db, capture_id)
     _authorize_capture(capture, ctx, "read_voice_audio")
     if capture.audio_bytes is None:
@@ -314,11 +354,12 @@ async def upload_capture_audio(
     db: Session = Depends(get_db),
     ctx: RoleContext = Depends(require_auth),
 ):
+    _require_voice_enabled()
     capture = _get_capture(db, capture_id)
     _authorize_capture(capture, ctx, "upload_voice_audio")
     upload_key = _operation_key(idempotency_key, "upload")
     declared_mime = request.headers.get("content-type", "").split(";", 1)[0].lower()
-    if declared_mime not in {"audio/wav", "audio/x-wav"}:
+    if declared_mime not in {*ACCEPTED_AUDIO_MIME_TYPES, "audio/x-wav"}:
         raise HTTPException(status_code=415, detail="Unsupported audio media type")
 
     data = bytearray()
@@ -429,6 +470,7 @@ def transcribe_capture(
     db: Session = Depends(get_db),
     ctx: RoleContext = Depends(require_auth),
 ):
+    _require_voice_enabled()
     capture = _get_capture(db, capture_id)
     _authorize_capture(capture, ctx, "transcribe_voice_capture")
     if capture.transcribe_key == body.idempotency_key:
@@ -629,6 +671,7 @@ def review_capture_segments(
     db: Session = Depends(get_db),
     ctx: RoleContext = Depends(require_auth),
 ):
+    _require_voice_enabled()
     capture = _get_capture(db, capture_id)
     _authorize_capture(capture, ctx, "review_voice_transcript")
     if capture.revision != body.expected_revision:
@@ -672,6 +715,7 @@ def confirm_capture(
     db: Session = Depends(get_db),
     ctx: RoleContext = Depends(require_auth),
 ):
+    _require_voice_enabled()
     capture = _get_capture(db, capture_id)
     _authorize_capture(capture, ctx, "confirm_voice_transcript")
     if capture.confirm_key == body.idempotency_key and capture.status == CaptureStatus.PROCESSED.value:

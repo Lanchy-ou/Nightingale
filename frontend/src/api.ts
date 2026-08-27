@@ -27,6 +27,10 @@ import type {
   Span,
   TaskProvenance,
   TranscriptNormalizeResult,
+  VoiceCapabilities,
+  VoiceCaptureMode,
+  VoiceCaptureRecord,
+  VoiceReviewedSegment,
 } from './types';
 
 // ---------------------------------------------------------------------------
@@ -143,6 +147,26 @@ function patch<T>(path: string, body: unknown): Promise<T> {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', ...headers() },
     body: JSON.stringify(body),
+  });
+}
+
+function putAudio<T>(
+  path: string,
+  audio: Blob,
+  expectedRevision: number,
+  idempotencyKey: string,
+  signal?: AbortSignal,
+): Promise<T> {
+  return request<T>(path, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': audio.type.split(';', 1)[0] || 'application/octet-stream',
+      'X-Expected-Revision': String(expectedRevision),
+      'Idempotency-Key': idempotencyKey,
+      ...headers(),
+    },
+    body: audio,
+    signal,
   });
 }
 
@@ -298,4 +322,56 @@ export const api = {
       started_at: startedAt,
       content,
     }),
+  getVoiceCapabilities: (signal?: AbortSignal) =>
+    get<VoiceCapabilities>('/api/voice/capabilities', signal),
+  createVoiceCapture: (payload: {
+    idempotency_key: string;
+    patient_id: string;
+    capture_mode: VoiceCaptureMode;
+    patient_event_type?: 'patient_ai_preconsult' | 'patient_followup';
+    started_at: string;
+    ended_at?: string | null;
+    encounter_id?: string | null;
+  }, signal?: AbortSignal) => post<VoiceCaptureRecord>('/api/voice/captures', payload, signal),
+  uploadVoiceAudio: (
+    captureId: string,
+    audio: Blob,
+    expectedRevision: number,
+    idempotencyKey: string,
+    signal?: AbortSignal,
+  ) => putAudio<VoiceCaptureRecord>(
+    `/api/voice/captures/${captureId}/audio`,
+    audio,
+    expectedRevision,
+    idempotencyKey,
+    signal,
+  ),
+  transcribeVoiceCapture: (
+    captureId: string,
+    expectedRevision: number,
+    idempotencyKey: string,
+    signal?: AbortSignal,
+  ) => post<VoiceCaptureRecord>(`/api/voice/captures/${captureId}/transcribe`, {
+    expected_revision: expectedRevision,
+    idempotency_key: idempotencyKey,
+  }, signal),
+  reviewVoiceSegments: (
+    captureId: string,
+    expectedRevision: number,
+    segments: Array<Pick<VoiceReviewedSegment,
+      'source_machine_segment_ids' | 'speaker' | 'text' | 'speaker_source_verified'> & {
+        resolved_issues: string[];
+      }>,
+  ) => patch<VoiceCaptureRecord>(`/api/voice/captures/${captureId}/segments`, {
+    expected_revision: expectedRevision,
+    segments,
+  }),
+  confirmVoiceCapture: (
+    captureId: string,
+    expectedRevision: number,
+    idempotencyKey: string,
+  ) => post<VoiceCaptureRecord>(`/api/voice/captures/${captureId}/confirm`, {
+    expected_revision: expectedRevision,
+    idempotency_key: idempotencyKey,
+  }),
 };

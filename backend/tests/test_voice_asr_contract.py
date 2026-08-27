@@ -5,7 +5,7 @@ from hashlib import sha256
 import pytest
 from pydantic import ValidationError
 
-from app.voice.asr import DeterministicMockASRClient
+from app.voice.asr import DeterministicMockASRClient, FasterWhisperASRClient
 from app.voice.contracts import (
     ASRResult,
     ASRSegment,
@@ -143,3 +143,30 @@ def test_unmapped_provider_speaker_requires_explicit_unknown_issue():
         issues=["unknown_speaker"],
     )
     assert segment.speaker_candidate == "speaker_0"
+
+
+def test_local_asr_preserves_observed_time_and_never_invents_speaker(monkeypatch, tmp_path):
+    class Observed:
+        start = 0.25
+        end = 1.75
+        text = " Synthetic observed words "
+
+    class Info:
+        language = "en"
+
+    class Model:
+        def transcribe(self, _audio, **options):
+            assert options["beam_size"] == 1
+            assert options["condition_on_previous_text"] is False
+            return iter([Observed()]), Info()
+
+    monkeypatch.setattr("app.voice.asr._load_local_model", lambda _path: Model())
+    result = FasterWhisperASRClient(tmp_path).transcribe(_recording())
+
+    assert result.failure_reason is None
+    assert result.provider == "faster_whisper"
+    assert result.segments[0].source_start_ms == 250
+    assert result.segments[0].source_end_ms == 1750
+    assert result.segments[0].speaker_candidate is None
+    assert result.segments[0].confidence is None
+    assert result.segments[0].issues == ["unknown_speaker"]

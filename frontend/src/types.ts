@@ -210,6 +210,78 @@ export interface DoctorConsultResult {
 
 export type NurseConsultResult = DoctorConsultResult;
 
+// --- E4 local voice adapter ----------------------------------------------
+export type VoiceCaptureMode = 'doctor_consult' | 'nurse_consult' | 'patient_session';
+
+export interface VoiceCapabilities {
+  enabled: boolean;
+  provider: string;
+  asr_ready: boolean;
+  allowed_modes: VoiceCaptureMode[];
+  accepted_mime_types: string[];
+  max_bytes: number;
+  max_duration_ms: number;
+}
+
+export interface VoiceMachineSegment {
+  machine_segment_id: string;
+  source_start_ms: number | null;
+  source_end_ms: number | null;
+  speaker_candidate: string | null;
+  text: string;
+  confidence: number | null;
+  issues: string[];
+}
+
+export interface VoiceReviewedSegment {
+  index: number;
+  source_machine_segment_ids: string[];
+  speaker: string | null;
+  text: string;
+  source_start_ms: number | null;
+  source_end_ms: number | null;
+  confidence: number | null;
+  issues: string[];
+  audio_range_exact: boolean;
+  speaker_source_verified: boolean;
+}
+
+export interface VoiceCaptureRecord {
+  capture_id: string;
+  patient_id: string;
+  capture_mode: VoiceCaptureMode;
+  event_type: string;
+  encounter_id: string | null;
+  status: string;
+  revision: number;
+  failure_reason: string | null;
+  started_at: string;
+  ended_at: string | null;
+  created_at: string;
+  updated_at: string;
+  audio: {
+    mime_type: string;
+    byte_length: number;
+    sha256: string;
+    duration_ms: number | null;
+    sample_rate_hz: number | null;
+    channels: number | null;
+  } | null;
+  machine_transcript: {
+    provider: string;
+    method: string;
+    model: string | null;
+    version: string | null;
+    language: string | null;
+    segments: VoiceMachineSegment[];
+    degraded: boolean;
+    failure_reason: string | null;
+  } | null;
+  reviewed_segments: VoiceReviewedSegment[] | null;
+  event_id: string | null;
+  processing: { method: string; degraded: boolean; fallback_reason: string | null } | null;
+}
+
 // --- E1 Admin oversight ---------------------------------------------------
 export interface AdminUser {
   user_id: string;

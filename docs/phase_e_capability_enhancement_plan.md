@@ -187,6 +187,9 @@ Data Decay 只改变热路径与软排序：
 
 ## 8. E4 — Voice Capture Adapter
 
+> 实际状态（2026-08-28）：**COMPLETE — local synthetic ASR vertical slice**。
+> 使用固定 multilingual Base local model；E5 未开始且不在本次合并范围。
+
 Voice 是输入适配器，不是第二套 AI pipeline：
 
 ```text
@@ -207,6 +210,9 @@ Recording
 - 外部 ASR 需要单独的 privacy/license/provider Decision Gate；
 - 没有 speaker/timestamp 时不得发明；低置信和 unknown 必须进入 review；
 - E4 不得阻塞 PDF 明确点名的 Self-Learning 与 Data Decay Bonus。
+- runtime feature flag 默认关闭；只有固定本地模型已准备且能力探测通过时显示产品入口；
+- mock 只保留作 automated-test adapter，不显示产品入口；
+- 观察证据与非声明见 `docs/e4_voice_capture_evidence.md`。
 
 ---
 

@@ -39,7 +39,9 @@ def test_invalid_mime_size_and_audio_do_not_persist_bytes(clinician_client, db_s
             "Idempotency-Key": "wrong-mime",
         },
     )
-    assert wrong_mime.status_code == 415
+    # WebM is a supported browser format, but these bytes are not a valid
+    # WebM container and must fail validation without persistence.
+    assert wrong_mime.status_code == 422
 
     invalid_wav = clinician_client.put(
         f"/api/voice/captures/{capture_id}/audio",

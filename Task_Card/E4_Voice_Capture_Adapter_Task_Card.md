@@ -1,6 +1,6 @@
 # E4 Task Card — Voice Capture Adapter
 
-> 状态：**PLANNED — IMPLEMENTATION NOT STARTED**
+> 状态：**COMPLETE — LOCAL SYNTHETIC ASR VERTICAL SLICE（2026-08-28）**
 >
 > 对应总计划：`docs/phase_e_capability_enhancement_plan.md`
 >
@@ -14,7 +14,7 @@
 
 ```text
 browser recording
--> immutable Recording Artifact
+-> immutable Recording record (encrypted BLOB)
 -> ASR provider/local adapter
 -> machine Transcript with speaker/timestamp/confidence
 -> human review
@@ -339,3 +339,18 @@ frontend/tests/voiceCapture.test.mjs
 - ASR failure 仍生成看似成功的 AI Summary -> 停止；
 - 需要覆盖 raw recording/transcript 才能修正 -> 停止；
 - mock 结果被称为 live transcription -> 停止并修正文档。
+
+---
+
+## 13. Implementation Evidence（2026-08-28）
+
+- 提交范围选择 DG1 方案 2：`faster-whisper==1.2.1`、multilingual Base、固定 revision `a80717a3a48b1b28aa687bca146cb7301feae1b1`、CPU int8、`local_files_only=True`。Python 3.13.5 Gate 0 安装与离线加载通过；运行时不下载模型。
+- 固定 synthetic WAV SHA-256 `b999bd2e8daaca659b975ea5fa2044e9280fe0c03443710a2d712bd65313d9fc`，时长 14.470 秒。项目正式 venv 观察到 1.565 秒完成本地转录，输出 2 个非空、有真实时间范围的 segment；speaker/confidence 保持 null，`unknown_speaker` 可见并阻断确认。
+- 共享前端组件接入 Clinician Doctor Consult、Staff/Nurse Consult 和 Patient Check-in。能力由认证后的 `/api/voice/capabilities` 提供；feature flag 默认关闭，mock 不暴露产品入口，patient 不能自行创建 AI/system speaker。
+- WAV/WebM/Ogg 由 PyAV 在内存中检查真实容器和单一音轨；限制 8 MiB/120 秒/1–2 声道。MIME 不符、损坏、多音轨、空音频、超限全部 fail closed。原始 BLOB immutable，不进入 Summary LLM 或日志。
+- Capture → Upload → local ASR → Review/split/merge/reindex → Confirm → existing ingestion 已通过真实模型 endpoint test；confirmed Transcript 之前不创建 Event/Summary。AI Summary/Highlight 继续解析到 exact Transcript Span，并保留 recording/audio-range pointer。
+- E2/E3 联合回归证明 voice Highlight 的 final score 仍为 base + adaptive + decay；旧 voice Transcript 可 cold shadow archive、恢复并继续解析 exact span，而 Recording BLOB 独立保留，不进入 E3 compression。
+- SQLCipher backup/restore 同时验证 `artifact_storage_state` 与 `voice_captures.audio_bytes`。权限覆盖 same-role owner、跨角色、跨 clinic、patient ownership 和 raw audio creator-only。
+- 浏览器观察到 Clinician/Nurse/Patient 三入口，role switch 后 consent/draft 重置，console 0 warning/error。为遵守 synthetic-only 边界，没有启动物理麦克风采集环境音；浏览器录音到 WebM/Ogg 的格式合同由 PyAV synthetic container tests 覆盖。
+- 最终回归：backend **482 passed**（显式本地模型/合成音频路径，E4 real-ASR tests 无 skip）；security/integration **20 passed**；D3 corpus/runtime PASS（live LLM provider `NOT_RUN` 独立报告）；D4 frozen eval PASS；frontend Node 2 passed、production build PASS；`pip check`、`npm ls --depth=0`、secret scan、Caddy validate、`git diff --check` PASS。
+- 限制：不是 production medical capture、真人 usability、临床准确率、说话人分离、noisy/code-switching benchmark 或生产容量证明；E5 未开始且不在本卡范围。

@@ -17,6 +17,7 @@ Declared in `backend/requirements.txt`:
 | anthropic | MIT |
 | argon2-cffi (password hashing, Argon2id) | MIT |
 | sqlcipher3 (Python DB-API driver for SQLCipher 4.x) | MIT |
+| faster-whisper 1.2.1 (local ASR adapter) | MIT |
 
 `argon2-cffi` bundles the reference Argon2 implementation (D. Biryukov,
 D. Dinu, D. Khovratovich; CC0 / Apache-2.0 dual licensed). Password hashing
@@ -25,6 +26,11 @@ uses the library default Argon2id parameters (t=3, m=64 MiB, p=4).
 The D5 single-machine deployment uses the `sqlcipher3` driver and SQLCipher
 Community Edition for whole-database and backup encryption. SQLCipher Community
 Edition is BSD-3-Clause licensed.
+
+The observed E4 Python 3.13 runtime resolved CTranslate2 4.8.1 (MIT) and PyAV
+18.1.0 (BSD-3-Clause). PyAV provides the in-process FFmpeg bindings used to
+inspect/decode WAV, WebM and Ogg; Nightingale does not invoke a system FFmpeg
+command or upload audio to an external ASR service.
 
 ## Deployment runtime
 
@@ -51,6 +57,12 @@ Declared in `frontend/package.json`:
 | @types/react-dom | MIT |
 
 ## Models / Providers
+
+- Local ASR model: `Systran/faster-whisper-base`, multilingual Base, revision
+  `a80717a3a48b1b28aa687bca146cb7301feae1b1`, MIT license. Model weights are
+  downloaded by `backend/scripts/prepare_local_asr.py` into an ignored private
+  directory and are not bundled. Runtime loading is local-only
+  (`local_files_only=True`, CPU int8).
 
 - Provider: DeepSeek (https://www.deepseek.com) via its anthropic-compatible endpoint
   (`https://api.deepseek.com/anthropic`), models `deepseek-v4-flash` / `deepseek-v4-pro`.

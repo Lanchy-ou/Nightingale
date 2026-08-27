@@ -204,6 +204,7 @@ def _provenance_verified(
     artifacts_by_id: dict[str, Artifact],
     related_highlights: list[Highlight],
     sourced_tasks: list[Task],
+    voice_captures_by_id: dict[str, object],
 ) -> bool:
     for highlight in related_highlights:
         if highlight.source_artifact_id == artifact.artifact_id:
@@ -233,6 +234,32 @@ def _provenance_verified(
     if pointer is not None:
         if not isinstance(pointer, dict):
             return False
+        recording_capture_id = pointer.get("recording_capture_id")
+        if recording_capture_id is not None:
+            capture = voice_captures_by_id.get(recording_capture_id)
+            audio_ranges = pointer.get("audio_ranges")
+            if (
+                capture is None
+                or getattr(capture, "transcript_artifact_id", None) != artifact.artifact_id
+                or getattr(capture, "event_id", None) != event.event_id
+                or getattr(capture, "patient_id", None) != event.patient_id
+                or getattr(capture, "clinic_id", None) != event.clinic_id
+                or not isinstance(audio_ranges, list)
+            ):
+                return False
+            for item in audio_ranges:
+                if not isinstance(item, dict):
+                    return False
+                values = (
+                    item.get("segment_index"),
+                    item.get("source_start_ms"),
+                    item.get("source_end_ms"),
+                )
+                if any(not isinstance(value, int) or isinstance(value, bool) for value in values):
+                    return False
+                if values[0] < 0 or values[1] < 0 or values[2] < values[1]:
+                    return False
+            return True
         source = artifacts_by_id.get(pointer.get("artifact_id", ""))
         if (
             pointer.get("event_id") != event.event_id
@@ -319,6 +346,14 @@ def run_storage_policy(
         if has_state_table
         else {}
     )
+    voice_captures_by_id: dict[str, object] = {}
+    if inspect(bind).has_table("voice_captures"):
+        from .voice.models import VoiceCaptureRecord
+
+        voice_captures_by_id = {
+            capture.capture_id: capture
+            for capture in db.scalars(select(VoiceCaptureRecord)).all()
+        }
 
     decisions: dict[str, ArtifactPolicyResult] = {}
     desired_states: dict[str, dict] = {}
@@ -361,6 +396,7 @@ def run_storage_policy(
             artifacts_by_id=artifacts_by_id,
             related_highlights=related,
             sourced_tasks=sourced_tasks,
+            voice_captures_by_id=voice_captures_by_id,
         ):
             protections.add("provenance_unverified")
 
