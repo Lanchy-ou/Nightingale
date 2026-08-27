@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ApiError, api } from '../api';
+import { codePointLength, splitSegmentAtCodePoint } from '../transcriptRange';
 import type {
   DoctorConsultResult,
   DoctorTranscriptSegment,
@@ -113,7 +114,7 @@ export default function NewDoctorConsult({
     segments.forEach((segment, index) => {
       if (segment.speaker_candidate === null) issues.push(`Segment ${index}: choose doctor or patient`);
       if (!segment.text.trim()) issues.push(`Segment ${index}: text cannot be empty`);
-      if (segment.text.length > 4000) issues.push(`Segment ${index}: text exceeds 4000 characters`);
+      if (codePointLength(segment.text) > 4000) issues.push(`Segment ${index}: text exceeds 4000 characters`);
     });
     return issues;
   }, [normalization, segments]);
@@ -188,50 +189,39 @@ export default function NewDoctorConsult({
   function splitSegment(index: number) {
     const segment = segments[index];
     if (!segment) return;
-    const remembered = cursorByIndex.current[index] ?? 0;
-    const newline = segment.text.indexOf('\n');
-    const midpoint = Math.floor(segment.text.length / 2);
-    const leftSpace = segment.text.lastIndexOf(' ', midpoint);
-    const rightSpace = segment.text.indexOf(' ', midpoint);
-    const wordBoundary = leftSpace > 0
-      && (rightSpace < 0 || midpoint - leftSpace <= rightSpace - midpoint)
-      ? leftSpace
-      : rightSpace > 0
-        ? rightSpace
-        : midpoint;
-    const cursor = remembered > 0 && remembered < segment.text.length
-      ? remembered
-      : newline > 0
-        ? newline
-        : wordBoundary;
-    const before = segment.text.slice(0, cursor).trimEnd();
-    const after = segment.text.slice(cursor).trimStart();
-    if (!before || !after) {
+    const result = splitSegmentAtCodePoint(
+      segment.text,
+      cursorByIndex.current[index] ?? 0,
+    );
+    if (!result) {
       setError('A split must leave non-empty text on both sides.');
       return;
     }
     resetOperationAfterEdit();
     // Exact remap: `before` is a prefix of the segment text and `after` is its
     // suffix, so when the segment still carries an exact raw range we can map
-    // both halves precisely. Otherwise both halves are marked unmapped.
+    // both halves precisely using CODE-POINT lengths. Otherwise both halves are
+    // marked unmapped.
     const mapped = segment.source_start !== null && segment.source_end !== null
       ? { start: segment.source_start, end: segment.source_end }
       : null;
+    const beforeCpLen = codePointLength(result.before);
+    const afterCpLen = codePointLength(result.after);
     const beforeIssues = [...new Set([...segment.issues, 'user_split'])];
     const afterIssues = [...new Set([...segment.issues, 'user_split'])];
     setSegments((current) => reindex([
       ...current.slice(0, index),
       {
         ...segment,
-        text: before,
+        text: result.before,
         source_start: mapped ? mapped.start : null,
-        source_end: mapped ? mapped.start + before.length : null,
+        source_end: mapped ? mapped.start + beforeCpLen : null,
         issues: mapped ? beforeIssues : [...new Set([...beforeIssues, 'unmapped_source_range'])],
       },
       {
         ...segment,
-        text: after,
-        source_start: mapped ? mapped.end - after.length : null,
+        text: result.after,
+        source_start: mapped ? mapped.end - afterCpLen : null,
         source_end: mapped ? mapped.end : null,
         issues: mapped ? afterIssues : [...new Set([...afterIssues, 'unmapped_source_range'])],
       },

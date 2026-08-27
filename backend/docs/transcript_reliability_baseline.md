@@ -146,6 +146,6 @@ Final gate verification recorded for this worktree:
 
 - corpus validation: exit 0;
 - deterministic runtime evaluation: exit 0, hard gates pass;
-- backend: 292 passed;
+- backend: 296 passed;
 - frontend production build: passed;
 - local three-step browser QA: passed.

@@ -769,7 +769,7 @@ cd backend
 .venv/Scripts/python.exe scripts/evaluate_transcripts.py --evaluate-runtime
 ```
 
-> 当前进度：M1–M7、Phase C（C1+C2）、**D1 Identity**、**D2 Care Tasks + Patient Experience** 与 **D3 Transcript Reliability** 已落地。后端全量为 **292 passed**，frozen corpus validation/runtime runner 与 TypeScript/Vite production build 通过；warm-path Glance Layer A P95 ≈ 3.8 ms（`backend/docs/perf_baseline.md`）。剩余 Phase D 工作：D4 evidence-bound Clinician Copilot、D5 TLS/at-rest 与跨角色集成。
+> 当前进度：M1–M7、Phase C（C1+C2）、**D1 Identity**、**D2 Care Tasks + Patient Experience** 与 **D3 Transcript Reliability** 已落地。后端全量为 **296 passed**，frozen corpus validation/runtime runner 与 TypeScript/Vite production build 通过；warm-path Glance Layer A P95 ≈ 3.8 ms（`backend/docs/perf_baseline.md`）。剩余 Phase D 工作：D4 evidence-bound Clinician Copilot、D5 TLS/at-rest 与跨角色集成。
 
 架构约定（记录确切位置，随阶段更新）：
 
