@@ -205,7 +205,7 @@ export default function ClinicalEventDetail({
             </div>
             <div className="event-task-composer">
               <h3>Create care Task</h3>
-              <p className="panel-help">Uses this Event and, when resolvable, the selected Artifact's exact first source span.</p>
+              <p className="panel-help">Creates a Task on this Event. You may optionally choose and confirm an exact source quote below; otherwise the Task uses Event-level provenance.</p>
               <TaskCreateForm event={event} sourceArtifact={selectedArtifact} onCreated={onChanged} />
             </div>
           </div>
