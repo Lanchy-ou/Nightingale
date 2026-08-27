@@ -29,6 +29,7 @@ FORBIDDEN = {
     "app.redaction",
     "app.deterministic_pipeline",
     "app.conflicts",
+    "app.importance_learning",
 }
 
 

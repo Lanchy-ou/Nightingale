@@ -137,12 +137,35 @@ def update_status(
         "updated_at": now,
     }
     # Clinician authority: only a clinician accept/pin marks clinician_confirmed
-    # and triggers a score recompute. Staff actions never change this flag.
+    # and triggers a base-score recompute. Staff actions never change this flag.
+    flags = hl.feature_flags
     if ctx.role == "clinician" and new_status in ("accepted", "pinned"):
         if not hl.feature_flags.get("clinician_confirmed"):
             flags = {**hl.feature_flags, "clinician_confirmed": True}
             values["feature_flags"] = flags
-            values["importance_score"] = compute_score(flags)
+
+    # Import the aggregation service only on this write path. Merely importing
+    # or executing GET Glance never imports or queries importance feedback.
+    from ..importance_learning import compose_score, requested_adaptive_adjustment
+
+    rescored = compose_score(
+        base_importance_score=compute_score(flags),
+        adaptive_adjustment=requested_adaptive_adjustment(
+            hl.adaptive_adjustment, hl.learning_metadata
+        ),
+        decay_adjustment=hl.decay_adjustment,
+        feature_flags=flags,
+        status=new_status,
+        review_status=hl.review_status,
+        learning_metadata=hl.learning_metadata,
+    )
+    values.update(
+        base_importance_score=rescored.base_importance_score,
+        adaptive_adjustment=rescored.adaptive_adjustment,
+        decay_adjustment=rescored.decay_adjustment,
+        importance_score=rescored.importance_score,
+        learning_metadata=rescored.learning_metadata,
+    )
 
     # Deterministic optimistic lock (H3): the current status is the version.
     # A concurrent writer that already moved the status matches 0 rows and is
@@ -184,6 +207,19 @@ def update_status(
             },
         )
 
+    # Only the winning CAS reaches this point. No-op and conflict paths return
+    # earlier and therefore cannot append learning feedback.
+    from ..importance_learning import record_feedback
+
+    record_feedback(
+        db,
+        highlight=hl,
+        event=event,
+        actor_id=ctx.user_id,
+        actor_role=ctx.role,
+        status=new_status,
+        created_at=now,
+    )
     add_audit(
         db,
         actor_id=ctx.user_id,

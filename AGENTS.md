@@ -1049,3 +1049,17 @@ E1 is complete. This section neither authorizes nor classifies E2–E5; use each
 - **Admin backend**: `/api/admin/users`, account status, per-user session revoke and access-audit endpoints are strict, clinic-scoped and metadata-only. Account/session mutations use compare-and-set; self-disable and last-active-admin disable fail closed; disabling atomically revokes active sessions and writes audits.
 - **Admin frontend**: session-role routing sends Admin directly to `AdminWorkspacePage`, not a patient clinical page. It reuses the Nightingale typography/cards/buttons/status system and exposes Overview, Users/Sessions, Invites and Access Audit only; no Note, Copilot, Glance confirmation or clinical Task controls exist.
 - **Verification**: 35 E1 tests added; E1 branch backend **377 passed** (the E4 voice foundation tests live on `codex/e4-voice-adapter-foundation` and are not counted here); D3 corpus/runtime and frozen hash, D4 eval, pip check, secret scan, frontend build and diff check passed. Acceptance repairs lock role-specific default encounter identity, database-atomic mutual-admin protection, and clean task-card EOFs. Local synthetic browser QA covered Nurse preview/confirm/Event Detail and Admin Overview/Invites/Audit with zero console warnings/errors. No dependency/provider/dataset/attribution addition was made by E1.
+
+---
+
+## 30. Phase E / E2 Self-Learning Importance Status（2026-08-27）
+
+E2 is complete on `codex/e2-self-learning-importance`. E3–E5 remain unstarted by this branch.
+
+- **Learning scope/key**: `backend/app/importance_learning.py` aggregates only same-clinic feedback by controlled `entity_type`; `other` is metadata-only and never generalized. Raw text, PHI, names, quotes, comments, notes and embeddings are forbidden as learning keys.
+- **Signals/cap**: clinician `accepted +1 / pinned +2 / rejected -1`; staff `+1 / +1 / -1`; each `(actor_id, highlight_id)` contributes only its latest valid event; adaptive adjustment is capped to `[-2,+3]`.
+- **CAS/eligibility**: only a successful status conditional UPDATE on a system-authored AI Summary Highlight with resolvable exact source appends `ImportanceFeedback`. No-op, conflict, patient/admin and non-AI rows produce no feedback. Feedback and highlight-status AuditLog remain metadata-only.
+- **Score fields**: Highlight stores base/adaptive/E3-reserved decay/final plus counts-only learning metadata. Candidate write computes learning once; Glance GET reads only precomputed final score and never queries feedback/full history or calls a provider.
+- **Authority/protection**: staff feedback never sets clinician confirmation. Negative learning is blocked for explicit risk, unresolved Task, clinician-confirmed, pinned and needs-review rows; facts, Tasks, Artifacts and provenance are never changed.
+- **Schema**: `migrate_e2_schema()` explicitly and idempotently upgrades existing SQLite/SQLCipher Demo schemas; `create_all` is not treated as an old-DB migration. The local gitignored synthetic Demo was migrated.
+- **Evidence**: required E2 synthetic evaluation 16/16; full backend 393 passed; frontend build, D3 corpus/runtime, D4 frozen eval, security/integration 17, SQLCipher, secret/dependency checks, Caddy validation and diff check passed. Glance Layer A P50/P95 is 3.978/4.515 ms versus E1 3.233/3.926 ms. These are local synthetic results, not production capacity, real clinician preference, learned clinical correctness or human usability evidence.

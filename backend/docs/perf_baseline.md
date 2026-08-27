@@ -1,6 +1,6 @@
 # Glance warm-path performance baseline
 
-> Generated 2026-08-26T20:45:42 by `backend/scripts/measure_glance.py`.
+> Generated 2026-08-27T23:31:00 by `backend/scripts/measure_glance.py`.
 
 ## Environment
 
@@ -24,29 +24,42 @@
 
 | Endpoint | P50 | P95 | Mean | Max |
 |---|---|---|---|---|
-| glance | 3.233 | 3.926 | 3.288 | 6.126 |
-| events | 5.67 | 6.269 | 5.624 | 7.124 |
-| patient-view | 3.585 | 4.273 | 3.619 | 5.04 |
+| glance | 3.978 | 4.515 | 3.982 | 4.793 |
+| events | 6.607 | 7.298 | 6.605 | 7.474 |
+| patient-view | 5.695 | 6.474 | 5.719 | 7.069 |
 
 ### Layer B — HTTP round trip (local)
 
 | Endpoint | P50 | P95 | Mean | Max |
 |---|---|---|---|---|
-| glance | 3.312 | 3.797 | 3.311 | 4.336 |
-| events | 4.739 | 5.512 | 4.83 | 5.894 |
-| patient-view | 3.501 | 4.36 | 3.599 | 4.586 |
+| glance | 3.998 | 4.613 | 4.049 | 5.05 |
+| events | 6.517 | 7.184 | 6.502 | 7.541 |
+| patient-view | 5.396 | 6.34 | 5.436 | 6.99 |
 
-## Read-path LLM-free guard
+## E2 pre/post comparison
+
+| Run | Layer A Glance P50 | Layer A Glance P95 |
+|---|---:|---:|
+| E1 baseline (2026-08-26) | 3.233 | 3.926 |
+| E2 (2026-08-27) | 3.978 | 4.515 |
+
+These are separate local runs. The difference is reported, not attributed to
+E2 as a causal performance effect. Both remain far below the 300 ms prototype
+gate.
+
+## Read-path dependency and query guard
 
 `tests/test_read_path_no_llm.py` imports each read module in a clean
 interpreter and asserts its transitive import graph contains none of
 `ai_pipeline`, `llm_client`, `extraction`, `redaction`,
-`deterministic_pipeline` or `conflicts`. Glance/patient-view/events do
+`deterministic_pipeline`, `conflicts` or `importance_learning`. The E2 required
+test additionally captures Glance SQL and rejects any query of
+`importance_feedback`, Artifacts or AuditLog. Glance/patient-view/events do
 zero LLM calls and zero extraction at read time.
 
 ## Honesty clause
 
 These numbers come from a **single-user local SQLite** database and prove
-only that the warm read path performs no synchronous LLM call and no
-full-history scan. They do **not** establish distributed or
+only that the warm read path performs no synchronous LLM call, feedback
+aggregation or full-history scan. They do **not** establish distributed or
 production-scale capacity, and must not be presented as such.

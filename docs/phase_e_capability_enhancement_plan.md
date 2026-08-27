@@ -2,7 +2,7 @@
 
 > 中文名称：能力提升阶段
 >
-> 状态：**IN PROGRESS — E1 COMPLETE；其他任务状态以各自任务卡/分支验收为准（2026-08-27）**
+> 状态：**IN PROGRESS — E1/E2 COMPLETE；E3–E5 状态以各自任务卡/分支验收为准（2026-08-27）**
 >
 > 前置状态：Phase D 工程实现与自动化验收完成；当前核心基线为 342 个 backend tests、D3/D4 frozen evaluation、frontend production build 与 D5 security evidence 通过。
 >
@@ -135,6 +135,8 @@ Entry Gate -> E1 -> E2 -> E3 -> E4 -> E5
 ---
 
 ## 6. E2 — Self-Learning Importance
+
+> Implementation status: **COMPLETE — Exit Gate verified 2026-08-27**. This status does not advance E3–E5 and is based on controlled synthetic evaluation, not real clinician validation.
 
 第一版只学习 Glance 的软排序，不学习诊断、Summary 写法或临床事实。
 

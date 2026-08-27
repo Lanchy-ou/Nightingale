@@ -51,6 +51,10 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .highlight-body { flex: 1; }
 .highlight-text { font-weight: 600; }
 .highlight-reason { color: #6b7280; font-size: 12px; margin: 2px 0 6px; }
+.learned-priority { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; margin: 6px 0 9px; color: #315e50; font-size: 10px; }
+.learned-priority strong { color: #1e6a57; font-size: 11px; }
+.learned-priority span { font-variant-numeric: tabular-nums; }
+.learned-priority small { flex-basis: 100%; color: #63766f; }
 .highlight-actions { display: flex; gap: 8px; align-items: center; }
 .highlight-actions button {
   border: 1px solid #cbd5e1; background: #fff; border-radius: 6px;

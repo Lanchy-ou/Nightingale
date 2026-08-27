@@ -61,7 +61,21 @@ export interface Highlight {
   text: string;
   risk_reason: string;
   feature_flags: FeatureFlags;
+  base_importance_score: number;
+  adaptive_adjustment: number;
+  decay_adjustment: number;
   importance_score: number;
+  learning_metadata: {
+    feedback_key?: string;
+    review_count?: number;
+    positive_count?: number;
+    negative_count?: number;
+    raw_adjustment?: number;
+    cap_min?: number;
+    cap_max?: number;
+    reason?: string;
+    protection_applied?: boolean;
+  };
   status: string;
   status_history: { from: string; to: string; at: string }[];
   created_at: string;

@@ -63,7 +63,11 @@ class HighlightOut(BaseModel):
     text: str
     risk_reason: str
     feature_flags: dict
+    base_importance_score: int
+    adaptive_adjustment: int
+    decay_adjustment: int
     importance_score: int
+    learning_metadata: dict
     status: str
     status_history: list = []
     created_at: datetime

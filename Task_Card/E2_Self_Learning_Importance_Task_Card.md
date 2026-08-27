@@ -1,6 +1,6 @@
 # E2 Task Card — Self-Learning Importance
 
-> 状态：**PLANNED — IMPLEMENTATION NOT STARTED**
+> 状态：**COMPLETE — EXIT GATE VERIFIED 2026-08-27**
 >
 > 对应总计划：`docs/phase_e_capability_enhancement_plan.md`
 >
@@ -335,3 +335,18 @@ frontend/src/index.css
 - learning 可压过硬风险保护 -> 停止；
 - Glance read path 需要重新扫全历史或调用 LLM -> 停止；
 - synthetic labels 被描述为真实 clinician preference -> 停止并修正文档。
+
+---
+
+## 14. Implementation Evidence（2026-08-27）
+
+- `importance_feedback` 为 append-only metadata table；只含 Highlight/clinic/actor/role/controlled key/status/integer signal/time，不含 Highlight text、quote、risk reason、Comment/Note/Artifact content。
+- server 固定 signal 为 clinician `accepted +1 / pinned +2 / rejected -1`、staff `+1 / +1 / -1`；按同 clinic、同 controlled entity type 聚合，每个 `(actor_id, highlight_id)` 只取最新有效 event，最终 cap `[-2,+3]`；`other` 记录但不泛化。
+- 只有具备 exact source 的 system-authored AI Summary Highlight 成功通过 status CAS 后才写 feedback；no-op、409、patient/admin、非 AI row 均不训练。Staff feedback 不设置 `clinician_confirmed`。
+- Highlight 明确存储 `base_importance_score + adaptive_adjustment + decay_adjustment = importance_score`；E2 的 decay 恒为 0。risk、unresolved Task、clinician-confirmed、pinned、needs-review 的负向 adaptive 强制为 0，并由测试锁定。
+- AI candidate persistence 在 write path 查询 feedback 并预计算最终 score；Glance GET 不 import/query learning aggregation，不读取 Artifact/Audit/feedback，不调用 LLM，保持 deterministic `highlight_id` tiebreak。
+- `migrate_e2_schema()` 对旧 SQLite 与 SQLCipher synthetic Demo 都通过幂等迁移测试；旧 final score 被保留并回填为 base。当前 gitignored local Demo 已实际迁移。
+- `backend/tests/test_self_learning_importance.py`：16 passed；覆盖 current pin vs future learning、accept/pin/reject、same-base control/final ordering、clinic isolation、staff authority、patient/admin、latest-only、no-op/CAS loser、caps、全部 hard protections、metadata-only、exact provenance、read path、tiebreak、UI explanation、SQLite/SQLCipher migration。
+- E2 后 Glance warm path（100 samples，10 warm-up）：Layer A P50/P95 `3.978/4.515 ms`；E1 基线为 `3.233/3.926 ms`。Layer B P50/P95 `3.998/4.613 ms`。均为单用户本地 synthetic SQLite，不是生产容量或真人 usability 证据。
+- Regression：backend full `393 passed`；frontend production build PASS；D3 corpus validation/runtime hard gates PASS；D4 frozen Copilot eval PASS；security/integration `17 passed`；SQLCipher migration/storage、secret scan、`pip check`、Caddy validate 与 `git diff --check` PASS。
+- 未新增 dependency、provider、外部 dataset 或 attribution。E3/E4/E5 未在本卡推进；未生成真实 clinician preference/usability/learned clinical correctness claim。

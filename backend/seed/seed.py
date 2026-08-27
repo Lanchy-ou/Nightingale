@@ -22,6 +22,7 @@ from app.models import (
     Comment,
     Event,
     Highlight,
+    ImportanceFeedback,
     Invite,
     Patient,
     Task,
@@ -63,6 +64,7 @@ def seed(db: Session) -> None:
     # Clear in FK-safe order (children first). D1 identity tables reference
     # users/patients/clinics and are cleared before them.
     db.execute(delete(AuditLog))
+    db.execute(delete(ImportanceFeedback))
     db.execute(delete(AuthSession))
     db.execute(delete(UserCredential))
     db.execute(delete(Invite))

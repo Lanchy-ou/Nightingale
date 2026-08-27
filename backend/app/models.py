@@ -175,7 +175,15 @@ class Highlight(Base):
     text: Mapped[str] = mapped_column(String(512), nullable=False)
     risk_reason: Mapped[str] = mapped_column(String(512), nullable=False)
     feature_flags: Mapped[dict] = mapped_column(JSON, nullable=False)
+    # E2 separates the transparent deterministic score from bounded adaptive
+    # learning and the E3-reserved decay component. ``importance_score`` stays
+    # the stored final score used by the Glance read path.
+    base_importance_score: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    adaptive_adjustment: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    decay_adjustment: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     importance_score: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Counts/reason only. Never stores Highlight/source/comment/note text.
+    learning_metadata: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="suggested")
     # Temporary audit field; folds into AuditLog in Phase 3.
     status_history: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
@@ -187,6 +195,28 @@ class Highlight(Base):
     assertion_value: Mapped[str | None] = mapped_column(String(255), nullable=True)
     conflict_with_artifact_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     review_status: Mapped[str | None] = mapped_column(String(16), nullable=True)
+
+
+class ImportanceFeedback(Base):
+    """Append-only, clinic-scoped E2 ranking feedback metadata."""
+
+    __tablename__ = "importance_feedback"
+
+    feedback_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    highlight_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("highlights.highlight_id"), nullable=False, index=True
+    )
+    clinic_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("clinics.clinic_id"), nullable=False, index=True
+    )
+    actor_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("users.user_id"), nullable=False, index=True
+    )
+    actor_role: Mapped[str] = mapped_column(String(32), nullable=False)
+    feedback_key: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    signal_value: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
 
 class Comment(Base):

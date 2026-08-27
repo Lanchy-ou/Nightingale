@@ -457,6 +457,33 @@ Admin 登录后进入独立 `AdminWorkspacePage`，沿用现有字体、间距�
 
 E1 增加 `User.professional_title` nullable column。现有本地 synthetic SQLite Demo 没有 migration runner；升级后必须重新运行 seed 命令重建 Demo schema。没有新增 dependency、provider、外部数据或需追加的 attribution。
 
+### 4.7 E2 Self-Learning Importance（2026-08-27）
+
+> 状态：**E2 COMPLETE（synthetic evaluation）**。这不是模型训练、真实医生偏好验证或 learned clinical correctness 证明；E3–E5 未开始。
+
+E2 只学习未来相似 AI-derived Glance candidate 的软排序：成功的 clinician/staff Highlight status compare-and-set 才能在 append-only `importance_feedback` 中留下 metadata-only 反馈；no-op、409、patient/admin action、非 AI Summary 或缺少 exact source 的 row 都不训练。学习键由服务端把 `entity_type` 映射到 `symptom|medication|task|risk|allergy|follow_up|other`，不保存或使用 raw text、姓名、quote、risk reason、Comment、Note 或 embedding；`other` 只记录，不跨不相关概念泛化。
+
+```text
+clinician: accepted +1 / pinned +2 / rejected -1
+staff:     accepted +1 / pinned +1 / rejected -1
+
+final importance
+  = base_importance_score
+  + adaptive_adjustment  # same clinic, latest actor/highlight only, cap [-2,+3]
+  + decay_adjustment     # E3 reserved; E2 always 0
+```
+
+每个 `(actor_id, highlight_id)` 只取最新有效反馈，防止 toggle inflation。`explicit_risk`、`unresolved_task`、`clinician_confirmed`、`pinned`、`needs_review` 遇到负向 adaptive 值时强制归零；staff review 永不成为 clinician confirmation。新候选在 AI persistence write path 聚合并写入 base/adaptive/final 与 counts-only explanation，GET Glance 仍只读取预计算 Highlight，不查询 feedback、不扫描 Artifact/全历史、不调用 LLM。UI 仅在非零调整时显示 `Learned priority`、base/adaptive/final 与同院 review count，不暴露 actor 或其他患者内容。
+
+现有 SQLite/SQLCipher synthetic Demo 可用显式、幂等的 E2 migration 升级；它把旧 `importance_score` 回填为 base 并添加 feedback table，而不是假设 `create_all` 会修改旧表：
+
+```bash
+cd backend
+.venv/Scripts/python.exe -c "from app.db import migrate_e2_schema; migrate_e2_schema()"
+```
+
+新 Demo 仍由 seed / SQLCipher init 直接创建完整 schema。E2 没有新增 dependency、provider、dataset 或 attribution 条目。
+
 ---
 
 ## 5. AI 的职责边界
@@ -625,7 +652,7 @@ Consult Glance View：
 
 `backend/scripts/measure_glance.py` 在一次性 reseed 的 SQLite 上，对 glance / events / patient-view 三个读端点分别采样 100 次（前 10 次 warm-up 丢弃），输出 Layer A（TestClient in-process，应用逻辑 + SQLite 查询）与 Layer B（真实 uvicorn + 本地 HTTP 往返）两层 P50/P95/Mean/Max。
 
-最新一轮：Layer A Glance P95 ≈ **3.8 ms**（远低于 300 ms），events ≈ 6.7 ms，patient-view ≈ 5.0 ms；Layer B 各端点仅增加 ~1 ms 本地往返/序列化开销。排序确定性（`highlight_id` tiebreak）、写后读一致与 highlight 状态并发乐观锁均由 `tests/test_glance_ordering.py` 锁定；读路径零-LLM 由 `tests/test_read_path_no_llm.py`（transitive import 守卫）证明。
+E1 基线 Layer A Glance P50/P95 为 **3.233/3.926 ms**；E2 后同方法重测为 **3.978/4.515 ms**（远低于 300 ms）。E2 Layer B P50/P95 为 **3.998/4.613 ms**。这是两次独立本地运行，不把差异解释为因果性能结论。排序确定性（`highlight_id` tiebreak）、写后读一致与 highlight 状态并发乐观锁由 `tests/test_glance_ordering.py` 锁定；读路径零-LLM、零 feedback aggregation 由 `tests/test_read_path_no_llm.py` 与 E2 SQL capture probe 证明。
 
 > 诚实条款：单用户本地 SQLite 数字只证明 warm read path 不含同步 LLM / 全量历史扫描，不代表分布式或生产级容量。
 
@@ -792,7 +819,7 @@ cd backend
 .venv/Scripts/python.exe -B scripts/evaluate_copilot.py
 ```
 
-> 当前进度：M1–M7、Phase C、D1–D5 与 Phase E 的 E1 已完成；其他 Phase E 任务必须以各自任务卡/分支 Exit Gate 判断，不由 E1 自动宣称完成。D5 达到 **D5_AUTOMATED_SECURITY_COMPLETE**。E1 增加 Nurse/Staff 与 Admin 角色闭环，但不改变 synthetic-data、非生产医疗、无人类 usability 结论的边界。详见 `Task_Card/E1_Role_Workspaces_Task_Card.md`、`docs/d5_deployment_security_decisions.md` 与 `docs/d5_automated_evidence_2026-08-27.md`。
+> 当前进度：M1–M7、Phase C、D1–D5 与 Phase E 的 E1/E2 已完成；E3–E5 必须以各自任务卡/分支 Exit Gate 判断，未由 E2 推进。D5 达到 **D5_AUTOMATED_SECURITY_COMPLETE**。E2 仅通过受控 synthetic evaluation 证明同院、bounded、latest-only 的未来软排序变化，不代表真实医生偏好、真人 usability 或 learned clinical correctness。详见 `Task_Card/E1_Role_Workspaces_Task_Card.md`、`Task_Card/E2_Self_Learning_Importance_Task_Card.md`、`docs/d5_deployment_security_decisions.md` 与 `docs/d5_automated_evidence_2026-08-27.md`。
 
 架构约定（记录确切位置，随阶段更新）：
 
@@ -800,6 +827,7 @@ cd backend
 - **RBAC 强制点**：所有权限判断在 server-side 完成，集中在 `backend/app/authz.py`（`authorize(action, resource)` + `PERMISSIONS` 矩阵）与 `backend/app/role_context.py`（DB 为身份/角色唯一权威，`X-Role` 只能作 demo 一致性断言，不一致即拒绝，不可提权）。每个端点经 `require_auth`（401）+ `authorize`（同院无权限 403 / 跨院或非本人 404）；不存在、跨院和非本人资源使用相同 404 body，避免存在性探测。UI 只做展示裁剪，不作为安全边界，角色切换会重新挂载整个 patient workspace 以清除敏感状态。
 - **LLM 客户端出口**：`backend/app/llm_client.py`（`LLMClient` protocol）是唯一 provider 出口，只能接收 `RedactedContent`。实际仅支持 `mock`（无 key、确定性）与 `deepseek`（live adapter）两个 provider；`NANTINGALE_LLM_PROVIDER` 默认 `deepseek`。`deepseek` 缺 key / provider 出错 / schema 非法时明确降级到 deterministic fallback；key 只从环境变量读取，永不打印/入库。
 - **D4 Copilot 边界**：`POST /api/patients/{patient_id}/copilot/query` 只对同 clinic 的 clinician 开放。Provider 只接收最多 12 个脱敏 exact-span cards，且不拥有 draft type/Event/patient/visibility/endpoint；AI Summary 必须继续解析到 raw source 才能成为 source fact。`Find evidence` 先在当前授权 patient 全历史做服务器端匹配，再限制 provider egress；`What changed` 返回两个 Event source facts + 显式 comparison inference。Copilot 不直接写记录；可编辑 Preview 由服务端签发 5 分钟 HMAC token，绑定 actor/clinic/patient/Event/type/evidence，既有 Note/Task API 验证成功后才记录 `draft_origin=copilot`。Patient instruction 必须改成有效 patient-facing 内容；Patient View 从不加载 Copilot。
+- **E2 importance learning 边界**：`backend/app/importance_learning.py` 只在成功 status CAS 与候选 persistence write path 工作。受控 entity type、server-derived role/status signal、同院 latest-only aggregation 和 `[-2,+3]` cap 共同产生 adaptive adjustment；raw clinical text/PHI 不进入 key/table/metadata。GET Glance 继续只按已存 final score 排序，hard-risk/Task/clinician-confirmed/pinned/needs-review 不受负向学习削弱。
 
 ### Demo auth（D1）：Invite → Register → Login → Session → Logout
 
