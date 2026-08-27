@@ -145,7 +145,7 @@ def create_task(
         clinic_id=event.clinic_id,
         patient_id=event.patient_id,
         event_id=event.event_id,
-        details={"status": "open"},
+        details={"status": "open", **({"draft_origin": parsed.draft_origin} if parsed.draft_origin else {})},
     )
     recompute_task_highlights(db, event.patient_id)
     db.commit()

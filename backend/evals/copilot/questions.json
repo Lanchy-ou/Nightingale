@@ -1,0 +1,6 @@
+[
+  {"id": "changed", "category": "what_changed", "question": "What changed recently?"},
+  {"id": "matters", "category": "what_matters_now", "question": "What matters now?"},
+  {"id": "evidence", "category": "find_evidence", "question": "Find evidence about nausea"},
+  {"id": "draft", "category": "draft_action", "question": "Prepare a draft action"}
+]

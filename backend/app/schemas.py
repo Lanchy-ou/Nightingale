@@ -150,8 +150,11 @@ class AuditLogOut(BaseModel):
 
 
 class NoteCreate(BaseModel):
-    artifact_type: Literal["staff_note", "clinician_note"]
+    artifact_type: Literal["staff_note", "clinician_note", "patient_instruction"]
     content: dict
+    # UI-only D4 provenance flag. The server still derives author identity and
+    # uses the same normal write endpoint; it is recorded as audit metadata.
+    draft_origin: Literal["copilot"] | None = None
 
 
 class ArtifactUpdate(BaseModel):
@@ -367,6 +370,7 @@ class TaskCreate(BaseModel):
     due_at: datetime | None = None
     source_artifact_id: str | None = None
     source_span: dict | None = None
+    draft_origin: Literal["copilot"] | None = None
 
     @field_validator("title")
     @classmethod

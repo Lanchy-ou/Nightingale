@@ -67,6 +67,8 @@ PERMISSIONS: dict[str, dict[str, bool]] = {
         "read_task_provenance": True,
         "create_task": True,
         "transition_task": True,
+        "query_copilot": True,
+        "write_patient_instruction": True,
     },
     "admin": {
         # Read-only oversight, clinic-scoped. No note/comment/highlight writes.

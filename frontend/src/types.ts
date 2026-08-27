@@ -283,6 +283,47 @@ export interface TaskProvenance {
   quote: string | null;
 }
 
+// --- D4 Evidence-Bound Clinician Copilot ---------------------------------
+export type CopilotCategory = 'what_changed' | 'what_matters_now' | 'find_evidence' | 'draft_action';
+
+export interface CopilotEvidence {
+  evidence_id: string;
+  event_id: string;
+  event_type: string;
+  event_time: string;
+  artifact_id: string;
+  artifact_type: string;
+  author_role: string;
+  span: Span;
+  quote: string;
+  review_required: boolean;
+}
+
+export interface CopilotClaim {
+  text: string;
+  status: 'supported' | 'inference' | 'unknown';
+  evidence_ids: string[];
+}
+
+export interface CopilotDraft {
+  artifact_type: 'clinician_note' | 'patient_instruction' | 'task';
+  event_id: string;
+  evidence_ids: string[];
+  content: Record<string, string>;
+  patient_visible: boolean;
+  ai_generated: true;
+  requires_clinician_confirmation: true;
+}
+
+export interface CopilotResponse {
+  category: CopilotCategory;
+  status: 'ok' | 'unavailable';
+  claims: CopilotClaim[];
+  evidence: CopilotEvidence[];
+  limitations: string[];
+  draft: CopilotDraft | null;
+}
+
 export interface PatientView {
   patient_id: string;
   display_name: string;

@@ -135,6 +135,7 @@ def create_note(
         event_id=event_id,
         from_version=None,
         to_version=1,
+        details={"draft_origin": body.draft_origin} if body.draft_origin else None,
     )
     db.commit()
     artifact = db.get(Artifact, artifact_id)

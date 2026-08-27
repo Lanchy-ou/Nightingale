@@ -3,6 +3,7 @@ import { api } from '../api';
 import { artifactLabel, formatDate } from '../clinical';
 import type {
   Artifact,
+  CopilotEvidence,
   CurrentIdentity,
   DoctorConsultResult,
   Event,
@@ -16,6 +17,7 @@ import ClinicalTimeline from '../components/ClinicalTimeline';
 import ClinicalTasksView from '../components/ClinicalTasksView';
 import ClinicianSidebar from '../components/ClinicianSidebar';
 import CommentThread from '../components/CommentThread';
+import CopilotPanel from '../components/CopilotPanel';
 import GlancePanel from '../components/GlancePanel';
 import NewDoctorConsult from '../components/NewDoctorConsult';
 import ProvenancePanel from '../components/ProvenancePanel';
@@ -81,7 +83,8 @@ function PatientWorkspace({
   const [refreshKey, setRefreshKey] = useState(0);
   const [eventRefreshKey, setEventRefreshKey] = useState(0);
   const [provenance, setProvenance] = useState<ProvenanceResult | null>(null);
-  const [contextTab, setContextTab] = useState<'source' | 'comments' | 'versions' | 'audit'>('comments');
+  const [copilotEvidence, setCopilotEvidence] = useState<CopilotEvidence | null>(null);
+  const [contextTab, setContextTab] = useState<'copilot' | 'source' | 'comments' | 'history'>(identity.role === 'clinician' ? 'copilot' : 'comments');
   const [eventContext, setEventContext] = useState<EventContextState>({ artifacts: [], selectedArtifact: null });
   const [initialArtifactId, setInitialArtifactId] = useState<string | null>(null);
   const [completion, setCompletion] = useState<DoctorConsultResult | null>(null);
@@ -123,6 +126,18 @@ function PatientWorkspace({
     }
   }, [route.mode]);
 
+  useEffect(() => {
+    // patient/role/session identity is a strict state boundary. The outer key
+    // unmounts on logout; this also handles an in-place identity transition.
+    setProvenance(null);
+    setCopilotEvidence(null);
+    setEventContext({ artifacts: [], selectedArtifact: null });
+    setInitialArtifactId(null);
+    setTaskFocusId(null);
+    setCompletion(null);
+    setContextTab(identity.role === 'clinician' ? 'copilot' : 'comments');
+  }, [patientId, identity.role, identity.user_id]);
+
   const selectedEvent = useMemo(
     () => events.find((event) => event.event_id === route.eventId) ?? null,
     [events, route.eventId],
@@ -151,7 +166,16 @@ function PatientWorkspace({
 
   function handleViewSource(next: ProvenanceResult) {
     setProvenance(next);
+    setCopilotEvidence(null);
     setContextTab('source');
+  }
+
+  function handleOpenCopilotEvidence(next: CopilotEvidence) {
+    setCopilotEvidence(next);
+    setProvenance(null);
+    setInitialArtifactId(next.artifact_id);
+    setContextTab('source');
+    onNavigate({ kind: 'patient', patientId, mode: 'event', eventId: next.event_id });
   }
 
   function changed() {
@@ -290,18 +314,34 @@ function PatientWorkspace({
               <div><p className="eyebrow">Event context</p><h2>{selectedArtifact ? artifactLabel(selectedArtifact) : 'Collaboration'}</h2></div>
             </div>
             <nav className="context-tabs" aria-label="Event context tools">
-              {provenance && <button className={contextTab === 'source' ? 'active' : ''} onClick={() => setContextTab('source')}>Source</button>}
+              {identity.role === 'clinician' && <button className={contextTab === 'copilot' ? 'active' : ''} onClick={() => setContextTab('copilot')}>Copilot</button>}
+              <button className={contextTab === 'source' ? 'active' : ''} onClick={() => setContextTab('source')}>Source</button>
               <button className={contextTab === 'comments' ? 'active' : ''} onClick={() => setContextTab('comments')}>Comments</button>
-              {hasVersions && <button className={contextTab === 'versions' ? 'active' : ''} onClick={() => setContextTab('versions')}>Versions</button>}
-              <button className={contextTab === 'audit' ? 'active' : ''} onClick={() => setContextTab('audit')}>Audit</button>
+              <button className={contextTab === 'history' ? 'active' : ''} onClick={() => setContextTab('history')}>History</button>
             </nav>
             <div className="context-scroll">
+              {contextTab === 'copilot' && identity.role === 'clinician' && (
+                <CopilotPanel patientId={patientId} roleKey={`${identity.user_id}:${identity.role}`} onOpenEvidence={handleOpenCopilotEvidence} onConfirmed={changed} />
+              )}
               {contextTab === 'source' && provenance && (
                 <ProvenancePanel
                   provenance={provenance}
                   onClose={() => { setProvenance(null); setContextTab('comments'); }}
                   onFocusEvent={(eventId) => onNavigate({ kind: 'patient', patientId, mode: 'event', eventId })}
                 />
+              )}
+              {contextTab === 'source' && copilotEvidence && (
+                <div className="copilot-source-card">
+                  <p className="eyebrow">Verified Copilot evidence</p>
+                  <h3>{copilotEvidence.artifact_type.replace(/_/g, ' ')}</h3>
+                  <p>{copilotEvidence.event_type.replace(/_/g, ' ')} · {new Date(copilotEvidence.event_time).toLocaleString()}</p>
+                  <small>{copilotEvidence.author_role} · exact {copilotEvidence.span.kind} span</small>
+                  <blockquote>{copilotEvidence.quote}</blockquote>
+                  {copilotEvidence.review_required && <div className="verification-callout">Review flag on this source.</div>}
+                </div>
+              )}
+              {contextTab === 'source' && !provenance && !copilotEvidence && (
+                <div className="context-empty"><p className="eyebrow">Source</p><h3>No source selected</h3><p>Open a verified Copilot evidence card or a Glance source to inspect its exact span.</p></div>
               )}
               {contextTab === 'comments' && (
                 <CommentThread
@@ -312,20 +352,24 @@ function PatientWorkspace({
                   onChanged={changed}
                 />
               )}
-              {contextTab === 'versions' && hasVersions && selectedArtifact && (
-                <RevisionPanel
-                  key={`${selectedArtifact.artifact_id}:${selectedArtifact.version}`}
-                  artifact={selectedArtifact}
-                  onReverted={changed}
-                  canRevert={selectedArtifact.artifact_type === `${identity.role}_note`}
-                  defaultOpen
-                />
-              )}
-              {contextTab === 'audit' && (
-                <AuditList key={`${selectedEvent.event_id}:${eventRefreshKey}`} eventId={selectedEvent.event_id} defaultOpen />
+              {contextTab === 'history' && (
+                <>
+                  {hasVersions && selectedArtifact && <RevisionPanel
+                    key={`${selectedArtifact.artifact_id}:${selectedArtifact.version}`}
+                    artifact={selectedArtifact}
+                    onReverted={changed}
+                    canRevert={selectedArtifact.artifact_type === `${identity.role}_note`}
+                    defaultOpen
+                  />}
+                  <AuditList key={`${selectedEvent.event_id}:${eventRefreshKey}`} eventId={selectedEvent.event_id} defaultOpen />
+                </>
               )}
             </div>
           </>
+        ) : identity.role === 'clinician' ? (
+          <div className="context-scroll">
+            <CopilotPanel patientId={patientId} roleKey={`${identity.user_id}:${identity.role}`} onOpenEvidence={handleOpenCopilotEvidence} onConfirmed={changed} />
+          </div>
         ) : provenance ? (
           <div className="context-scroll standalone-source">
             <ProvenancePanel

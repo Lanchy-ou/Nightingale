@@ -14,6 +14,7 @@ from .api import (
     audit,
     auth,
     comments,
+    copilot,
     events,
     highlights,
     notes,
@@ -42,6 +43,7 @@ app.include_router(events.router)
 app.include_router(highlights.router)
 app.include_router(notes.router)
 app.include_router(comments.router)
+app.include_router(copilot.router)
 app.include_router(audit.router)
 app.include_router(sources.router)
 app.include_router(tasks.router)
