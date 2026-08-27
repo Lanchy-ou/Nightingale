@@ -1,0 +1,103 @@
+{
+  "schema_version": 1,
+  "case_id": "tr_dev_026_phi_quote_restoration",
+  "split": "development",
+  "data_classification": "SYNTHETIC_ONLY",
+  "description": "A redacted synthetic name must restore locally before exact raw anchoring.",
+  "category": "redaction_anchor",
+  "coverage_tags": [
+    "synthetic_name",
+    "anchorable_quote"
+  ],
+  "raw_text": "PATIENT: Synthetic Bob Lim reports nausea.\nDOCTOR: Noted.",
+  "expected_normalize_outcome": "ACCEPT",
+  "expected_canonical_segments": [
+    {
+      "index": 0,
+      "speaker": "patient",
+      "text": "Synthetic Bob Lim reports nausea.",
+      "source_start": 9,
+      "source_end": 42
+    },
+    {
+      "index": 1,
+      "speaker": "doctor",
+      "text": "Noted.",
+      "source_start": 51,
+      "source_end": 57
+    }
+  ],
+  "expected_source_ranges": [
+    {
+      "segment_index": 0,
+      "source_start": 9,
+      "source_end": 42
+    },
+    {
+      "segment_index": 1,
+      "source_start": 51,
+      "source_end": 57
+    }
+  ],
+  "normalize_reason": null,
+  "extraction_expectations": {
+    "annotation_status": "ANNOTATED",
+    "entities": [
+      {
+        "entity_type": "symptom",
+        "text": "nausea",
+        "assertion_value": "present",
+        "polarity": "positive",
+        "source_range": {
+          "source_start": 9,
+          "source_end": 42
+        }
+      }
+    ],
+    "task_status": null,
+    "conflict_expected": false
+  },
+  "redaction_expectations": {
+    "annotation_status": "ANNOTATED",
+    "known_names": [
+      "Synthetic Bob Lim"
+    ],
+    "expected_redactions": [
+      {
+        "text": "Synthetic Bob Lim",
+        "placeholder_type": "NAME",
+        "occurrences": 1
+      }
+    ],
+    "unclassified_suspected_phi": null
+  },
+  "anchor_expectations": {
+    "annotation_status": "ANNOTATED",
+    "quotes": [
+      {
+        "quote": "Synthetic Bob Lim reports nausea.",
+        "expected_outcome": "ANCHORABLE",
+        "source_range": {
+          "source_start": 9,
+          "source_end": 42
+        }
+      }
+    ]
+  },
+  "provider_expectations": {
+    "scenario": "not_applicable",
+    "primary_result": null,
+    "fallback_expected": null,
+    "expected_generation_method": null,
+    "fallback_reason": null,
+    "metrics_status": "NOT_EVALUATED"
+  },
+  "hard_gate_annotations": {
+    "silent_speaker_invention_allowed": false,
+    "unknown_to_default_allowed": false,
+    "silent_truncation_allowed": false,
+    "raw_source_overwrite_allowed": false,
+    "unanchored_highlight_persistence_allowed": false,
+    "known_phi_unredacted_egress_allowed": false
+  }
+}

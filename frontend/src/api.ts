@@ -20,6 +20,7 @@ import type {
   RegisterResult,
   Span,
   TaskProvenance,
+  TranscriptNormalizeResult,
 } from './types';
 
 // ---------------------------------------------------------------------------
@@ -212,6 +213,8 @@ export const api = {
       artifact_type: 'transcript',
       content,
     }),
+  normalizeTranscript: (rawText: string, signal?: AbortSignal) =>
+    post<TranscriptNormalizeResult>(`/api/transcripts/normalize`, { raw_text: rawText }, signal),
   createDoctorConsult: (
     patientId: string,
     consultId: string,

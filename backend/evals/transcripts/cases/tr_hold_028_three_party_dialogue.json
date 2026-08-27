@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "case_id": "tr_hold_028_three_party_dialogue",
+  "split": "frozen_holdout",
+  "data_classification": "SYNTHETIC_ONLY",
+  "description": "A caregiver creates an unsupported third speaker.",
+  "category": "speaker_ambiguity",
+  "coverage_tags": [
+    "three_party",
+    "unknown_speaker"
+  ],
+  "raw_text": "DOCTOR: How are you?\nPATIENT: Tired.\nCAREGIVER: She slept poorly.",
+  "expected_normalize_outcome": "NEEDS_REVIEW",
+  "expected_canonical_segments": null,
+  "expected_source_ranges": [
+    {
+      "issue_index": 0,
+      "source_start": 37,
+      "source_end": 65
+    }
+  ],
+  "normalize_reason": "UNSUPPORTED_THIRD_SPEAKER",
+  "extraction_expectations": {
+    "annotation_status": "UNKNOWN",
+    "entities": null,
+    "task_status": "unknown",
+    "conflict_expected": null
+  },
+  "redaction_expectations": {
+    "annotation_status": "ANNOTATED",
+    "known_names": [],
+    "expected_redactions": [],
+    "unclassified_suspected_phi": null
+  },
+  "anchor_expectations": {
+    "annotation_status": "NOT_APPLICABLE",
+    "quotes": null
+  },
+  "provider_expectations": {
+    "scenario": "not_applicable",
+    "primary_result": null,
+    "fallback_expected": null,
+    "expected_generation_method": null,
+    "fallback_reason": null,
+    "metrics_status": "NOT_EVALUATED"
+  },
+  "hard_gate_annotations": {
+    "silent_speaker_invention_allowed": false,
+    "unknown_to_default_allowed": false,
+    "silent_truncation_allowed": false,
+    "raw_source_overwrite_allowed": false,
+    "unanchored_highlight_persistence_allowed": false,
+    "known_phi_unredacted_egress_allowed": false
+  }
+}

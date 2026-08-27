@@ -824,7 +824,7 @@ M1 (skeleton + canonical fixture), M2 (Glance → Provenance vertical slice), an
 
 M4 (AI pipeline + redaction + deterministic prioritization) is complete. Conventions added:
 
-- **Provider protocol (Gate 0)**: `NOT_LIVE_VERIFIED` — DeepSeek live adapter is BLOCKED (see `backend/docs/gate0_provider_status.md`). The build runs `mock` / `deterministic_fallback`; provider chosen via `NANTINGALE_LLM_PROVIDER`, key read from env only.
+- **Provider protocol**: only `mock` (key-free deterministic) and `deepseek` (live adapter) are wired; chosen via `NANTINGALE_LLM_PROVIDER` (default `deepseek`). `deepseek` reads its key from env only — a missing key, provider error, or schema-invalid output falls back to `deterministic_fallback`. No other provider is wired (see `backend/docs/gate0_provider_status.md` for the dated Gate 0 smoke-check record).
 - **Redaction**: `backend/app/redaction.py` (`redact_content` / `restore_placeholders`). Deterministic coverage for known names + IC/ID + phone; `placeholder_mapping` is in-memory only. `backend/app/ai_pipeline.py` redacts BEFORE any provider call.
 - **LLM egress**: `backend/app/llm_client.py` `LLMClient` protocol is the ONLY provider exit; accepts `RedactedContent` only. No module may call an SDK/HTTP provider directly.
 - **Span anchoring (permanent)**: provider quotes are over REDACTED text; pipeline restores placeholders locally, then `locate_span` against the RAW source; a failed restore/anchore drops the candidate (never fuzzy match).
@@ -969,7 +969,7 @@ D1 (Identity, Invite, Login and Session) is complete. D2 is the next task card. 
 
 ## 25. D2 Implementation Status（2026-08-27 审查修复后重验）
 
-D2 (Care Task Lifecycle + Patient Experience) is complete. D3/D4/D5 remain untouched and are not authorized by this status.
+D2 (Care Task Lifecycle + Patient Experience) is complete. At D2 close, D3/D4/D5 remained untouched; D3 has since completed under the separate authorization recorded in §26.
 
 - **First-class Task**: `Task` in `backend/app/models.py` requires patient/clinic/origin Event and stores optional paired Artifact/Span provenance, assignment, patient visibility, due time and terminal actor/timestamps. There is no parallel Task history table; metadata-only `AuditLog.details` is the single status-history authority.
 - **State machine / concurrency**: `backend/app/tasks.py` freezes `open -> in_progress|reported_done|cancelled`, `in_progress -> reported_done|cancelled`, `reported_done -> completed|cancelled`; `completed|cancelled` have no outgoing transitions. `POST /api/tasks/{task_id}/transition` uses atomic `UPDATE ... WHERE status=expected_status`; stale writes return deterministic 409.
@@ -985,3 +985,19 @@ D2 (Care Task Lifecycle + Patient Experience) is complete. D3/D4/D5 remain untou
   - After a successful login, `SessionApp` updates the authenticated identity and renders the correct role view, but the browser URL may remain `/login`; a future surgical fix should navigate to the role home without weakening session-driven routing or remount boundaries.
   - ~~`frontend/src/components/ClinicalEventDetail.tsx` stale "exact first source span" help text~~ — fixed 2026-08-27: the copy now states the Task may optionally choose/confirm an exact source quote, otherwise Event-level provenance. No automatic first-span selection was restored.
 - **Non-goals preserved**: no appointment, lab-order system, billing, recurrence, notification provider, patient direct chat, D3 transcript normalization/evals, D4 Copilot or D5 security integration was implemented.
+
+---
+
+## 26. D3 Implementation Status（2026-08-27）
+
+D3 (Transcript Import, Normalization and Reliability Evaluation) is complete. D4 is the next task card; D3 completion does not authorize Copilot or D5 work.
+
+- **Pure normalize boundary**: `backend/app/transcript_normalizer.py` is deterministic and frozen (`SHA-256 1ac0e01e92401b1728e7b938541e71f8d95e81cca137376004953eb2cd371476`). `POST /api/transcripts/normalize` is clinician-only and performs no patient DB read, persistence, AuditLog write, LLM/provider call or timestamp invention.
+- **Outcome contract**: preview returns `ACCEPT|NEEDS_REVIEW|REJECT` plus exact character ranges, nullable speaker candidate, deterministic confidence marker and issues. Frozen mapping supports DOCTOR/PATIENT case variants and Dr/Pt; unknown/third-party/unlabelled/empty input fails closed. UNKNOWN never becomes doctor, patient or another default.
+- **Limits**: raw text is capped at 4096 UTF-8 bytes (413); canonical preview is capped at 500 segments and 4000 characters per segment (422). There is no silent truncation.
+- **Confirm authority**: only reviewed, continuous `doctor|patient` canonical segments cross the existing C1 Doctor Consult endpoint. Event + immutable system-authored Transcript commit first; M4 redaction/provider-or-fallback/provenance remains the only derived path. Preview metadata and raw labels do not persist; derived failure preserves raw.
+- **Frontend**: `NewDoctorConsult.tsx` is a real `Paste → Review → Confirm` workflow with raw/preview comparison, visible unknown blocking, speaker/text edits, split/merge, explicit reject state, stable retry identity and patient-switch reset. No fake ASR confidence/timestamp is shown.
+- **Frozen evaluation**: 40 synthetic cases (development 26 / frozen_holdout 14), UTF-8/LF bytes, per-file SHA-256, manifest hash and composite holdout digest. Holdout normalize outcome 14/14, speaker 12/12, ambiguous blocking 8/8; silent invention/truncation/redaction miss/fallback unanchored candidate all zero. No rule was changed after first holdout evaluation.
+- **Layered honesty**: the deepseek provider requires an env key and is not exercised by the frozen runner; the runner reports provider `NOT_RUN`. Deterministic fallback is separate: development exact entity precision 0.888889/recall 0.571429 and task precision 1.0/recall 0.5; holdout lacks entity gold and reports null. Standalone corpus conflict accuracy is `NOT_EVALUATED` because clinician-note DB context is absent.
+- **Verification**: backend **296 passed**; corpus validation and deterministic runtime runner exit 0; frontend production build passed. Review re-verification added canonical-boundary regressions (`tests/test_transcript_preview_contract.py`) plus a non-BMP code-point contract (`tests/test_transcript_non_bmp.py`, which runs the Node `frontend/tests/transcriptRange.test.ts`) locking that preview source ranges can never enter the canonical Transcript and that emoji/non-BMP text is split with code-point accuracy, plus `CORPUS_VALIDATION_PASS` and the unified mock/deepseek provider wording. Browser QA covered ACCEPT/NEEDS_REVIEW/REJECT, resolve/split/merge, confirm → fallback → exact source, patient-switch isolation, and zero console warnings/errors.
+- **Permanent stop rules**: never default unknown speakers, never call an LLM or persist at normalize time, never tune rules case-by-case against frozen holdout, never merge provider/fallback scores, and never persist an unanchored candidate.

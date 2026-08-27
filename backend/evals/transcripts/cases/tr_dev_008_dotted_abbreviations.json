@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "case_id": "tr_dev_008_dotted_abbreviations",
+  "split": "development",
+  "data_classification": "SYNTHETIC_ONLY",
+  "description": "Dotted Dr./Pt. abbreviations use the frozen mapping.",
+  "category": "label_mapping",
+  "coverage_tags": [
+    "dr_pt_mapping",
+    "abbreviation"
+  ],
+  "raw_text": "Dr.: Has the headache improved?\nPt.: Slightly improved.",
+  "expected_normalize_outcome": "ACCEPT",
+  "expected_canonical_segments": [
+    {
+      "index": 0,
+      "speaker": "doctor",
+      "text": "Has the headache improved?",
+      "source_start": 5,
+      "source_end": 31
+    },
+    {
+      "index": 1,
+      "speaker": "patient",
+      "text": "Slightly improved.",
+      "source_start": 37,
+      "source_end": 55
+    }
+  ],
+  "expected_source_ranges": [
+    {
+      "segment_index": 0,
+      "source_start": 5,
+      "source_end": 31
+    },
+    {
+      "segment_index": 1,
+      "source_start": 37,
+      "source_end": 55
+    }
+  ],
+  "normalize_reason": null,
+  "extraction_expectations": {
+    "annotation_status": "NOT_APPLICABLE",
+    "entities": null,
+    "task_status": null,
+    "conflict_expected": null
+  },
+  "redaction_expectations": {
+    "annotation_status": "ANNOTATED",
+    "known_names": [],
+    "expected_redactions": [],
+    "unclassified_suspected_phi": null
+  },
+  "anchor_expectations": {
+    "annotation_status": "NOT_APPLICABLE",
+    "quotes": null
+  },
+  "provider_expectations": {
+    "scenario": "not_applicable",
+    "primary_result": null,
+    "fallback_expected": null,
+    "expected_generation_method": null,
+    "fallback_reason": null,
+    "metrics_status": "NOT_EVALUATED"
+  },
+  "hard_gate_annotations": {
+    "silent_speaker_invention_allowed": false,
+    "unknown_to_default_allowed": false,
+    "silent_truncation_allowed": false,
+    "raw_source_overwrite_allowed": false,
+    "unanchored_highlight_persistence_allowed": false,
+    "known_phi_unredacted_egress_allowed": false
+  }
+}

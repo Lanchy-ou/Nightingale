@@ -1,0 +1,95 @@
+{
+  "schema_version": 1,
+  "case_id": "tr_dev_013_negation",
+  "split": "development",
+  "data_classification": "SYNTHETIC_ONLY",
+  "description": "Explicit symptom negation must not become a positive assertion.",
+  "category": "clinical_entity",
+  "coverage_tags": [
+    "negation",
+    "anchorable_quote"
+  ],
+  "raw_text": "DOCTOR: Any vomiting?\nPATIENT: I have not vomited.",
+  "expected_normalize_outcome": "ACCEPT",
+  "expected_canonical_segments": [
+    {
+      "index": 0,
+      "speaker": "doctor",
+      "text": "Any vomiting?",
+      "source_start": 8,
+      "source_end": 21
+    },
+    {
+      "index": 1,
+      "speaker": "patient",
+      "text": "I have not vomited.",
+      "source_start": 31,
+      "source_end": 50
+    }
+  ],
+  "expected_source_ranges": [
+    {
+      "segment_index": 0,
+      "source_start": 8,
+      "source_end": 21
+    },
+    {
+      "segment_index": 1,
+      "source_start": 31,
+      "source_end": 50
+    }
+  ],
+  "normalize_reason": null,
+  "extraction_expectations": {
+    "annotation_status": "ANNOTATED",
+    "entities": [
+      {
+        "entity_type": "symptom",
+        "text": "vomiting",
+        "assertion_value": "absent",
+        "polarity": "negative",
+        "source_range": {
+          "source_start": 31,
+          "source_end": 50
+        }
+      }
+    ],
+    "task_status": null,
+    "conflict_expected": false
+  },
+  "redaction_expectations": {
+    "annotation_status": "ANNOTATED",
+    "known_names": [],
+    "expected_redactions": [],
+    "unclassified_suspected_phi": null
+  },
+  "anchor_expectations": {
+    "annotation_status": "ANNOTATED",
+    "quotes": [
+      {
+        "quote": "I have not vomited.",
+        "expected_outcome": "ANCHORABLE",
+        "source_range": {
+          "source_start": 31,
+          "source_end": 50
+        }
+      }
+    ]
+  },
+  "provider_expectations": {
+    "scenario": "not_applicable",
+    "primary_result": null,
+    "fallback_expected": null,
+    "expected_generation_method": null,
+    "fallback_reason": null,
+    "metrics_status": "NOT_EVALUATED"
+  },
+  "hard_gate_annotations": {
+    "silent_speaker_invention_allowed": false,
+    "unknown_to_default_allowed": false,
+    "silent_truncation_allowed": false,
+    "raw_source_overwrite_allowed": false,
+    "unanchored_highlight_persistence_allowed": false,
+    "known_phi_unredacted_egress_allowed": false
+  }
+}

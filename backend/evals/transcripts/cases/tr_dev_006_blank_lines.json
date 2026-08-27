@@ -1,0 +1,87 @@
+{
+  "schema_version": 1,
+  "case_id": "tr_dev_006_blank_lines",
+  "split": "development",
+  "data_classification": "SYNTHETIC_ONLY",
+  "description": "Blank lines separate turns without creating empty segments.",
+  "category": "line_structure",
+  "coverage_tags": [
+    "blank_line",
+    "canonical_label"
+  ],
+  "raw_text": "DOCTOR: Any fever?\n\nPATIENT: No fever.\n\nDOCTOR: Thank you.",
+  "expected_normalize_outcome": "ACCEPT",
+  "expected_canonical_segments": [
+    {
+      "index": 0,
+      "speaker": "doctor",
+      "text": "Any fever?",
+      "source_start": 8,
+      "source_end": 18
+    },
+    {
+      "index": 1,
+      "speaker": "patient",
+      "text": "No fever.",
+      "source_start": 29,
+      "source_end": 38
+    },
+    {
+      "index": 2,
+      "speaker": "doctor",
+      "text": "Thank you.",
+      "source_start": 48,
+      "source_end": 58
+    }
+  ],
+  "expected_source_ranges": [
+    {
+      "segment_index": 0,
+      "source_start": 8,
+      "source_end": 18
+    },
+    {
+      "segment_index": 1,
+      "source_start": 29,
+      "source_end": 38
+    },
+    {
+      "segment_index": 2,
+      "source_start": 48,
+      "source_end": 58
+    }
+  ],
+  "normalize_reason": null,
+  "extraction_expectations": {
+    "annotation_status": "NOT_APPLICABLE",
+    "entities": null,
+    "task_status": null,
+    "conflict_expected": null
+  },
+  "redaction_expectations": {
+    "annotation_status": "ANNOTATED",
+    "known_names": [],
+    "expected_redactions": [],
+    "unclassified_suspected_phi": null
+  },
+  "anchor_expectations": {
+    "annotation_status": "NOT_APPLICABLE",
+    "quotes": null
+  },
+  "provider_expectations": {
+    "scenario": "not_applicable",
+    "primary_result": null,
+    "fallback_expected": null,
+    "expected_generation_method": null,
+    "fallback_reason": null,
+    "metrics_status": "NOT_EVALUATED"
+  },
+  "hard_gate_annotations": {
+    "silent_speaker_invention_allowed": false,
+    "unknown_to_default_allowed": false,
+    "silent_truncation_allowed": false,
+    "raw_source_overwrite_allowed": false,
+    "unanchored_highlight_persistence_allowed": false,
+    "known_phi_unredacted_egress_allowed": false
+  }
+}

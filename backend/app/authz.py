@@ -59,6 +59,7 @@ PERMISSIONS: dict[str, dict[str, bool]] = {
         "edit_clinician_note": True,
         "ingest_doctor_transcript": True,
         "create_doctor_consult": True,
+        "normalize_doctor_transcript": True,
         "list_clinic_patients": True,
         "comment": True,
         "highlight_status": True,

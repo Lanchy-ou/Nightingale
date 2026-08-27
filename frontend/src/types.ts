@@ -153,6 +153,28 @@ export interface DoctorTranscriptSegment {
   text: string;
 }
 
+export type TranscriptNormalizeOutcome = 'ACCEPT' | 'NEEDS_REVIEW' | 'REJECT';
+
+export interface TranscriptPreviewSegment {
+  index: number;
+  speaker_candidate: 'doctor' | 'patient' | null;
+  text: string;
+  // Nullable: after a user edit/split/merge that cannot be mapped back to the
+  // raw text exactly, the source range is cleared (never a pseudo-precise span).
+  source_start: number | null;
+  source_end: number | null;
+  confidence_marker: 'exact_label' | 'mapped_label' | 'inferred_boundary' | 'unknown';
+  issues: string[];
+}
+
+export interface TranscriptNormalizeResult {
+  outcome: TranscriptNormalizeOutcome;
+  normalize_reason: string | null;
+  raw_byte_length: number;
+  segments: TranscriptPreviewSegment[];
+  issues: string[];
+}
+
 export interface DoctorConsultResult {
   event: Event;
   encounter_id: string;

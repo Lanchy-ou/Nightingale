@@ -1,0 +1,96 @@
+{
+  "schema_version": 1,
+  "case_id": "tr_dev_017_internal_contradiction",
+  "split": "development",
+  "data_classification": "SYNTHETIC_ONLY",
+  "description": "Contradictory patient statements are preserved for later review.",
+  "category": "clinical_conflict",
+  "coverage_tags": [
+    "internal_contradiction",
+    "medication_dose"
+  ],
+  "raw_text": "PATIENT: I take propranolol 20 mg daily.\nPATIENT: I do not take any medication.",
+  "expected_normalize_outcome": "ACCEPT",
+  "expected_canonical_segments": [
+    {
+      "index": 0,
+      "speaker": "patient",
+      "text": "I take propranolol 20 mg daily.",
+      "source_start": 9,
+      "source_end": 40
+    },
+    {
+      "index": 1,
+      "speaker": "patient",
+      "text": "I do not take any medication.",
+      "source_start": 50,
+      "source_end": 79
+    }
+  ],
+  "expected_source_ranges": [
+    {
+      "segment_index": 0,
+      "source_start": 9,
+      "source_end": 40
+    },
+    {
+      "segment_index": 1,
+      "source_start": 50,
+      "source_end": 79
+    }
+  ],
+  "normalize_reason": null,
+  "extraction_expectations": {
+    "annotation_status": "ANNOTATED",
+    "entities": [
+      {
+        "entity_type": "medication",
+        "text": "propranolol",
+        "assertion_value": "20 mg daily",
+        "polarity": "positive",
+        "source_range": {
+          "source_start": 9,
+          "source_end": 40
+        }
+      },
+      {
+        "entity_type": "medication",
+        "text": "any medication",
+        "assertion_value": "none",
+        "polarity": "negative",
+        "source_range": {
+          "source_start": 50,
+          "source_end": 79
+        }
+      }
+    ],
+    "task_status": null,
+    "conflict_expected": true
+  },
+  "redaction_expectations": {
+    "annotation_status": "ANNOTATED",
+    "known_names": [],
+    "expected_redactions": [],
+    "unclassified_suspected_phi": null
+  },
+  "anchor_expectations": {
+    "annotation_status": "NOT_APPLICABLE",
+    "quotes": null
+  },
+  "provider_expectations": {
+    "scenario": "not_applicable",
+    "primary_result": null,
+    "fallback_expected": null,
+    "expected_generation_method": null,
+    "fallback_reason": null,
+    "metrics_status": "NOT_EVALUATED"
+  },
+  "hard_gate_annotations": {
+    "silent_speaker_invention_allowed": false,
+    "unknown_to_default_allowed": false,
+    "silent_truncation_allowed": false,
+    "raw_source_overwrite_allowed": false,
+    "unanchored_highlight_persistence_allowed": false,
+    "known_phi_unredacted_egress_allowed": false
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "case_id": "tr_hold_040_chinese_unknown_labels",
+  "split": "frozen_holdout",
+  "data_classification": "SYNTHETIC_ONLY",
+  "description": "Chinese speaker labels are outside the frozen mapping and remain unknown.",
+  "category": "language_variation",
+  "coverage_tags": [
+    "bilingual",
+    "unknown_speaker",
+    "unknown_not_defaulted"
+  ],
+  "raw_text": "医生：请描述症状。\n病人：我今天头痛。",
+  "expected_normalize_outcome": "NEEDS_REVIEW",
+  "expected_canonical_segments": null,
+  "expected_source_ranges": [
+    {
+      "issue_index": 0,
+      "source_start": 0,
+      "source_end": 9
+    },
+    {
+      "issue_index": 1,
+      "source_start": 10,
+      "source_end": 19
+    }
+  ],
+  "normalize_reason": "UNKNOWN_SPEAKER_LABEL",
+  "extraction_expectations": {
+    "annotation_status": "UNKNOWN",
+    "entities": null,
+    "task_status": "unknown",
+    "conflict_expected": null
+  },
+  "redaction_expectations": {
+    "annotation_status": "ANNOTATED",
+    "known_names": [],
+    "expected_redactions": [],
+    "unclassified_suspected_phi": null
+  },
+  "anchor_expectations": {
+    "annotation_status": "NOT_APPLICABLE",
+    "quotes": null
+  },
+  "provider_expectations": {
+    "scenario": "not_applicable",
+    "primary_result": null,
+    "fallback_expected": null,
+    "expected_generation_method": null,
+    "fallback_reason": null,
+    "metrics_status": "NOT_EVALUATED"
+  },
+  "hard_gate_annotations": {
+    "silent_speaker_invention_allowed": false,
+    "unknown_to_default_allowed": false,
+    "silent_truncation_allowed": false,
+    "raw_source_overwrite_allowed": false,
+    "unanchored_highlight_persistence_allowed": false,
+    "known_phi_unredacted_egress_allowed": false
+  }
+}

@@ -21,6 +21,7 @@ from .api import (
     patients,
     sources,
     tasks,
+    transcripts,
 )
 from .db import get_db
 from .errors import error_response
@@ -44,6 +45,7 @@ app.include_router(comments.router)
 app.include_router(audit.router)
 app.include_router(sources.router)
 app.include_router(tasks.router)
+app.include_router(transcripts.router)
 
 
 @app.exception_handler(HTTPException)

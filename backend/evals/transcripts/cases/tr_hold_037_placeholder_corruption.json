@@ -1,0 +1,84 @@
+{
+  "schema_version": 1,
+  "case_id": "tr_hold_037_placeholder_corruption",
+  "split": "frozen_holdout",
+  "data_classification": "SYNTHETIC_ONLY",
+  "description": "Corrupted PHI placeholder must be classified as placeholder_error.",
+  "category": "provider_behavior",
+  "coverage_tags": [
+    "synthetic_name",
+    "provider_invalid_schema",
+    "deterministic_fallback"
+  ],
+  "raw_text": "PATIENT: Synthetic Carol Ng has nausea.\nDOCTOR: Understood.",
+  "expected_normalize_outcome": "ACCEPT",
+  "expected_canonical_segments": [
+    {
+      "index": 0,
+      "speaker": "patient",
+      "text": "Synthetic Carol Ng has nausea.",
+      "source_start": 9,
+      "source_end": 39
+    },
+    {
+      "index": 1,
+      "speaker": "doctor",
+      "text": "Understood.",
+      "source_start": 48,
+      "source_end": 59
+    }
+  ],
+  "expected_source_ranges": [
+    {
+      "segment_index": 0,
+      "source_start": 9,
+      "source_end": 39
+    },
+    {
+      "segment_index": 1,
+      "source_start": 48,
+      "source_end": 59
+    }
+  ],
+  "normalize_reason": null,
+  "extraction_expectations": {
+    "annotation_status": "UNKNOWN",
+    "entities": null,
+    "task_status": "unknown",
+    "conflict_expected": null
+  },
+  "redaction_expectations": {
+    "annotation_status": "ANNOTATED",
+    "known_names": [
+      "Synthetic Carol Ng"
+    ],
+    "expected_redactions": [
+      {
+        "text": "Synthetic Carol Ng",
+        "placeholder_type": "NAME",
+        "occurrences": 1
+      }
+    ],
+    "unclassified_suspected_phi": null
+  },
+  "anchor_expectations": {
+    "annotation_status": "NOT_APPLICABLE",
+    "quotes": null
+  },
+  "provider_expectations": {
+    "scenario": "placeholder_corruption",
+    "primary_result": "placeholder_error",
+    "fallback_expected": true,
+    "expected_generation_method": "deterministic_fallback",
+    "fallback_reason": "placeholder_error",
+    "metrics_status": "NOT_EVALUATED"
+  },
+  "hard_gate_annotations": {
+    "silent_speaker_invention_allowed": false,
+    "unknown_to_default_allowed": false,
+    "silent_truncation_allowed": false,
+    "raw_source_overwrite_allowed": false,
+    "unanchored_highlight_persistence_allowed": false,
+    "known_phi_unredacted_egress_allowed": false
+  }
+}

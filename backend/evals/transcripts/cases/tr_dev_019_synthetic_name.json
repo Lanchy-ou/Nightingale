@@ -1,0 +1,92 @@
+{
+  "schema_version": 1,
+  "case_id": "tr_dev_019_synthetic_name",
+  "split": "development",
+  "data_classification": "SYNTHETIC_ONLY",
+  "description": "Obviously synthetic name is marked for redaction before any future provider call.",
+  "category": "redaction",
+  "coverage_tags": [
+    "synthetic_name",
+    "anchorable_quote"
+  ],
+  "raw_text": "DOCTOR: Please confirm your name.\nPATIENT: My test name is Synthetic Alice Tan.",
+  "expected_normalize_outcome": "ACCEPT",
+  "expected_canonical_segments": [
+    {
+      "index": 0,
+      "speaker": "doctor",
+      "text": "Please confirm your name.",
+      "source_start": 8,
+      "source_end": 33
+    },
+    {
+      "index": 1,
+      "speaker": "patient",
+      "text": "My test name is Synthetic Alice Tan.",
+      "source_start": 43,
+      "source_end": 79
+    }
+  ],
+  "expected_source_ranges": [
+    {
+      "segment_index": 0,
+      "source_start": 8,
+      "source_end": 33
+    },
+    {
+      "segment_index": 1,
+      "source_start": 43,
+      "source_end": 79
+    }
+  ],
+  "normalize_reason": null,
+  "extraction_expectations": {
+    "annotation_status": "NOT_APPLICABLE",
+    "entities": null,
+    "task_status": null,
+    "conflict_expected": null
+  },
+  "redaction_expectations": {
+    "annotation_status": "ANNOTATED",
+    "known_names": [
+      "Synthetic Alice Tan"
+    ],
+    "expected_redactions": [
+      {
+        "text": "Synthetic Alice Tan",
+        "placeholder_type": "NAME",
+        "occurrences": 1
+      }
+    ],
+    "unclassified_suspected_phi": null
+  },
+  "anchor_expectations": {
+    "annotation_status": "ANNOTATED",
+    "quotes": [
+      {
+        "quote": "My test name is Synthetic Alice Tan.",
+        "expected_outcome": "ANCHORABLE",
+        "source_range": {
+          "source_start": 43,
+          "source_end": 79
+        }
+      }
+    ]
+  },
+  "provider_expectations": {
+    "scenario": "not_applicable",
+    "primary_result": null,
+    "fallback_expected": null,
+    "expected_generation_method": null,
+    "fallback_reason": null,
+    "metrics_status": "NOT_EVALUATED"
+  },
+  "hard_gate_annotations": {
+    "silent_speaker_invention_allowed": false,
+    "unknown_to_default_allowed": false,
+    "silent_truncation_allowed": false,
+    "raw_source_overwrite_allowed": false,
+    "unanchored_highlight_persistence_allowed": false,
+    "known_phi_unredacted_egress_allowed": false
+  }
+}

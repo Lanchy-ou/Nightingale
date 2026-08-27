@@ -263,6 +263,35 @@ class DoctorConsultOut(BaseModel):
     idempotent_replay: bool
 
 
+# --- D3 raw transcript normalization preview (no persistence / no LLM) ---
+class TranscriptNormalizeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    raw_text: str = Field(min_length=1)
+
+
+class TranscriptPreviewSegmentOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    index: int
+    speaker_candidate: Literal["doctor", "patient"] | None
+    text: str
+    source_start: int
+    source_end: int
+    confidence_marker: Literal["exact_label", "mapped_label", "inferred_boundary", "unknown"]
+    issues: list[str]
+
+
+class TranscriptNormalizeOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    outcome: Literal["ACCEPT", "NEEDS_REVIEW", "REJECT"]
+    normalize_reason: str | None
+    raw_byte_length: int
+    segments: list[TranscriptPreviewSegmentOut]
+    issues: list[str]
+
+
 class CurrentIdentityOut(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

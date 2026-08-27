@@ -1,0 +1,96 @@
+{
+  "schema_version": 1,
+  "case_id": "tr_dev_001_canonical_uppercase",
+  "split": "development",
+  "data_classification": "SYNTHETIC_ONLY",
+  "description": "Canonical uppercase DOCTOR/PATIENT labels.",
+  "category": "label_mapping",
+  "coverage_tags": [
+    "canonical_label",
+    "uppercase",
+    "anchorable_quote"
+  ],
+  "raw_text": "DOCTOR: What brings you in today?\nPATIENT: My headache is worse this week.",
+  "expected_normalize_outcome": "ACCEPT",
+  "expected_canonical_segments": [
+    {
+      "index": 0,
+      "speaker": "doctor",
+      "text": "What brings you in today?",
+      "source_start": 8,
+      "source_end": 33
+    },
+    {
+      "index": 1,
+      "speaker": "patient",
+      "text": "My headache is worse this week.",
+      "source_start": 43,
+      "source_end": 74
+    }
+  ],
+  "expected_source_ranges": [
+    {
+      "segment_index": 0,
+      "source_start": 8,
+      "source_end": 33
+    },
+    {
+      "segment_index": 1,
+      "source_start": 43,
+      "source_end": 74
+    }
+  ],
+  "normalize_reason": null,
+  "extraction_expectations": {
+    "annotation_status": "ANNOTATED",
+    "entities": [
+      {
+        "entity_type": "symptom",
+        "text": "headache worsening",
+        "assertion_value": "worse",
+        "polarity": "positive",
+        "source_range": {
+          "source_start": 43,
+          "source_end": 74
+        }
+      }
+    ],
+    "task_status": null,
+    "conflict_expected": false
+  },
+  "redaction_expectations": {
+    "annotation_status": "ANNOTATED",
+    "known_names": [],
+    "expected_redactions": [],
+    "unclassified_suspected_phi": null
+  },
+  "anchor_expectations": {
+    "annotation_status": "ANNOTATED",
+    "quotes": [
+      {
+        "quote": "My headache is worse this week.",
+        "expected_outcome": "ANCHORABLE",
+        "source_range": {
+          "source_start": 43,
+          "source_end": 74
+        }
+      }
+    ]
+  },
+  "provider_expectations": {
+    "scenario": "not_applicable",
+    "primary_result": null,
+    "fallback_expected": null,
+    "expected_generation_method": null,
+    "fallback_reason": null,
+    "metrics_status": "NOT_EVALUATED"
+  },
+  "hard_gate_annotations": {
+    "silent_speaker_invention_allowed": false,
+    "unknown_to_default_allowed": false,
+    "silent_truncation_allowed": false,
+    "raw_source_overwrite_allowed": false,
+    "unanchored_highlight_persistence_allowed": false,
+    "known_phi_unredacted_egress_allowed": false
+  }
+}
