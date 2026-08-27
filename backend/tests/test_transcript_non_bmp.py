@@ -12,7 +12,7 @@ from pathlib import Path
 import subprocess
 
 FRONTEND_TEST = (
-    Path(__file__).resolve().parents[2] / "frontend" / "tests" / "transcriptRange.test.ts"
+    Path(__file__).resolve().parents[2] / "frontend" / "tests" / "transcriptRange.test.mjs"
 )
 
 
@@ -30,6 +30,7 @@ def test_normalize_source_ranges_are_code_point_offsets_for_emoji(clinician_clie
 
 
 def test_frontend_non_bmp_split_helpers_are_code_point_aware():
+    # Plain ESM JavaScript: runs on Node 18+ (the README's declared minimum).
     result = subprocess.run(
         ["node", str(FRONTEND_TEST)],
         capture_output=True,

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ApiError, api } from '../api';
-import { codePointLength, splitSegmentAtCodePoint } from '../transcriptRange';
+import { codePointLength, splitSegmentAtCodePoint } from '../transcriptRange.js';
 import type {
   DoctorConsultResult,
   DoctorTranscriptSegment,

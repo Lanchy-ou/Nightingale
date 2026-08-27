@@ -1,12 +1,13 @@
 // Non-BMP / emoji regression checks for the code-point-aware transcript range
-// helpers. Run directly with Node (native type stripping): `node <this file>`.
+// helpers. Plain ESM JavaScript so it runs on Node 18+ (no type stripping).
+// Run directly: `node transcriptRange.test.mjs`.
 import assert from 'node:assert/strict';
 import {
   codePointLength,
   codePointIndexForCodeUnit,
   sliceByCodePoint,
   splitSegmentAtCodePoint,
-} from '../src/transcriptRange.ts';
+} from '../src/transcriptRange.js';
 
 // "Pain 😀 today" is 12 code points but 13 UTF-16 code units.
 assert.equal('Pain \u{1F600} today'.length, 13, 'UTF-16 length');
