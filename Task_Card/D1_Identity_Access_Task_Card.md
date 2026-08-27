@@ -85,7 +85,7 @@ last_seen_at
 
 ```text
 POST /api/auth/invites                   # admin; clinic-scoped
-GET  /api/auth/invites/{token}/preview   # no sensitive enumeration
+POST /api/auth/invites/preview           # token in JSON body; no sensitive enumeration
 POST /api/auth/register
 POST /api/auth/login
 POST /api/auth/logout

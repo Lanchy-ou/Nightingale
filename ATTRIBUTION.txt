@@ -16,10 +16,25 @@ Declared in `backend/requirements.txt`:
 | httpx | BSD-3-Clause |
 | anthropic | MIT |
 | argon2-cffi (password hashing, Argon2id) | MIT |
+| sqlcipher3 (Python DB-API driver for SQLCipher 4.x) | MIT |
 
 `argon2-cffi` bundles the reference Argon2 implementation (D. Biryukov,
 D. Dinu, D. Khovratovich; CC0 / Apache-2.0 dual licensed). Password hashing
 uses the library default Argon2id parameters (t=3, m=64 MiB, p=4).
+
+The D5 single-machine deployment uses the `sqlcipher3` driver and SQLCipher
+Community Edition for whole-database and backup encryption. SQLCipher Community
+Edition is BSD-3-Clause licensed.
+
+## Deployment runtime
+
+| Tool | License |
+|---|---|
+| Caddy 2.11.4 | Apache-2.0 |
+
+Caddy terminates local Demo TLS, redirects HTTP to HTTPS, serves the built SPA
+and reverse-proxies `/api/*` to the loopback-only FastAPI process. The binary is
+downloaded into an ignored local tools directory and is not bundled in the repo.
 
 ## Frontend (Node)
 
@@ -39,8 +54,11 @@ Declared in `frontend/package.json`:
 
 - Provider: DeepSeek (https://www.deepseek.com) via its anthropic-compatible endpoint
   (`https://api.deepseek.com/anthropic`), models `deepseek-v4-flash` / `deepseek-v4-pro`.
-- Status: **LIVE_VERIFIED** (2026-08-26) — see `backend/docs/gate0_provider_status.md`.
-  When no key is configured or a provider call fails, generation degrades to
+- A dated key-free/live-adapter smoke record exists at
+  `backend/docs/gate0_provider_status.md`; it is not a current provider uptime
+  or production-readiness claim. D3/D4 frozen evaluations use mock/local paths
+  and report the live provider layer as `NOT_RUN` when no key is configured.
+  Missing keys, provider failures and invalid schemas degrade explicitly to
   `deterministic_fallback`.
 - No model weights are bundled. No provider API key is committed or logged.
 

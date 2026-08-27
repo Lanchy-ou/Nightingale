@@ -512,6 +512,14 @@ class InviteOut(BaseModel):
     status: Literal["pending", "used", "expired"]
 
 
+class InvitePreviewRequest(BaseModel):
+    """Bearer token stays in the request body, never in the API URL."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    token: str = Field(min_length=1, max_length=512)
+
+
 class InvitePreviewOut(BaseModel):
     """Minimal invite context for the accept-invite page.
 

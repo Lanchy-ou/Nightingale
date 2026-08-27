@@ -434,7 +434,7 @@ Phase C 两张任务卡均已完成：
 
 D3 frozen evaluation 包含 40 个 synthetic cases（development 26 / frozen_holdout 14）。normalizer 在首次 holdout 前以 SHA-256 冻结；holdout outcome 14/14、speaker 12/12、ambiguous blocking 8/8，silent invention/truncation 为 0。frozen runner **不调用 provider/network**；provider 层明确 `NOT_RUN`，deterministic fallback 单独报告（development exact entity precision 0.888889 / recall 0.571429，task precision 1.0 / recall 0.5）。不得把两层合并为一个成绩。
 
-仍明确后置：独立 Nurse Workspace、Nurse input、录音/ASR、外部 dataset ingestion、复杂 care-team assignment、appointment/billing/notification。Phase C、M7、D1、D2、D3、D4 Exit Gate 已通过；D5 未开始。
+仍明确后置：独立 Nurse Workspace、Nurse input、录音/ASR、外部 dataset ingestion、复杂 care-team assignment、appointment/billing/notification。Phase C、M7、D1、D2、D3、D4 Exit Gate 已通过；D5 自动化安全/集成范围已实施，但浏览器信任和独立观察者 usability gate 尚未关闭。
 
 ---
 
@@ -702,20 +702,21 @@ Bonus：
 
 ## 15. Setup / Run / Tests
 
-**技术栈（已冻结，2026-08-25）**：
+**技术栈（D5 部署选择更新于 2026-08-27）**：
 
-- 后端：Python 3.13 + FastAPI + Uvicorn + SQLAlchemy 2.x + SQLite + Pydantic v2
+- 后端：Python 3.13 + FastAPI + Uvicorn + SQLAlchemy 2.x + Pydantic v2；plain SQLite 用于 unit tests/development，SQLCipher 用于单机加密 Demo
 - 前端：React 18 + Vite + TypeScript（SPA，调用 FastAPI JSON API）
 - LLM：DeepSeek（经 anthropic SDK，base_url / key 用环境变量注入）；deterministic stub 兜底，demo / 测试不依赖外部 API 实时可用
 - 测试：pytest（required tests 均为 `.py`）
-- 身份：D1 真实 Demo 身份流程（invite → register → login → HttpOnly session → logout）；密码 Argon2id 哈希，invite/session token 只存 SHA-256 哈希；TLS in transit 与 encryption at rest 是 D5 的部署证据目标（当前不做字段级加密声明）
+- 身份：D1 真实 Demo 身份流程（invite → register → login → HttpOnly session → logout）；密码 Argon2id 哈希，invite/session token 只存 SHA-256 哈希；D5 部署使用 Caddy HTTPS + SQLCipher 整库/备份加密（不做字段级加密声明）
 - 角色：产品模式不再接受 `X-User-Id/X-Role` 头；RBAC 服务端强制
 
 ### 目录结构
 
 ```text
-backend/    FastAPI + SQLAlchemy + SQLite（app/ 代码，seed/ fixture，tests/ pytest）
+backend/    FastAPI + SQLAlchemy + SQLite/SQLCipher（app/ 代码，seed/ fixture，tests/ pytest）
 frontend/   Vite + React 18 + TS（clinician/staff 共用三栏 clinic shell + 独立四区 PatientViewPage）
+deploy/     D5 Caddy HTTPS 与单机 Demo 环境模板（无密钥、证书或数据库入库）
 ```
 
 ### Demo data（canonical fixture）
@@ -770,7 +771,7 @@ cd backend
 .venv/Scripts/python.exe -B scripts/evaluate_copilot.py
 ```
 
-> 当前进度：M1–M7、Phase C（C1+C2）、**D1 Identity**、**D2 Care Tasks + Patient Experience**、**D3 Transcript Reliability** 与审查修复后的 **D4 Evidence-Bound Clinician Copilot** 已落地。全量 backend collection **316**；强化 frozen Copilot mock eval 见 `backend/evals/copilot/`，其 `COPILOT_READ_PATH` latency 与 Glance P95 分开报告。剩余 Phase D 工作：D5 TLS/at-rest 与跨角色集成。
+> 当前进度：M1–M7、Phase C、D1–D4 已完成；D5 达到 **D5_AUTOMATED_SECURITY_COMPLETE**。SQLCipher database/backup/restore、Caddy TLS、CSRF/CORS/headers/rate/body/error hardening、body-only invite preview、offline-Caddy token log probe 与三角色 real-session integration tests 已通过。**D5_USABILITY_GATE_BLOCKED_EXTERNAL_OBSERVERS**：当前无法获得任务卡要求的 5–8 位独立观察者，空白协议未填入任何模拟结果；因此不得宣称 D5 / Phase D Product Demo Complete。详见 `docs/d5_deployment_security_decisions.md`、`docs/d5_automated_evidence_2026-08-27.md` 与 `docs/d5_usability_protocol.md`。
 
 架构约定（记录确切位置，随阶段更新）：
 
@@ -791,7 +792,7 @@ Admin 创建 clinic invite（一次性链接，不发送真实邮件）
      patient invite 只能把新登录绑定到既有 Patient 记录，绝不创建第二条纵向记录
   -> 登录：Argon2id 校验（argon2-cffi），未知邮箱/错误密码/禁用账号返回同一 401 body
   -> 会话：256-bit 随机 token 只存 SHA-256 哈希，HttpOnly + SameSite=Lax cookie
-     （部署 HTTPS 后设 NANTINGALE_SECURE_COOKIES=true 加 Secure）
+     （D5 production gate 强制 NANTINGALE_SECURE_COOKIES=true，并加 Secure）
   -> 每次请求都重新解析 cookie → DB User（role/clinic/patient 全来自 DB）
   -> 登出：条件 UPDATE 原子 revoke，客户端 cookie 同时清除
 ```
@@ -812,6 +813,14 @@ NANTINGALE_DEMO_AUTH=true          # 显式开启 legacy X-User-Id/X-Role 头模
 NANTINGALE_SESSION_TTL_HOURS=12    # session 有效期（默认 12 小时）
 NANTINGALE_INVITE_TTL_DAYS=7       # invite 有效期（默认 7 天）
 NANTINGALE_SECURE_COOKIES=true     # HTTPS 部署后开启 cookie Secure 标志
+NANTINGALE_ENV=production           # 启用 D5 production fail-closed 配置门
+NANTINGALE_SECURITY_MODE=strict     # exact-Origin CSRF/CORS、限流和 HSTS
+NANTINGALE_DATABASE_MODE=sqlcipher  # D5 单机加密部署；plain SQLite 仅 test/dev
+NANTINGALE_DB_PATH=<private path>   # gitignored/private SQLCipher 文件
+NANTINGALE_DB_KEY=<32+ char secret> # 只从环境/secret manager 注入
+NANTINGALE_BACKUP_KEY=<different 32+ char secret>
+NANTINGALE_RESTORED_DB_KEY=<third different 32+ char secret>
+NANTINGALE_FRONTEND_ORIGIN=https://127.0.0.1:8443
 NANTINGALE_COPILOT_CONFIRMATION_SECRET=<shared secret>  # 多 worker 必配；单进程未配置时使用进程随机 secret
 ```
 
@@ -825,11 +834,50 @@ VITE_DEMO_AUTH=true                # 前端与后端 demo 模式需同时开启�
 
 - 密码哈希（Argon2id）、token 哈希、server-side session、revoke/expiry、cookie 标志、单次 invite、注册绑定和 AuditLog 都是真实实现，不以明文落库/入日志；
 - 属于 Demo 的：不发真实邮件/SMS（admin 复制一次性链接）、无 MFA/SSO/OAuth、无 forgot-password（可 admin 重新邀请）、无跨 clinic membership、无生产 KYC/执照校验；
-- 未做：TLS 与 at-rest 加密的部署证据（D5 范围）、生产 PostgreSQL、真实 PHI。
+- 已实证：D5 本机 Caddy TLS、secure cookie/security headers、SQLCipher database + separately keyed backup + rotated-key restore；普通 sqlite3 无法读取三者。
+- 仍未做/未宣称：生产 PostgreSQL、多进程/容量证明、真实 PHI、公众可信域名证书。当前本地 CA 必须由用户显式信任；不得绕过浏览器证书警告。
+
+### D5 加密单机 Demo
+
+完整的 Decision Gates、密钥/备份/恢复边界、Caddy 拓扑与复现命令见
+`docs/d5_deployment_security_decisions.md`。最短路径：
+
+```text
+1. 从 deploy/.env.example 将独立随机密钥注入当前进程环境（不要提交 .env）
+2. frontend: npm run build
+3. backend: .venv/Scripts/python.exe scripts/init_encrypted_demo.py
+4. backend: .venv/Scripts/python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --no-access-log
+5. deploy: caddy run --config Caddyfile --adapter caddyfile
+6. backend: .venv/Scripts/python.exe scripts/verify_secure_demo.py --ca-file <Caddy root.crt>
+```
+
+database/backup/restore 三把 key 必须 32+ 字符且两两不同。加密备份与恢复分别由
+`backup_encrypted_db.py` 和 `restore_encrypted_backup.py` 完成；两者拒绝覆盖已有目标。`check_no_secrets.py`
+检查 tracked/untracked-but-not-ignored 文件中的高置信 secret。该部署只使用 synthetic
+data，是单进程产品 Demo，不是 production medical system。
+
+后端不会自动加载 `.env`。PowerShell 必须在每个运行进程所在终端显式执行
+以下导入命令（不需要修改或绕过 PowerShell execution policy）：
+
+```powershell
+Set-Location E:\桌面\Nantingale\deploy
+$d5EnvFile = (Resolve-Path -LiteralPath .\.env.local).Path
+Get-Content -LiteralPath $d5EnvFile | ForEach-Object {
+    $line = $_.Trim(); if (-not $line -or $line.StartsWith('#')) { return }
+    if ($line -notmatch '^([A-Z][A-Z0-9_]*)=(.*)$') { throw 'Invalid NAME=value line' }
+    $name = $Matches[1]; $value = $Matches[2].Trim()
+    if (-not ($name.StartsWith('NANTINGALE_') -or $name -in @('XDG_DATA_HOME','XDG_CONFIG_HOME'))) { throw "Variable outside D5 allowlist: $name" }
+    if (-not $value -or $value.Contains('<') -or $value.Contains('>')) { throw "Replace placeholder: $name" }
+    [Environment]::SetEnvironmentVariable($name, $value, 'Process')
+}
+```
+
+`.env.example` 同时要求显式设置 `XDG_DATA_HOME` / `XDG_CONFIG_HOME`，使
+Caddy CA/config/runtime state 落在用户选择的 private、gitignored 路径，而不是依赖隐含默认目录。
 
 ### DeepSeek API key 放在哪里
 
-不要把 key 写入源码、JSON、测试 fixture 或提交到 Git。后端按顺序从环境变量 `DEEPSEEK_API_KEY` → `Natingale_API_KEY` 读取（当前 Windows 用户级已设置的是 `Natingale_API_KEY`，二者皆可）。Windows PowerShell 中可只为当前终端设置：
+不要把 key 写入源码、JSON、测试 fixture 或提交到 Git。后端按顺序从环境变量 `DEEPSEEK_API_KEY` → legacy alias `Natingale_API_KEY` 读取；推荐只使用标准名 `DEEPSEEK_API_KEY`。Windows PowerShell 中可只为当前终端设置：
 
 ```powershell
 $env:DEEPSEEK_API_KEY = "你的 DeepSeek API key"
@@ -844,7 +892,7 @@ cd backend
 [Environment]::SetEnvironmentVariable("DEEPSEEK_API_KEY", "你的 DeepSeek API key", "User")
 ```
 
-项目 `.gitignore` 已排除 `.env`，但当前后端没有加载 `.env` 文件，因此仅创建 `.env` **不会生效**。`deepseek-v4-flash` 曾于 2026-08-26 完成一次无 PHI smoke check（记录在 `backend/docs/gate0_provider_status.md`）；live adapter 在配置 key 后可用，但无 key 或调用失败时仍会明确降级到 deterministic fallback。
+项目 `.gitignore` 已排除 `.env`，但当前后端没有加载 `.env` 文件，因此仅创建 `.env` **不会生效**。`deepseek-v4-flash` 曾于 2026-08-26 完成一次无 PHI 的日期化 smoke check（记录在 `backend/docs/gate0_provider_status.md`）；这不是当前 provider uptime 或 production-readiness 证明。D3/D4 frozen eval 在无 key 时把 live provider 层明确报告为 `NOT_RUN`，运行时无 key 或调用失败仍会显式降级到 deterministic fallback。
 
 ---
 

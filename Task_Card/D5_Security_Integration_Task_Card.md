@@ -1,6 +1,6 @@
 # D5 任务卡 - Deployment Security, Cross-Role Integration and Usability Gate
 
-> 状态：**BLOCKED BY D1-D4**
+> 状态：**D5_AUTOMATED_SECURITY_COMPLETE（2026-08-27）；D5_USABILITY_GATE_BLOCKED_EXTERNAL_OBSERVERS；D5 / Phase D NOT COMPLETE**
 >
 > 对应总计划：`docs/phase_d_product_completion_plan.md`
 >
@@ -134,7 +134,6 @@ Login -> Open patient
 
 ```text
 tests/integration/test_auth_care_journey.py
-tests/integration/test_transcript_copilot_journey.py
 tests/integration/test_patient_staff_task_journey.py
 tests/security/test_session_cookie_policy.py
 tests/security/test_log_sanitization.py
@@ -182,3 +181,19 @@ tests/security/test_cross_patient_sentinels.py
 - 为通过 E2E 使用 demo headers/Role selector -> 不通过；
 - 可用性失败只通过培训用户或修改演示脚本规避 -> 不通过；
 - production config 暴露 secret、debug stack 或未保护 API -> 停止发布并修复。
+
+---
+
+## 9. Implementation Evidence（2026-08-27，未宣称 Complete）
+
+- D1-D4 已在 clean `main` 基线独立重验：324 backend tests、D3 corpus/runtime、D4 frozen eval、pip check 与 frontend production build 通过。
+- DG1 选择任务卡允许的 SQLCipher 单机 Demo；普通 SQLite 仅保留为 unit-test/development path。production startup 对 plain SQLite fail closed。
+- DG2 落地整库 SQLCipher + 独立 backup key + restore 时换 DB key；database/backup/restore 三把 key 必须 32+ 字符且两两不同，production/startup 与 backup/restore scripts 对缺钥、短钥、同钥、错钥 fail closed。实际原始文件检查均为 `plaintext_header=false` / `plain_reader_blocked=true`，SQLCipher 4.12.0，database/backup/restore 均 13 tables，restore 可读回 2 patients / 14 artifacts 对应 schema/data。
+- DG3 选择 Caddy 2.11.4：FastAPI 仅绑定 `127.0.0.1:8000`；Caddy 在 8080/8443 提供 HTTP→HTTPS、SPA 与 `/api/*` reverse proxy。实际 TLS chain 验证 `OK`（TLSv1.3 / TLS_AES_128_GCM_SHA256），certificate issuer/expiry/fingerprint 已读取。
+- `backend/app/security.py` 已实现 strict Origin CSRF、exact-origin CORS、login/register/invite 基础限流、actual-body size limit、HSTS/CSP/security headers、generic 500 与 metadata-only error log；cookie create/clear 都锁定 `Secure + HttpOnly + SameSite=Lax`。
+- integration/security tests 使用真实 session 且不使用 `X-User-Id/X-Role`。Clinician journey 已合并为同一个新邀请账号、同一个 Cookie 完成 Invite → Register → Login → Glance → Transcript → AI Summary → Exact Source → Note → Task → Patient Instruction → Logout；另有 patient/staff journey、patient/cross-clinic sentinel、log sanitization、cookie/CORS/CSRF/rate/body 与 encrypted backup/restore tests。
+- `backend/scripts/check_no_secrets.py`、SQLCipher init/backup/restore scripts 与 `verify_secure_demo.py` 已实际运行通过；部署决策和命令见 `docs/d5_deployment_security_decisions.md`，观察者协议见 `docs/d5_usability_protocol.md`。
+- invite preview 已改为 `POST /api/auth/invites/preview`，raw token 只在 JSON body；旧 URL-token endpoint 已删除。后端离线 Caddy 故障测试用虚构 token 验证 502 response、Caddy stdout/stderr 与未运行应用的 log sink 均无 token。Uvicorn `--no-access-log` 与 Caddy 不启用 production access log 继续作为 defense in depth。
+- D5 修正后最终回归：backend **342 passed**；security/integration **17 passed**；D3 corpus/runtime、D4 frozen eval、pip check、secret scan、Caddy validate、frontend production build 与 `git diff --check` 均通过；实际 listener 全部为 loopback（Caddy 127.0.0.1:8080/8443，FastAPI 127.0.0.1:8000）。
+- Caddy 设置 `skip_install_trust`；本轮没有安装或绕过本地 CA。TLS verifier 通过显式 `--ca-file` 验证链路。
+- **D5_USABILITY_GATE_BLOCKED_EXTERNAL_OBSERVERS**：当前无法获得 5-8 位未参与开发观察者；`docs/d5_usability_protocol.md` 保持空白，无模拟参与者或虚假结果。因此最多声明 `D5_AUTOMATED_SECURITY_COMPLETE`，不得声明 D5 / Phase D COMPLETE。

@@ -6,6 +6,10 @@ tests can assert header parsing.
 """
 from __future__ import annotations
 
+import logging
+import os
+from contextlib import asynccontextmanager
+
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import HTTPException, RequestValidationError
 from sqlalchemy.orm import Session
@@ -29,12 +33,41 @@ from .errors import error_response
 from .models import Clinic, User
 from .role_context import RoleContext, get_role_context
 from .schemas import CurrentIdentityOut
+from .security import (
+    SecurityMiddleware,
+    validate_production_settings,
+)
+from .db import DATABASE_MODE, DATABASE_KEY, engine
+
+logger = logging.getLogger("nantingale.security")
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    from .security import production_mode
+
+    if production_mode():
+        errors = validate_production_settings(
+            database_driver=engine.url.drivername,
+            database_mode=DATABASE_MODE,
+            database_key=DATABASE_KEY,
+            backup_key=os.environ.get("NANTINGALE_BACKUP_KEY", ""),
+            restored_database_key=os.environ.get("NANTINGALE_RESTORED_DB_KEY", ""),
+        )
+        if errors:
+            raise RuntimeError(
+                "D5 production configuration rejected: " + "; ".join(errors)
+            )
+    yield
 
 app = FastAPI(
     title="Nightingale API",
     version="0.1.0",
+    debug=False,
+    lifespan=lifespan,
     dependencies=[Depends(get_role_context)],
 )
+app.add_middleware(SecurityMiddleware)
 
 app.include_router(auth.router)
 app.include_router(patients.router)
@@ -67,6 +100,18 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     # Auth payloads can contain passwords/tokens, so validation responses must
     # never serialize the exception verbatim.
     return error_response(422, "validation_error", "Request validation failed")
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    # Never serialize/log exception text: provider payloads, SQL fragments or
+    # secrets may be embedded in third-party exception messages.
+    logger.error(
+        "Unhandled application error path=%s type=%s",
+        request.url.path,
+        type(exc).__name__,
+    )
+    return error_response(500, "internal_error", "Internal server error")
 
 
 @app.get("/api/me", response_model=CurrentIdentityOut)

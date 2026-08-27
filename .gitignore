@@ -38,3 +38,10 @@ Thumbs.db
 
 # Build artifacts
 *.log
+
+# Local D5 deployment runtime/evidence (never commit keys, databases or cert state)
+.tools/
+backups/
+restores/
+deploy/caddy-data/
+deploy/caddy-config/

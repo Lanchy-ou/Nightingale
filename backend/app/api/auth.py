@@ -54,6 +54,7 @@ from ..schemas import (
     InviteCreate,
     InviteCreatedOut,
     InviteOut,
+    InvitePreviewRequest,
     InvitePreviewOut,
     LoginRequest,
     LogoutOut,
@@ -213,15 +214,15 @@ def list_invites(
     ]
 
 
-@router.get("/invites/{token}/preview", response_model=InvitePreviewOut)
-def preview_invite(token: str, db: Session = Depends(get_db)):
+@router.post("/invites/preview", response_model=InvitePreviewOut)
+def preview_invite(body: InvitePreviewRequest, db: Session = Depends(get_db)):
     """Minimal invite context for the accept-invite page.
 
     Unknown/tampered tokens receive the uniform 404. Distinct used/expired
     states are returned only for a token the caller actually holds (the token
     is a 256-bit bearer secret, so this is not an enumeration channel).
     """
-    invite = _find_invite_by_token(db, token)
+    invite = _find_invite_by_token(db, body.token)
     if invite is None:
         raise resource_not_found()
 

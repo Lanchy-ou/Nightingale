@@ -98,7 +98,16 @@ def session_cookie_value(token: str) -> str:
 
 
 def cleared_session_cookie() -> str:
-    return f"{SESSION_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0"
+    parts = [
+        f"{SESSION_COOKIE_NAME}=",
+        "Path=/",
+        "HttpOnly",
+        "SameSite=Lax",
+    ]
+    if secure_cookies():
+        parts.append("Secure")
+    parts.append("Max-Age=0")
+    return "; ".join(parts)
 
 
 def utc_now() -> datetime:

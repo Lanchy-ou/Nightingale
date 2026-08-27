@@ -174,7 +174,7 @@ def test_preview_valid_invite_shows_masked_minimal_info():
     client = _admin_client()
     r = _invite(client, "preview@demo.clinic", "clinician")
     token = _token_from_link(r.json()["invite_link"])
-    p = client.get(f"/api/auth/invites/{token}/preview")
+    p = client.post("/api/auth/invites/preview", json={"token": token})
     assert p.status_code == 200
     body = p.json()
     assert body["status"] == "valid"
@@ -188,16 +188,26 @@ def test_preview_patient_invite_names_bound_record():
     client = _admin_client()
     r = _invite(client, "previewpat@demo.clinic", "patient", fixture.PATIENT_B_ID)
     token = _token_from_link(r.json()["invite_link"])
-    p = client.get(f"/api/auth/invites/{token}/preview")
+    p = client.post("/api/auth/invites/preview", json={"token": token})
     assert p.status_code == 200
     assert p.json()["patient_name"] == fixture.PATIENT_B_NAME
+
+
+def test_url_token_preview_endpoint_is_removed():
+    client = _admin_client()
+    non_bearer_probe = "URL_TOKEN_ENDPOINT_REMOVED"
+
+    old = client.get(f"/api/auth/invites/{non_bearer_probe}/preview")
+
+    assert old.status_code == 404
+    assert non_bearer_probe not in old.text
 
 
 def test_tampered_token_gets_uniform_404():
     client = _admin_client()
     _invite(client, "tamper@demo.clinic", "clinician")
     bad = "A" * 43
-    p = client.get(f"/api/auth/invites/{bad}/preview")
+    p = client.post("/api/auth/invites/preview", json={"token": bad})
     reg = client.post(
         "/api/auth/register",
         json={"token": bad, "password": "supersecret1", "name": "X"},
@@ -298,7 +308,7 @@ def test_invite_token_is_single_use():
     second = client.post("/api/auth/register", json=payload)
     assert second.status_code == 409
 
-    p = client.get(f"/api/auth/invites/{token}/preview")
+    p = client.post("/api/auth/invites/preview", json={"token": token})
     assert p.status_code == 200
     assert p.json()["status"] == "used"
 
@@ -342,7 +352,7 @@ def test_expired_invite_rejected(db_session):
     invite.expires_at = datetime.now() - timedelta(minutes=1)
     db_session.commit()
 
-    p = client.get(f"/api/auth/invites/{token}/preview")
+    p = client.post("/api/auth/invites/preview", json={"token": token})
     assert p.status_code == 200
     assert p.json()["status"] == "expired"
     reg = client.post(

@@ -150,7 +150,7 @@ export const api = {
   getSession: (signal?: AbortSignal) =>
     get<CurrentIdentity>('/api/auth/session', signal, { skipUnauthorized: true }),
   getInvitePreview: (token: string) =>
-    get<InvitePreview>(`/api/auth/invites/${encodeURIComponent(token)}/preview`, undefined, {
+    post<InvitePreview>('/api/auth/invites/preview', { token }, undefined, {
       skipUnauthorized: true,
     }),
   register: (payload: { token: string; password: string; name?: string }) =>
