@@ -24,7 +24,7 @@ from ..schemas import (
     TaskProvenanceOut,
     TaskTransition,
 )
-from ..tasks import recompute_task_highlights, resolve_exact_span, task_transitions
+from ..tasks import link_task_highlight, recompute_task_highlights, resolve_exact_span, task_transitions
 
 router = APIRouter(prefix="/api", tags=["tasks"])
 
@@ -130,6 +130,10 @@ def create_task(
         cancelled_at=None,
     )
     db.add(task)
+    db.flush()
+    link_task_highlight(db, task)
+    # autoflush is disabled project-wide: persist the adopted/dedicated
+    # highlight row so recompute_task_highlights can see the new mapping.
     db.flush()
     add_audit(
         db,

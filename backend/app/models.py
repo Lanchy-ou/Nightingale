@@ -150,13 +150,23 @@ class Artifact(Base):
 
 class Highlight(Base):
     __tablename__ = "highlights"
+    __table_args__ = (UniqueConstraint("task_id", name="uq_highlight_task"),)
 
     highlight_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     patient_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     event_id: Mapped[str] = mapped_column(String(64), nullable=False)
-    artifact_id: Mapped[str] = mapped_column(String(64), nullable=False)  # derived-from (AI summary / note)
-    source_artifact_id: Mapped[str] = mapped_column(String(64), nullable=False)  # contains the quote
-    source_span: Mapped[dict] = mapped_column(JSON, nullable=False)
+    # D2: task-owned highlights may be event-level (no artifact/span).
+    artifact_id: Mapped[str | None] = mapped_column(String(64), nullable=True)  # derived-from (AI summary / note)
+    source_artifact_id: Mapped[str | None] = mapped_column(String(64), nullable=True)  # contains the quote
+    source_span: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # D2 explicit Task↔Glance mapping: exactly one Task may own a Highlight and
+    # exactly one Highlight may represent a Task. Never inferred from the Event.
+    task_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("tasks.task_id"),
+        nullable=True,
+        index=True,
+    )
     text: Mapped[str] = mapped_column(String(512), nullable=False)
     risk_reason: Mapped[str] = mapped_column(String(512), nullable=False)
     feature_flags: Mapped[dict] = mapped_column(JSON, nullable=False)

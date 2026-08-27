@@ -55,9 +55,11 @@ class HighlightOut(BaseModel):
     highlight_id: str
     patient_id: str
     event_id: str
-    artifact_id: str
-    source_artifact_id: str
-    source_span: dict
+    artifact_id: str | None
+    source_artifact_id: str | None
+    source_span: dict | None
+    # D2: explicit Task↔Glance mapping (null for non-task highlights).
+    task_id: str | None = None
     text: str
     risk_reason: str
     feature_flags: dict

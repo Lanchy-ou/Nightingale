@@ -1,8 +1,10 @@
 # D2 任务卡 - Care Task Lifecycle + Patient Experience
 
-> 状态：**COMPLETE（2026-08-27）**
+> 状态：**COMPLETE（2026-08-27，审查修复后重验）**
 >
 > 对应总计划：`docs/phase_d_product_completion_plan.md`
+>
+> 审查发现并修复的阻塞问题：① Task↔Glance 改为显式映射（`Highlight.task_id`，不按 Event 猜测；Event-only Task 不误伤同 Event 无关 Highlight；无既有 Highlight 的新 Task 自建专属 Highlight进入 Glance）；② 精确 provenance 改为“用户明确选择 quote 并确认”后才能保存，否则 Event-level；Glance 的 Open Task 定位到具体 Task；③ `resolve_exact_span` 严格校验任意异常结构 fail closed → 422/404；④ rejected candidate 不得被 Task 采纳；⑤ Task↔Highlight 由 FK + unique + 条件 UPDATE/CAS 保证一对一；⑥终态专属 Highlight 更新为准确 completed/cancelled 文案，不再声称 unresolved。全部 Exit Gate 重验通过（backend 258 passed，frontend build 绿）。
 >
 > 本卡有意把 Task 与 Patient Experience 合并：患者页面必须消费真实照护行动，不能继续展示无状态的 pending 文本。
 

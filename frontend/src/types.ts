@@ -54,9 +54,10 @@ export interface Highlight {
   highlight_id: string;
   patient_id: string;
   event_id: string;
-  artifact_id: string;
-  source_artifact_id: string;
-  source_span: Span;
+  artifact_id: string | null;
+  source_artifact_id: string | null;
+  source_span: Span | null;
+  task_id: string | null;
   text: string;
   risk_reason: string;
   feature_flags: FeatureFlags;
