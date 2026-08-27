@@ -30,6 +30,7 @@ FORBIDDEN = {
     "app.deterministic_pipeline",
     "app.conflicts",
     "app.importance_learning",
+    "app.data_decay",
 }
 
 

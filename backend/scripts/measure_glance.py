@@ -172,6 +172,9 @@ def main() -> int:
     tmp.close()
     db_url = f"sqlite:///{tmp.name}"
     os.environ["NANTINGALE_DB_URL"] = db_url
+    # The throwaway synthetic benchmark uses the repository's explicit
+    # header-auth test/demo path; production mode keeps this disabled.
+    os.environ["NANTINGALE_DEMO_AUTH"] = "true"
 
     from app.db import SessionLocal, engine
     from seed.seed import create_schema, seed
@@ -259,13 +262,27 @@ def write_baseline(env: dict, layer_a: dict, layer_b: dict) -> None:
         row("events", layer_b["events"]),
         row("patient-view", layer_b["patient-view"]),
         "",
-        "## Read-path LLM-free guard",
+        "## E2 / E3 Glance comparison",
+        "",
+        "| Run | Layer A Glance P50 | Layer A Glance P95 |",
+        "|---|---:|---:|",
+        "| E2 baseline (2026-08-27) | 3.978 | 4.515 |",
+        f"| E3 (current run) | {layer_a['glance']['p50_ms']} | {layer_a['glance']['p95_ms']} |",
+        "",
+        "These are separate local runs. The difference is reported, not",
+        "attributed to E3 as a causal performance effect. Both remain far",
+        "below the 300 ms prototype gate. E3 maintenance timing is measured",
+        "separately by `scripts/measure_storage_policy.py`.",
+        "",
+        "## Read-path dependency and query guard",
         "",
         "`tests/test_read_path_no_llm.py` imports each read module in a clean",
         "interpreter and asserts its transitive import graph contains none of",
         "`ai_pipeline`, `llm_client`, `extraction`, `redaction`,",
-        "`deterministic_pipeline` or `conflicts`. Glance/patient-view/events do",
-        "zero LLM calls and zero extraction at read time.",
+        "`deterministic_pipeline`, `conflicts`, `importance_learning` or",
+        "`data_decay`. E3 tests also reject Glance queries of storage state,",
+        "Artifact or Event history. Glance/patient-view/events do zero LLM",
+        "calls and zero extraction at read time.",
         "",
         "## Honesty clause",
         "",
@@ -275,7 +292,7 @@ def write_baseline(env: dict, layer_a: dict, layer_b: dict) -> None:
         "production-scale capacity, and must not be presented as such.",
         "",
     ]
-    out.write_text("\n".join(lines), encoding="utf-8")
+    out.write_text("\n".join(lines), encoding="utf-8", newline="\n")
     print(f"Wrote {out}")
 
 

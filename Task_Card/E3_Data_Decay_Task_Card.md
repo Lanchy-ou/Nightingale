@@ -1,6 +1,6 @@
 # E3 Task Card — Hybrid Storage and Data Decay
 
-> 状态：**PLANNED — IMPLEMENTATION NOT STARTED**
+> 状态：**COMPLETE — SYNTHETIC SHADOW-ARCHIVE PROOF（2026-08-28）**
 >
 > 对应总计划：`docs/phase_e_capability_enhancement_plan.md`
 >
@@ -360,3 +360,20 @@ frontend/src/index.css
 - archive 恢复后 exact source 不一致 -> 停止；
 - policy 读取自由文本猜测 Task/risk -> 停止；
 - 把 shadow archive 描述为已实现生产存储节省 -> 停止并修正文档。
+
+---
+
+## 14. Implementation Evidence（2026-08-28）
+
+- 从已验收 E2 commit `2ef243333a0cf468e16e4cbf81a2c20662184a79` 创建独立分支 `codex/e3-data-decay`；未 merge、rebase 或 push，未推进 E4/E5。
+- `decay-v1` 使用注入 `as_of=2026-08-26T23:59:59`；0–30 天 Hot、>30–365 天 Warm、>365 天 Cold，future timestamp fail safe Hot；普通 decay 固定为 `0/-1/-2`。
+- protection-first 已由测试覆盖：explicit risk、真实 unresolved Task、clinician-confirmed、pinned、needs-review、当前有效 patient instruction、provenance/round-trip failure 全部 Hot / decay 0。孤立的 pending 文本或 stale `feature_flags.unresolved_task` 不构成 Task authority。
+- 新增 `artifact_storage_state` 与显式幂等 SQLite/SQLCipher migration；canonical JSON 固定 UTF-8/sorted keys/compact separators，Cold 使用 `zlib-json-v1`，恢复必须重新通过 codec/zlib/SHA-256/JSON/canonical-byte equality。
+- authoritative `Artifact.content` 永久保留；Artifact/Version/Comment/AuditLog/Task/Highlight/Span 的 count、content 与 version 在 apply 前后相同。corrupted payload fail closed Hot，不保留半归档 payload。
+- canonical fixture 观察结果：Hot/Warm/Cold `12/1/1`、protected 7；Cold canonical 235 bytes、shadow payload 180 bytes、ratio 0.766、round-trip 1/1。首次 apply 写 14 state / 3 Highlight score；相同第二次 apply 写 0 / 0。
+- maintenance benchmark：dry-run 8.4890 ms、first apply 8.3320 ms、idempotent rerun 3.5574 ms；1,000 次 archive build+restore P50/P95 0.0220/0.0235 ms。均为单机 synthetic SQLite，不是生产容量或长期 retention 证据。
+- final warm read baseline（100 samples / 10 warm-up）：Layer A Glance P50/P95 `3.814/4.429 ms`；Events `6.374/7.096 ms`；Patient View `5.284/6.078 ms`。Glance GET 不 import/query policy/storage、Artifact/Event 全历史或 LLM。
+- Patient View strict projection 与 sentinel anti-leak 通过，未返回 tier/hash/codec/payload/reason/size；cross-clinic 统一 404 行为不变。
+- SQLCipher 4.12.0 Demo → E3 apply → separate-key backup → rotated-key restore 通过：三者 plaintext header absent / plain reader blocked；恢复库 15 tables，`artifact_storage_state` 14 rows，tier `12/1/1`。
+- final regression：backend **417 passed**；security/integration **17 passed**；D3 corpus validation/runtime hard gates PASS；D4 frozen Copilot eval PASS；frontend production build PASS；`pip check`、`npm ls --depth=0`、secret scan、Caddy validate 与 `git diff --check` PASS。
+- E3 无新增 dependency、provider、model、dataset 或 attribution。Shadow payload 与 authoritative hot copy 共存，不能声明总数据库节省、生产对象存储迁移或 production medical readiness。

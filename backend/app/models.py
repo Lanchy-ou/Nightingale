@@ -11,7 +11,15 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    DateTime,
+    ForeignKey,
+    Integer,
+    LargeBinary,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .db import Base
@@ -151,6 +159,33 @@ class Artifact(Base):
     ingestion_key: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)
     # Metadata-only generation record for AI artifacts (never prompt/raw text).
     generation_metadata: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+
+class ArtifactStorageState(Base):
+    """E3 maintenance metadata for a reversible shadow archive.
+
+    ``Artifact.content`` remains authoritative.  The optional payload is only a
+    verified compressed copy and is never read by the normal clinical paths.
+    """
+
+    __tablename__ = "artifact_storage_state"
+
+    artifact_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("artifacts.artifact_id"), primary_key=True
+    )
+    tier: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    reason_codes: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    policy_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    evaluated_as_of: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    evaluated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    source_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    codec: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    compressed_payload: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    original_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    compressed_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    roundtrip_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True
+    )
 
 
 class Highlight(Base):

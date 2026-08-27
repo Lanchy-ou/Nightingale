@@ -25,6 +25,8 @@ SIGNAL_VALUES = {
 }
 MIN_ADJUSTMENT = -2
 MAX_ADJUSTMENT = 3
+MIN_DECAY_ADJUSTMENT = -2
+MAX_DECAY_ADJUSTMENT = 0
 AI_SUMMARY_TYPES = {
     "ai_doctor_consult_summary",
     "ai_nurse_consult_summary",
@@ -188,17 +190,25 @@ def compose_score(
     applied_adaptive = max(
         MIN_ADJUSTMENT, min(MAX_ADJUSTMENT, adaptive_adjustment)
     )
-    if applied_adaptive < 0 and is_protected(
+    protected = is_protected(
         feature_flags, status=status, review_status=review_status
-    ):
+    )
+    if applied_adaptive < 0 and protected:
         applied_adaptive = 0
         metadata["protection_applied"] = True
         metadata["reason"] = "protected_negative_adjustment_blocked"
-    final = base_importance_score + applied_adaptive + decay_adjustment
+    applied_decay = max(
+        MIN_DECAY_ADJUSTMENT, min(MAX_DECAY_ADJUSTMENT, decay_adjustment)
+    )
+    if applied_decay < 0 and protected:
+        applied_decay = 0
+        metadata["protection_applied"] = True
+        metadata["reason"] = "protected_negative_adjustment_blocked"
+    final = base_importance_score + applied_adaptive + applied_decay
     return LearningResult(
         base_importance_score=base_importance_score,
         adaptive_adjustment=applied_adaptive,
-        decay_adjustment=decay_adjustment,
+        decay_adjustment=applied_decay,
         importance_score=final,
         learning_metadata=metadata,
     )

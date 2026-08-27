@@ -15,6 +15,7 @@ from app.db import Base, SessionLocal, engine
 from app.ids import new_id
 from app.models import (
     Artifact,
+    ArtifactStorageState,
     ArtifactVersion,
     AuditLog,
     AuthSession,
@@ -70,6 +71,7 @@ def seed(db: Session) -> None:
     db.execute(delete(Invite))
     db.execute(delete(Comment))
     db.execute(delete(ArtifactVersion))
+    db.execute(delete(ArtifactStorageState))
     db.execute(delete(Highlight))
     db.execute(delete(Task))
     db.execute(delete(Artifact))

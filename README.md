@@ -459,7 +459,7 @@ E1 增加 `User.professional_title` nullable column。现有本地 synthetic SQL
 
 ### 4.7 E2 Self-Learning Importance（2026-08-27）
 
-> 状态：**E2 COMPLETE（synthetic evaluation）**。这不是模型训练、真实医生偏好验证或 learned clinical correctness 证明；E3–E5 未开始。
+> 状态：**E2 COMPLETE（synthetic evaluation）**。这不是模型训练、真实医生偏好验证或 learned clinical correctness 证明；E3 的实现见下一节，E4/E5 未开始。
 
 E2 只学习未来相似 AI-derived Glance candidate 的软排序：成功的 clinician/staff Highlight status compare-and-set 才能在 append-only `importance_feedback` 中留下 metadata-only 反馈；no-op、409、patient/admin action、非 AI Summary 或缺少 strict exact source 的 row 都不训练。反馈资格使用非空、结构严格、带显式 in-bounds offset 的 Span，并拒绝 AI Summary 自我引用或与 Summary provenance pointer 不一致的 source。学习键由服务端把 `entity_type` 映射到 `symptom|medication|task|risk|allergy|follow_up|other`，不保存或使用 raw text、姓名、quote、risk reason、Comment、Note 或 embedding；`other` 只记录，不跨不相关概念泛化。
 
@@ -470,7 +470,7 @@ staff:     accepted +1 / pinned +1 / rejected -1
 final importance
   = base_importance_score
   + adaptive_adjustment  # same clinic, latest actor/highlight only, cap [-2,+3]
-  + decay_adjustment     # E3 reserved; E2 always 0
+  + decay_adjustment     # E2 基线为 0；E3 maintenance write path 写入 0/-1/-2
 ```
 
 每个 `(actor_id, highlight_id)` 只取最新有效反馈，防止 toggle inflation。`explicit_risk`、`unresolved_task`、`clinician_confirmed`、`pinned`、`needs_review` 遇到负向 adaptive 值时强制归零；staff review 永不成为 clinician confirmation。新候选在 AI persistence write path 聚合并写入 base/adaptive/final 与 counts-only explanation，GET Glance 仍只读取预计算 Highlight，不查询 feedback、不扫描 Artifact/全历史、不调用 LLM。UI 仅在非零调整时显示 `Learned priority`、base/adaptive/final 与同院 review count，不暴露 actor 或其他患者内容。
@@ -483,6 +483,34 @@ cd backend
 ```
 
 新 Demo 仍由 seed / SQLCipher init 直接创建完整 schema。E2 没有新增 dependency、provider、dataset 或 attribution 条目。
+
+### 4.8 E3 Hybrid Storage / Data Decay（2026-08-28）
+
+> 状态：**E3 COMPLETE（synthetic shadow-archive proof）**。没有删除、覆盖或外置任何 authoritative clinical record；E4/E5 未开始。
+
+E3 的 `decay-v1` 只在显式 maintenance/write path 上运行。`--as-of 2026-08-26` 被解析为当日 `23:59:59`，避免依赖机器当前日期：0–30 天为 Hot，超过 30 天至 365 天为 Warm，超过 365 天才可成为 Cold；普通 tier 对应 `decay_adjustment = 0/-1/-2`。保护事实先于 age rule：explicit risk、真实 `Task.status in open|in_progress|reported_done`、clinician-confirmed、pinned、needs-review、当前有效 patient instruction、provenance 未验证或 archive integrity 失败全部强制 Hot / decay 0。Task 保护只读取 Task row，不从自由文本或孤立 `feature_flags.unresolved_task` 猜测。
+
+新增 `artifact_storage_state` 保存 `tier`、受控 `reason_codes`、policy/as-of/evaluation metadata、canonical SHA-256、`zlib-json-v1` payload、size 与 round-trip timestamp。canonical JSON 固定 UTF-8、sorted keys 与 compact separators。Cold payload 必须解压、canonicalize 并 hash-equivalent 后才写入；损坏 payload 下一次 apply 会 fail closed 为 Hot 并清除不可用 shadow payload。`Artifact.content` 始终是 authoritative copy，Artifact/Version/Comment/AuditLog/Task/Highlight/Span 均不删除或覆盖。
+
+```bash
+cd backend
+
+# 只读；不会自动 migration 或写 policy state/score
+.venv/Scripts/python.exe scripts/apply_storage_policy.py --as-of 2026-08-26 --dry-run
+
+# 显式、幂等迁移 E2 SQLite/SQLCipher schema，并在一个 DB transaction 内写 state/final score
+.venv/Scripts/python.exe scripts/apply_storage_policy.py --as-of 2026-08-26 --apply
+```
+
+也可只执行 schema migration：
+
+```bash
+.venv/Scripts/python.exe -c "from app.db import migrate_e3_schema; migrate_e3_schema()"
+```
+
+canonical fixture 的观察结果为 Hot 12 / Warm 1 / Cold 1 / protected 7；唯一 Cold candidate 的 canonical JSON 为 235 bytes，shadow payload 为 180 bytes（ratio 0.766），round-trip 通过。该数字只描述一个 synthetic Artifact 的压缩副本；authoritative content 仍在同一数据库，因此**不是数据库总字节节省，更不是生产对象存储或长期 retention 验证**。Glance GET 仍只读预计算 Highlight final score，不查询 storage state、不执行 policy/decompression、不扫描 Artifact/全历史、不调用 LLM。Patient View schema 没有 tier/hash/codec/payload/reason/size 字段。
+
+实现与证据说明见 `docs/e3_data_decay_evidence.md`。E3 没有新增 dependency、provider、dataset 或 attribution 条目。
 
 ---
 
@@ -819,7 +847,7 @@ cd backend
 .venv/Scripts/python.exe -B scripts/evaluate_copilot.py
 ```
 
-> 当前进度：M1–M7、Phase C、D1–D5 与 Phase E 的 E1/E2 已完成；E3–E5 必须以各自任务卡/分支 Exit Gate 判断，未由 E2 推进。D5 达到 **D5_AUTOMATED_SECURITY_COMPLETE**。E2 仅通过受控 synthetic evaluation 证明同院、bounded、latest-only 的未来软排序变化，不代表真实医生偏好、真人 usability 或 learned clinical correctness。详见 `Task_Card/E1_Role_Workspaces_Task_Card.md`、`Task_Card/E2_Self_Learning_Importance_Task_Card.md`、`docs/d5_deployment_security_decisions.md` 与 `docs/d5_automated_evidence_2026-08-27.md`。
+> 当前进度：M1–M7、Phase C、D1–D5 与 Phase E 的 E1–E3 已完成；E4/E5 未开始。D5 达到 **D5_AUTOMATED_SECURITY_COMPLETE**。E2 仅通过受控 synthetic evaluation 证明同院、bounded、latest-only 的未来软排序变化；E3 仅证明 deterministic tier/decay 与可恢复 shadow archive，不代表真实医生偏好、生产存储节省、真人 usability 或长期 retention validation。详见 `Task_Card/E1_Role_Workspaces_Task_Card.md`、`Task_Card/E2_Self_Learning_Importance_Task_Card.md`、`Task_Card/E3_Data_Decay_Task_Card.md`、`docs/e3_data_decay_evidence.md`、`docs/d5_deployment_security_decisions.md` 与 `docs/d5_automated_evidence_2026-08-27.md`。
 
 架构约定（记录确切位置，随阶段更新）：
 
@@ -828,6 +856,7 @@ cd backend
 - **LLM 客户端出口**：`backend/app/llm_client.py`（`LLMClient` protocol）是唯一 provider 出口，只能接收 `RedactedContent`。实际仅支持 `mock`（无 key、确定性）与 `deepseek`（live adapter）两个 provider；`NANTINGALE_LLM_PROVIDER` 默认 `deepseek`。`deepseek` 缺 key / provider 出错 / schema 非法时明确降级到 deterministic fallback；key 只从环境变量读取，永不打印/入库。
 - **D4 Copilot 边界**：`POST /api/patients/{patient_id}/copilot/query` 只对同 clinic 的 clinician 开放。Provider 只接收最多 12 个脱敏 exact-span cards，且不拥有 draft type/Event/patient/visibility/endpoint；AI Summary 必须继续解析到 raw source 才能成为 source fact。`Find evidence` 先在当前授权 patient 全历史做服务器端匹配，再限制 provider egress；`What changed` 返回两个 Event source facts + 显式 comparison inference。Copilot 不直接写记录；可编辑 Preview 由服务端签发 5 分钟 HMAC token，绑定 actor/clinic/patient/Event/type/evidence，既有 Note/Task API 验证成功后才记录 `draft_origin=copilot`。Patient instruction 必须改成有效 patient-facing 内容；Patient View 从不加载 Copilot。
 - **E2 importance learning 边界**：`backend/app/importance_learning.py` 只在成功 status CAS 与候选 persistence write path 工作。受控 entity type、server-derived role/status signal、同院 latest-only aggregation 和 `[-2,+3]` cap 共同产生 adaptive adjustment；raw clinical text/PHI 不进入 key/table/metadata。GET Glance 继续只按已存 final score 排序，hard-risk/Task/clinician-confirmed/pinned/needs-review 不受负向学习削弱。
+- **E3 storage/decay 边界**：`backend/app/data_decay.py` 只由显式 maintenance runner 使用，基于注入 `as_of`、Event time、真实 Task 与 server-side protection facts 写入 Hot/Warm/Cold 和 bounded `0/-1/-2` decay。Cold 只是 canonical hash + `zlib-json-v1` shadow payload；`Artifact.content` 始终 authoritative。Glance GET 不 import/query policy 或 storage table，Patient View 不投影 tier/hash/codec/payload/reason/size。
 
 ### Demo auth（D1）：Invite → Register → Login → Session → Logout
 

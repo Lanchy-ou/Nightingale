@@ -119,6 +119,48 @@ def migrate_e2_schema(target_engine: Engine = engine) -> None:
             )
 
 
+def migrate_e3_schema(target_engine: Engine = engine) -> None:
+    """Upgrade an E2 SQLite/SQLCipher demo schema to E3 in place.
+
+    The migration is explicit because ``create_all`` does not alter existing
+    schemas.  It only adds the shadow-state table; authoritative Artifact rows
+    and all existing history remain untouched.
+    """
+    migrate_e2_schema(target_engine)
+    with target_engine.begin() as connection:
+        inspector = inspect(connection)
+        tables = set(inspector.get_table_names())
+        if "artifacts" not in tables:
+            raise RuntimeError("artifacts table is missing; initialize the demo schema first")
+        connection.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS artifact_storage_state (
+                    artifact_id VARCHAR(64) NOT NULL PRIMARY KEY,
+                    tier VARCHAR(16) NOT NULL,
+                    reason_codes JSON NOT NULL,
+                    policy_version VARCHAR(32) NOT NULL,
+                    evaluated_as_of DATETIME NOT NULL,
+                    evaluated_at DATETIME NOT NULL,
+                    source_sha256 VARCHAR(64),
+                    codec VARCHAR(32),
+                    compressed_payload BLOB,
+                    original_bytes INTEGER,
+                    compressed_bytes INTEGER,
+                    roundtrip_verified_at DATETIME,
+                    FOREIGN KEY(artifact_id) REFERENCES artifacts (artifact_id)
+                )
+                """
+            )
+        )
+        connection.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_artifact_storage_state_tier "
+                "ON artifact_storage_state (tier)"
+            )
+        )
+
+
 def get_db():
     db = SessionLocal()
     try:

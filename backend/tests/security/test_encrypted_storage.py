@@ -43,6 +43,49 @@ def test_database_backup_and_restore_are_really_encrypted(tmp_path):
             text("INSERT INTO clinics (clinic_id, name) VALUES (:id, :name)"),
             {"id": "cln_storage_probe", "name": "Encrypted demo clinic"},
         )
+        connection.execute(
+            text(
+                "INSERT INTO patients (patient_id, clinic_id, name) VALUES "
+                "('pat_storage_probe', 'cln_storage_probe', 'Synthetic Patient')"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO events (event_id, patient_id, clinic_id, event_type, "
+                "started_at, created_at) VALUES "
+                "('evt_storage_probe', 'pat_storage_probe', 'cln_storage_probe', "
+                "'historical_review', '2025-01-01 00:00:00', '2025-01-01 00:00:00')"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO artifacts (artifact_id, event_id, artifact_type, "
+                "author_role, content, created_at, version) VALUES "
+                "('art_storage_probe', 'evt_storage_probe', 'clinician_note', "
+                "'clinician', :content, '2025-01-01 00:00:00', 1)"
+            ),
+            {"content": '{"probe":true}'},
+        )
+        connection.execute(
+            text(
+                "INSERT INTO artifact_storage_state "
+                "(artifact_id, tier, reason_codes, policy_version, evaluated_as_of, "
+                "evaluated_at, source_sha256, codec, compressed_payload, original_bytes, "
+                "compressed_bytes, roundtrip_verified_at) VALUES "
+                "('art_storage_probe', 'cold', '[\"cold_age\"]', 'decay-v1', "
+                "'2026-08-26 23:59:59', '2026-08-27 08:00:00', "
+                "'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', "
+                "'zlib-json-v1', :payload, 14, 12, '2026-08-27 08:00:00')"
+            ),
+            {"payload": b"shadow-proof"},
+        )
+        tables = {
+            row[0]
+            for row in connection.execute(
+                text("SELECT name FROM sqlite_master WHERE type='table'")
+            )
+        }
+        assert "artifact_storage_state" in tables
     engine.dispose()
 
     assert_sqlcipher_file(database, DB_KEY)
@@ -64,7 +107,25 @@ def test_database_backup_and_restore_are_really_encrypted(tmp_path):
             "SELECT clinic_id, name FROM clinics WHERE clinic_id = ?",
             ("cln_storage_probe",),
         ).fetchone()
+        restored_tables = {
+            item[0]
+            for item in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+        storage_row = connection.execute(
+            "SELECT artifact_id, tier, policy_version, compressed_payload "
+            "FROM artifact_storage_state WHERE artifact_id = ?",
+            ("art_storage_probe",),
+        ).fetchone()
     assert row == ("cln_storage_probe", "Encrypted demo clinic")
+    assert "artifact_storage_state" in restored_tables
+    assert storage_row == (
+        "art_storage_probe",
+        "cold",
+        "decay-v1",
+        b"shadow-proof",
+    )
 
 
 def test_backup_and_restore_refuse_to_overwrite_explicit_files(tmp_path):
