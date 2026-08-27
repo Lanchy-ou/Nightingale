@@ -1,6 +1,8 @@
 # D5 任务卡 - Deployment Security, Cross-Role Integration and Usability Gate
 
-> 状态：**D5_AUTOMATED_SECURITY_COMPLETE（2026-08-27）；D5_USABILITY_GATE_BLOCKED_EXTERNAL_OBSERVERS；D5 / Phase D NOT COMPLETE**
+> 状态：**D5_AUTOMATED_SECURITY_COMPLETE（2026-08-27；owner-revised gate）**
+>
+> Owner 于 2026-08-27 取消 5-8 位独立观察者要求；该要求不再是完成门槛，也没有被冒充为已执行。Phase D 工程实现与自动化验收已完成，但不声明真人可用性研究或 production medical readiness。
 >
 > 对应总计划：`docs/phase_d_product_completion_plan.md`
 >
@@ -110,21 +112,16 @@ Login -> Open patient
 
 ---
 
-## 5. Usability Gate
+## 5. Automated Product-Journey Gate（owner-revised）
 
-使用 5-8 位未参与开发的观察者，synthetic data only。记录任务完成而非主观好评。
+5-8 位独立观察者要求已由 owner 取消并移出完成门槛。以下任务通过真实 session 自动化 E2E 验证功能可达性；这不是人因/可用性研究：
 
-核心任务：
-
-- clinician 10 秒内指出当前最重要问题与下一行动；
-- clinician 找到一条 AI 事实的 exact source；
-- clinician 完成 transcript import 并识别一个 ambiguous segment；
-- patient 说明自己下一步需要做什么；
-- patient 报告 Task 完成且理解“等待诊所确认”；
-- staff 找到并确认 reported_done Task；
+- clinician 打开 Glance，并完成 transcript ambiguity 修正、AI exact source、Note、Task 与 Patient Instruction；
+- patient 读取 Today/Care Plan、推进 Task、提交 Check-in 并查看 Visit Summary；
+- staff 找到并确认 reported_done Task、Comment/@clinician，并确认 Glance 更新；
 - 三角色都能正确退出并无法返回受保护内容。
 
-记录：成功/失败、完成时间、误解点、阻塞点。测试中出现的产品问题按 severity 修复；不能只修改演示话术掩盖。
+该门只证明自动化产品旅程与安全边界通过；不得据此声称“用户 10 秒内理解”“易用性已验证”或“真人测试通过”。
 
 ---
 
@@ -164,7 +161,7 @@ tests/security/test_cross_patient_sentinels.py
 4. 三角色 E2E 不依赖 Role selector；
 5. patient anti-leak、cross-clinic、cross-patient sentinel 全绿；
 6. transcript holdout 与 Copilot evidence eval 结果可复现；
-7. usability tasks 完成，阻塞级问题清零；
+7. owner-revised automated product journeys 全绿；无真人 usability claim；
 8. 全量 tests、integration tests、security checks、frontend build 全绿；
 9. README/AGENTS/ATTRIBUTION 与实际实现一致；
 10. 明确声明这是 synthetic-data product Demo，不是 production medical system。
@@ -192,8 +189,8 @@ tests/security/test_cross_patient_sentinels.py
 - DG3 选择 Caddy 2.11.4：FastAPI 仅绑定 `127.0.0.1:8000`；Caddy 在 8080/8443 提供 HTTP→HTTPS、SPA 与 `/api/*` reverse proxy。实际 TLS chain 验证 `OK`（TLSv1.3 / TLS_AES_128_GCM_SHA256），certificate issuer/expiry/fingerprint 已读取。
 - `backend/app/security.py` 已实现 strict Origin CSRF、exact-origin CORS、login/register/invite 基础限流、actual-body size limit、HSTS/CSP/security headers、generic 500 与 metadata-only error log；cookie create/clear 都锁定 `Secure + HttpOnly + SameSite=Lax`。
 - integration/security tests 使用真实 session 且不使用 `X-User-Id/X-Role`。Clinician journey 已合并为同一个新邀请账号、同一个 Cookie 完成 Invite → Register → Login → Glance → Transcript → AI Summary → Exact Source → Note → Task → Patient Instruction → Logout；另有 patient/staff journey、patient/cross-clinic sentinel、log sanitization、cookie/CORS/CSRF/rate/body 与 encrypted backup/restore tests。
-- `backend/scripts/check_no_secrets.py`、SQLCipher init/backup/restore scripts 与 `verify_secure_demo.py` 已实际运行通过；部署决策和命令见 `docs/d5_deployment_security_decisions.md`，观察者协议见 `docs/d5_usability_protocol.md`。
+- `backend/scripts/check_no_secrets.py`、SQLCipher init/backup/restore scripts 与 `verify_secure_demo.py` 已实际运行通过；部署决策和命令见 `docs/d5_deployment_security_decisions.md`。
 - invite preview 已改为 `POST /api/auth/invites/preview`，raw token 只在 JSON body；旧 URL-token endpoint 已删除。后端离线 Caddy 故障测试用虚构 token 验证 502 response、Caddy stdout/stderr 与未运行应用的 log sink 均无 token。Uvicorn `--no-access-log` 与 Caddy 不启用 production access log 继续作为 defense in depth。
 - D5 修正后最终回归：backend **342 passed**；security/integration **17 passed**；D3 corpus/runtime、D4 frozen eval、pip check、secret scan、Caddy validate、frontend production build 与 `git diff --check` 均通过；实际 listener 全部为 loopback（Caddy 127.0.0.1:8080/8443，FastAPI 127.0.0.1:8000）。
 - Caddy 设置 `skip_install_trust`；本轮没有安装或绕过本地 CA。TLS verifier 通过显式 `--ca-file` 验证链路。
-- **D5_USABILITY_GATE_BLOCKED_EXTERNAL_OBSERVERS**：当前无法获得 5-8 位未参与开发观察者；`docs/d5_usability_protocol.md` 保持空白，无模拟参与者或虚假结果。因此最多声明 `D5_AUTOMATED_SECURITY_COMPLETE`，不得声明 D5 / Phase D COMPLETE。
+- Owner 于 2026-08-27 取消 5-8 位独立观察者要求；原空白协议已删除，无模拟参与者或虚假结果。当前可声明 `D5_AUTOMATED_SECURITY_COMPLETE` 与 Phase D 工程实现/自动化验收完成，但不得声明真人 usability research、production deployment certification 或 production medical readiness。

@@ -1,7 +1,8 @@
 # D5 Deployment Security Decisions and Reproduction
 
-> Status: **D5_AUTOMATED_SECURITY_COMPLETE** on 2026-08-27;
-> **D5_USABILITY_GATE_BLOCKED_EXTERNAL_OBSERVERS**. D5/Phase D is not complete.
+> Status: **D5_AUTOMATED_SECURITY_COMPLETE** on 2026-08-27. The owner cancelled
+> the independent-observer requirement; no usability result is claimed. Phase D
+> engineering implementation and automated acceptance are complete.
 
 This is a single-machine, synthetic-data product Demo. It is not a production
 medical system and makes no production capacity claim.

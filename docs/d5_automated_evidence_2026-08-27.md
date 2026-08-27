@@ -4,7 +4,8 @@ This record contains observed automated results, not expected annotations.
 
 > Status: **D5_AUTOMATED_SECURITY_COMPLETE**
 >
-> Remaining: **D5_USABILITY_GATE_BLOCKED_EXTERNAL_OBSERVERS**
+> Owner-revised scope: the 5-8 independent-observer requirement was cancelled
+> on 2026-08-27. No participant or usability result was generated.
 
 ## Pre-change D1-D4 baseline
 
@@ -46,11 +47,12 @@ This record contains observed automated results, not expected annotations.
 - Caddy `skip_install_trust`: local CA installation disabled; TLS verifier used
   an explicit CA file and did not bypass verification.
 
-## Honest remaining gates
+## Scope limits
 
-- **D5_USABILITY_GATE_BLOCKED_EXTERNAL_OBSERVERS**: the required 5-8
-  independent observers are not available. The blank protocol remains blank;
-  no participants or outcomes were simulated.
+- The independent-observer requirement was removed by the owner rather than
+  marked passed. No participants or outcomes were simulated.
 - The local Caddy CA was not installed or bypassed, per owner instruction.
-- Therefore this document does **not** declare D5 or Phase D complete; the
-  strongest allowed status is `D5_AUTOMATED_SECURITY_COMPLETE`.
+- `D5_AUTOMATED_SECURITY_COMPLETE` means Phase D engineering implementation and
+  automated product-journey/security acceptance are complete. It does not mean
+  independent usability research, public-host deployment certification,
+  production capacity validation or production medical readiness.

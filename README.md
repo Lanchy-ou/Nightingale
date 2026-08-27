@@ -434,7 +434,7 @@ Phase C 两张任务卡均已完成：
 
 D3 frozen evaluation 包含 40 个 synthetic cases（development 26 / frozen_holdout 14）。normalizer 在首次 holdout 前以 SHA-256 冻结；holdout outcome 14/14、speaker 12/12、ambiguous blocking 8/8，silent invention/truncation 为 0。frozen runner **不调用 provider/network**；provider 层明确 `NOT_RUN`，deterministic fallback 单独报告（development exact entity precision 0.888889 / recall 0.571429，task precision 1.0 / recall 0.5）。不得把两层合并为一个成绩。
 
-仍明确后置：独立 Nurse Workspace、Nurse input、录音/ASR、外部 dataset ingestion、复杂 care-team assignment、appointment/billing/notification。Phase C、M7、D1、D2、D3、D4 Exit Gate 已通过；D5 自动化安全/集成范围已实施，但浏览器信任和独立观察者 usability gate 尚未关闭。
+仍明确后置：独立 Nurse Workspace、Nurse input、录音/ASR、外部 dataset ingestion、复杂 care-team assignment、appointment/billing/notification。Phase C、M7、D1–D4 Exit Gate 与 D5 自动化安全/集成门已通过；5-8 位独立观察者要求由 owner 取消，不作真人 usability claim。
 
 ---
 
@@ -771,7 +771,7 @@ cd backend
 .venv/Scripts/python.exe -B scripts/evaluate_copilot.py
 ```
 
-> 当前进度：M1–M7、Phase C、D1–D4 已完成；D5 达到 **D5_AUTOMATED_SECURITY_COMPLETE**。SQLCipher database/backup/restore、Caddy TLS、CSRF/CORS/headers/rate/body/error hardening、body-only invite preview、offline-Caddy token log probe 与三角色 real-session integration tests 已通过。**D5_USABILITY_GATE_BLOCKED_EXTERNAL_OBSERVERS**：当前无法获得任务卡要求的 5–8 位独立观察者，空白协议未填入任何模拟结果；因此不得宣称 D5 / Phase D Product Demo Complete。详见 `docs/d5_deployment_security_decisions.md`、`docs/d5_automated_evidence_2026-08-27.md` 与 `docs/d5_usability_protocol.md`。
+> 当前进度：M1–M7、Phase C、D1–D4 已完成；D5 达到 **D5_AUTOMATED_SECURITY_COMPLETE**。SQLCipher database/backup/restore、Caddy TLS、CSRF/CORS/headers/rate/body/error hardening、body-only invite preview、offline-Caddy token log probe 与三角色 real-session integration tests 已通过。Owner 已取消 5-8 位独立观察者要求，原空白协议已删除且没有生成模拟结果。项目可称为“Phase D 工程实现与自动化验收完成的 synthetic-data product Demo”，但不得声称经过真人 usability research、production deployment certification 或可用于真实医疗。详见 `docs/d5_deployment_security_decisions.md` 与 `docs/d5_automated_evidence_2026-08-27.md`。
 
 架构约定（记录确切位置，随阶段更新）：
 

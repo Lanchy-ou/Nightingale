@@ -933,7 +933,7 @@ Canonical plan and task order:
 3. `Task_Card/D2_Care_Tasks_Patient_Experience_Task_Card.md` - first-class Task lifecycle + patient product;
 4. `Task_Card/D3_Transcript_Reliability_Task_Card.md` - raw import preview + frozen transcript evaluation;
 5. `Task_Card/D4_Clinician_Copilot_Task_Card.md` - patient-scoped, evidence-bound, draft-only Copilot;
-6. `Task_Card/D5_Security_Integration_Task_Card.md` - TLS/at-rest evidence + cross-role E2E/usability gate.
+6. `Task_Card/D5_Security_Integration_Task_Card.md` - TLS/at-rest evidence + cross-role automated product-journey gate.
 
 Permanent Phase D decisions:
 
@@ -1006,7 +1006,7 @@ D3 (Transcript Import, Normalization and Reliability Evaluation) is complete. D4
 
 ## 27. D4 Implementation Status（2026-08-27 审查阻断项修复后重验）
 
-D4 (Evidence-Bound Clinician Copilot) is complete. D5 is now IN PROGRESS under the bounded implementation recorded in §28.
+D4 (Evidence-Bound Clinician Copilot) is complete. D5 automated security + owner-revised product-journey gate is complete (see §28).
 
 - **Query/RBAC**: `POST /api/patients/{patient_id}/copilot/query` is clinician-only and uses unified scope-first authorization. patient/staff/admin are denied; absent/cross-clinic records retain the uniform 404 contract.
 - **Provider boundary**: `LLMClient.copilot` receives only de-identified, server-selected exact evidence cards (maximum 12). Provider output contains claims/evidence IDs only and cannot choose draft type, Event, patient, visibility, endpoint, author or Task status.
@@ -1022,7 +1022,7 @@ D4 (Evidence-Bound Clinician Copilot) is complete. D5 is now IN PROGRESS under t
 
 ## 28. D5 Implementation Status（2026-08-27）
 
-Status: `D5_AUTOMATED_SECURITY_COMPLETE`; `D5_USABILITY_GATE_BLOCKED_EXTERNAL_OBSERVERS`. D5 / Phase D is NOT COMPLETE.
+Status: `D5_AUTOMATED_SECURITY_COMPLETE`. Owner cancelled the 5-8 independent-observer requirement on 2026-08-27; no usability result is claimed. Phase D engineering implementation and automated acceptance are complete.
 
 - **Deployment choice**: single-machine SQLCipher deployment; plain SQLite remains unit-test/development only. Production startup rejects plain SQLite, demo auth, insecure cookies, debug mode, non-HTTPS frontend origin and a missing/short DB key.
 - **At rest**: `backend/app/storage_security.py` plus init/backup/restore scripts use whole-file SQLCipher encryption. Database, backup and restored-database keys are 32+ characters and pairwise distinct; missing/short/same/wrong keys fail closed. Backup uses an independent environment key; restore exports to a new file under a rotated key; existing targets are never overwritten. No field-level encryption was added. Authorized process memory still contains decrypted synthetic data.
@@ -1033,4 +1033,4 @@ Status: `D5_AUTOMATED_SECURITY_COMPLETE`; `D5_USABILITY_GATE_BLOCKED_EXTERNAL_OB
 - **Integration tests**: one newly invited clinician account uses one unchanged Cookie for the complete Invite → Register → Login → Glance → Transcript → AI Summary → Exact Source → Note → Task → Patient Instruction → Logout journey. Patient invite/register/Today/start/report/check-in plus staff queue/verify/comment/Glance/logout use separate sessions; no demo headers/Role selector are used.
 - **Automated regression**: backend 342 passed; security/integration 17 passed; D3 corpus/runtime, D4 frozen eval, pip check, secret scan, Caddy validation, frontend production build and `git diff --check` passed after D5 changes.
 - **CA boundary**: Caddy sets `skip_install_trust`. No local CA was installed or bypassed; TLS verifier uses the explicit local CA file.
-- **Permanent honesty boundary**: `docs/d5_usability_protocol.md` is blank and marked `D5_USABILITY_GATE_BLOCKED_EXTERNAL_OBSERVERS`; no 5-8 observer results exist or were simulated. Never mark D5 or Phase D complete from automated evidence alone.
+- **Permanent honesty boundary**: the owner cancelled the 5-8 independent-observer requirement; the blank protocol was deleted and no observer result was simulated. `D5_AUTOMATED_SECURITY_COMPLETE` supports only the claim that Phase D engineering implementation and automated acceptance are complete. Never convert it into a human-usability, public-host certification, production-capacity or production-medical claim.
