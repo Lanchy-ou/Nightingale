@@ -4,8 +4,8 @@ from __future__ import annotations
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func, select, update
-from sqlalchemy.orm import Session
+from sqlalchemy import exists, select, update
+from sqlalchemy.orm import Session, aliased
 
 from ..audit import add_audit
 from ..authz import authorize, require_auth, resource_not_found
@@ -106,33 +106,44 @@ def update_account_status(
     if body.status == "disabled" and user.user_id == ctx.user_id:
         raise HTTPException(status_code=403, detail="Cannot disable current admin")
 
-    if body.status == "disabled" and user.role == "admin":
-        active_admins = db.scalar(
-            select(func.count())
-            .select_from(User)
-            .join(UserCredential, UserCredential.user_id == User.user_id)
-            .where(
-                User.clinic_id == ctx.clinic_id,
-                User.role == "admin",
-                UserCredential.disabled_at.is_(None),
-            )
-        ) or 0
-        if active_admins <= 1:
-            raise HTTPException(status_code=409, detail="Cannot disable last active admin")
-
     now = datetime.now()
     expected_disabled_at = (
         UserCredential.disabled_at.is_(None)
         if body.expected_status == "active"
         else UserCredential.disabled_at.is_not(None)
     )
+    update_conditions = [
+        UserCredential.user_id == user.user_id,
+        expected_disabled_at,
+    ]
+    if body.status == "disabled" and user.role == "admin":
+        other_user = aliased(User)
+        other_credential = aliased(UserCredential)
+        update_conditions.append(
+            exists(
+                select(1)
+                .select_from(other_user)
+                .join(
+                    other_credential,
+                    other_credential.user_id == other_user.user_id,
+                )
+                .where(
+                    other_user.clinic_id == ctx.clinic_id,
+                    other_user.role == "admin",
+                    other_user.user_id != user.user_id,
+                    other_credential.disabled_at.is_(None),
+                )
+            )
+        )
     result = db.execute(
         update(UserCredential)
-        .where(UserCredential.user_id == user.user_id, expected_disabled_at)
+        .where(*update_conditions)
         .values(disabled_at=now if body.status == "disabled" else None)
     )
     if result.rowcount != 1:
         db.rollback()
+        if body.status == "disabled" and user.role == "admin":
+            raise HTTPException(status_code=409, detail="Cannot disable last active admin")
         raise HTTPException(status_code=409, detail="Account status conflict")
 
     if body.status == "disabled":

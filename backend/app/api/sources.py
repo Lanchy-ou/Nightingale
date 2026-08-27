@@ -60,7 +60,10 @@ def _doctor_consult_ids(clinic_id: str, patient_id: str, consult_id: str) -> tup
 
 def _nurse_consult_ids(clinic_id: str, patient_id: str, consult_id: str) -> tuple[str, str, str]:
     event_id = f"evt_{stable_id('nurse_consult', clinic_id, patient_id, consult_id)}"
-    encounter_id = f"enc_{stable_id('clinic_visit', clinic_id, patient_id, consult_id)}"
+    # Default encounter identity is role/event-specific. Nurse and Doctor may
+    # share a human-entered consult label without being grouped implicitly;
+    # only an explicit request encounter_id may join their Clinic Visit.
+    encounter_id = f"enc_{stable_id('clinic_visit', 'nurse_consult', clinic_id, patient_id, consult_id)}"
     source_id = f"art_{stable_id('nurse_transcript', clinic_id, patient_id, consult_id)}"
     return event_id, encounter_id, source_id
 

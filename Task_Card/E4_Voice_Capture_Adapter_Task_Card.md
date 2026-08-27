@@ -339,4 +339,3 @@ frontend/tests/voiceCapture.test.mjs
 - ASR failure 仍生成看似成功的 AI Summary -> 停止；
 - 需要覆盖 raw recording/transcript 才能修正 -> 停止；
 - mock 结果被称为 live transcription -> 停止并修正文档。
-

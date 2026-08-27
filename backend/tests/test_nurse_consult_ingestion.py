@@ -171,6 +171,44 @@ def test_nurse_consult_replay_is_idempotent(staff_client, db_session, monkeypatc
     ) == 2
 
 
+def test_same_consult_id_does_not_implicitly_group_doctor_and_nurse_events(
+    clinician_client, staff_client, monkeypatch
+):
+    _force_missing_provider(monkeypatch)
+    shared_consult_id = "shared-label-not-shared-encounter"
+    doctor = clinician_client.post(
+        f"/api/patients/{fixture.PATIENT_ID}/doctor-consults",
+        json={
+            "consult_id": shared_consult_id,
+            "ingestion_key": "doctor-shared-label-key",
+            "started_at": "2026-08-27T10:00:00",
+            "content": {
+                "segments": [
+                    {"index": 0, "speaker": "doctor", "text": "Any change?"},
+                    {"index": 1, "speaker": "patient", "text": "The headache is better."},
+                ]
+            },
+        },
+    )
+    nurse_payload = _payload(shared_consult_id, "nurse-shared-label-key")
+    nurse_payload.pop("encounter_id")
+    nurse = staff_client.post(
+        f"/api/patients/{fixture.PATIENT_ID}/nurse-consults",
+        json=nurse_payload,
+    )
+    assert doctor.status_code == nurse.status_code == 200
+    assert doctor.json()["encounter_id"] != nurse.json()["encounter_id"]
+
+    explicit_payload = _payload("explicit-nurse-group", "explicit-nurse-group-key")
+    explicit_payload["encounter_id"] = doctor.json()["encounter_id"]
+    explicitly_grouped = staff_client.post(
+        f"/api/patients/{fixture.PATIENT_ID}/nurse-consults",
+        json=explicit_payload,
+    )
+    assert explicitly_grouped.status_code == 200
+    assert explicitly_grouped.json()["encounter_id"] == doctor.json()["encounter_id"]
+
+
 @pytest.mark.parametrize(
     ("user_id", "expected"),
     [

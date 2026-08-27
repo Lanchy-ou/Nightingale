@@ -339,10 +339,16 @@ Decision Gates 冻结结果：
 
 观察到的验证结果：
 
-- E1 新增 32 个 Nurse/Admin/frontend-contract tests；
-- 当前完整 workspace backend suite：399 passed；E1 自身新增 32 tests，其他并发分支测试不计作 E1 产出；
+- E1 新增 35 个 Nurse/Admin/frontend-contract tests；
+- E1 branch 完整 backend suite：377 passed；E4 voice foundation 位于独立分支，不计作 E1 产出；
 - D3 40-case corpus validation/runtime hard gates PASS，Doctor normalizer SHA-256 仍为 `1ac0e01e92401b1728e7b938541e71f8d95e81cca137376004953eb2cd371476`；
 - D4 frozen Copilot eval PASS；`pip check` 与 high-confidence secret scan PASS；
 - frontend TypeScript/production build PASS，`git diff --check` PASS；
 - local browser QA 完成 Clinician → Staff/Nurse → Nurse Consult preview/confirm/Event Detail → Admin Overview/Invites/Audit；console 0 warning/error；
 - 无新增 dependency、provider、外部 dataset 或 attribution 条目；E2–E4 未由本卡推进。
+
+Owner acceptance repair（2026-08-27）：
+
+- Nurse 默认 encounter identity 加入 `nurse_consult` namespace；与 Doctor 使用相同 `consult_id` 仍保持不同 encounter，只有显式 `encounter_id` 才分组；
+- last-active-admin 保护并入账户 conditional UPDATE 的 database predicate；两个 active Admin 并发互相 disable 时固定一方 200、一方 409，连续 10 次并发探测均保留一名 active Admin；
+- E2–E5 四个任务卡的第二个 EOF newline 已移除；提交后 `git diff --check main..HEAD` 必须无输出才允许恢复 E1 Complete 判断。

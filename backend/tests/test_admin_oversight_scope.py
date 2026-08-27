@@ -1,13 +1,18 @@
 """E1 hard gate: clinic-scoped Admin identity/access oversight."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta
+from threading import Barrier
 
 import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy import select
+from sqlalchemy.orm import Session
+from sqlalchemy.sql.dml import Update
 
-from app.models import AuditLog, AuthSession, UserCredential
+from app.main import app
+from app.models import AuditLog, AuthSession, User, UserCredential
 from seed import fixture
 
 
@@ -27,6 +32,34 @@ def _add_active_session(db, user_id: str, suffix: str) -> str:
     )
     db.commit()
     return session_id
+
+
+def _add_second_admin(db) -> str:
+    user_id = "usr_admin_02"
+    source = db.get(UserCredential, fixture.USER_ADMIN_ID)
+    now = datetime.now()
+    db.add(
+        User(
+            user_id=user_id,
+            clinic_id=fixture.CLINIC_ID,
+            name="Second Clinic Admin",
+            role="admin",
+            professional_title=None,
+            patient_id=None,
+        )
+    )
+    db.add(
+        UserCredential(
+            user_id=user_id,
+            email_normalized="admin2@demo.clinic",
+            password_hash=source.password_hash,
+            created_at=now,
+            password_changed_at=now,
+            disabled_at=None,
+        )
+    )
+    db.commit()
+    return user_id
 
 
 def test_admin_lists_only_clinic_users_with_sanitized_account_metadata(
@@ -145,6 +178,47 @@ def test_concurrent_account_status_updates_have_one_winner(client):
         second = pool.submit(disable)
         statuses = sorted((first.result().status_code, second.result().status_code))
     assert statuses == [200, 409]
+
+
+def test_two_admins_cannot_concurrently_disable_each_other(db_session, monkeypatch):
+    second_admin_id = _add_second_admin(db_session)
+    update_barrier = Barrier(2)
+    real_execute = Session.execute
+
+    def synchronized_execute(session, statement, *args, **kwargs):
+        if isinstance(statement, Update) and statement.table.name == "user_credentials":
+            update_barrier.wait(timeout=5)
+        return real_execute(session, statement, *args, **kwargs)
+
+    # Force both requests past any pre-update reads before either account
+    # mutation executes. The database write condition must preserve one Admin.
+    monkeypatch.setattr(Session, "execute", synchronized_execute)
+
+    def disable(actor_id: str, target_id: str):
+        with TestClient(app, headers={"X-User-Id": actor_id}) as local_client:
+            return local_client.patch(
+                f"/api/admin/users/{target_id}/status",
+                json={"expected_status": "active", "status": "disabled"},
+            )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(disable, fixture.USER_ADMIN_ID, second_admin_id)
+        second = pool.submit(disable, second_admin_id, fixture.USER_ADMIN_ID)
+        statuses = sorted((first.result().status_code, second.result().status_code))
+
+    assert statuses == [200, 409]
+    db_session.expire_all()
+    active_admin_ids = {
+        user.user_id
+        for user in db_session.scalars(
+            select(User).where(
+                User.clinic_id == fixture.CLINIC_ID,
+                User.role == "admin",
+            )
+        ).all()
+        if db_session.get(UserCredential, user.user_id).disabled_at is None
+    }
+    assert len(active_admin_ids) == 1
 
 
 def test_admin_cannot_disable_self_or_last_active_admin(admin_client):

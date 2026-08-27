@@ -319,4 +319,3 @@ E5 可以准备邮件草稿，但不得在未获 owner 明确授权时发送、�
 - repo/zip 包含 secret、private DB/audio 或无许可证数据 -> 停止并清理；
 - 最终测试与录制使用的 commit 不一致 -> 停止并重新验证；
 - owner 尚未授权 external send/upload -> 不执行外部动作。
-
