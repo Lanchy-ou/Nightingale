@@ -36,6 +36,17 @@ def group_repeated_entity_keys(anchored: list[tuple[str, str]]) -> set[str]:
     return {key for key, events in events_per_key.items() if len(events) >= 2}
 
 
+def group_repeated_patient_entity_keys(
+    anchored: list[tuple[str, str, str]],
+) -> set[tuple[str, str]]:
+    """Scope repeated mentions to one patient; never learn across records."""
+    events_per_key: dict[tuple[str, str], set[str]] = defaultdict(set)
+    for patient_id, entity_key, event_id in anchored:
+        if entity_key:
+            events_per_key[(patient_id, entity_key)].add(event_id)
+    return {key for key, events in events_per_key.items() if len(events) >= 2}
+
+
 def is_recent(started_at: datetime, as_of: datetime) -> bool:
     """True only when the Event occurred from 0 through 7 days before as_of."""
     age = as_of - started_at
@@ -53,27 +64,32 @@ def generate_highlights(db: Session) -> list[str]:
         if span is None:
             continue
         event = db.get(Event, cand["event_id"])
-        if event is None:
+        patient_id = cand.get("patient_id", fixture.PATIENT_ID)
+        if event is None or event.patient_id != patient_id:
             continue
         anchored.append((cand, span, event))
 
     # 2. repeated_mentions across distinct events (anchored only).
-    repeated_keys = group_repeated_entity_keys(
-        [(c["entity_key"], e.event_id) for c, _s, e in anchored]
+    repeated_keys = group_repeated_patient_entity_keys(
+        [
+            (c.get("patient_id", fixture.PATIENT_ID), c["entity_key"], e.event_id)
+            for c, _s, e in anchored
+        ]
     )
 
     # 3. build highlights with computed structural flags + score.
     created: list[str] = []
     for cand, span, event in anchored:
         entity_key = cand.get("entity_key")
-        repeated = bool(entity_key and entity_key in repeated_keys)
+        patient_id = cand.get("patient_id", fixture.PATIENT_ID)
+        repeated = bool(entity_key and (patient_id, entity_key) in repeated_keys)
         recency = is_recent(event.started_at, SEED_AS_OF)
         flags = {
             "recency": recency,
             "explicit_risk": bool(cand["feature_flags"].get("explicit_risk")),
             "unresolved_task": unresolved_task_exists(
                 db,
-                patient_id=fixture.PATIENT_ID,
+                patient_id=patient_id,
                 task_id=cand.get("task_id"),
             ),
             "clinician_confirmed": False,
@@ -90,7 +106,7 @@ def generate_highlights(db: Session) -> list[str]:
         db.add(
             Highlight(
                 highlight_id=cand["highlight_id"],
-                patient_id=fixture.PATIENT_ID,
+                patient_id=patient_id,
                 event_id=cand["event_id"],
                 artifact_id=cand["artifact_id"],
                 source_artifact_id=cand["source_artifact_id"],

@@ -337,6 +337,8 @@ def test_current_identity_and_clinic_patient_list_handoff(
     assert [patient["patient_id"] for patient in patients.json()] == [
         fixture.PATIENT_ID,
         fixture.PATIENT_B_ID,
+        fixture.PATIENT_DENSE_ID,
+        fixture.PATIENT_TASK_ID,
     ]
     assert {patient["clinic_id"] for patient in patients.json()} == {fixture.CLINIC_ID}
     assert patient_client.get("/api/patients").status_code == 403
@@ -347,4 +349,6 @@ def test_other_clinic_patient_list_is_scoped(client):
         "/api/patients", headers={"X-User-Id": fixture.USER_CLINICIAN_B_ID}
     )
     assert response.status_code == 200
-    assert response.json() == []
+    assert [patient["patient_id"] for patient in response.json()] == [
+        fixture.PATIENT_OTHER_ID
+    ]

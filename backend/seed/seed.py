@@ -96,6 +96,7 @@ def seed(db: Session) -> None:
     db.add_all(fixture.build_artifacts())
     db.add_all(fixture.build_tasks())
     db.add_all(fixture.build_task_audits())
+    db.add_all(fixture.build_comments())
     db.commit()
 
     generate_highlights(db)

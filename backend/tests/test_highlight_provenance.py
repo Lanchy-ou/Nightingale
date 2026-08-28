@@ -13,6 +13,10 @@ AI_SUMMARY_IDS = {
     fixture.ART_NURSE_SUMMARY,
     fixture.ART_DOC_SUMMARY,
     fixture.ART_FU_SUMMARY,
+    fixture.ART_MAYA_PRE_SUMMARY,
+    fixture.ART_MAYA_DOCTOR_SUMMARY,
+    fixture.ART_DANIEL_LATEST_SUMMARY,
+    fixture.ART_LEAH_PRE_SUMMARY,
 }
 
 
@@ -60,7 +64,11 @@ def test_ai_scribed_highlights_satisfy_same_rules(db_session):
         for h in db_session.scalars(select(Highlight)).all()
         if h.artifact_id in AI_SUMMARY_IDS
     ]
-    assert len(ai_highlights) == 5  # 5 of 9 highlights derive from an AI summary
+    expected = sum(
+        candidate["artifact_id"] in AI_SUMMARY_IDS
+        for candidate in fixture.HIGHLIGHT_CANDIDATES
+    )
+    assert len(ai_highlights) == expected == 10
     for h in ai_highlights:
         derived = db_session.get(Artifact, h.artifact_id)
         assert derived.author_role == "system"
