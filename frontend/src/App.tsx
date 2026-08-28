@@ -19,7 +19,7 @@ function adminTabFromPath(path: string): 'overview' | 'invites' | 'audit' | 'set
 function roleHomePath(role: string | null | undefined): string {
   if (role === 'clinician' || role === 'staff') return '/clinical';
   if (role === 'admin') return '/admin';
-  if (role === 'patient') return '/patient';
+  if (role === 'patient') return '/patient/today';
   return '/login';
 }
 

@@ -42,10 +42,11 @@ export default function ProvenancePanel({
       {quote && <blockquote className="source-quote-preview">“{quote}”</blockquote>}
       <p className="provenance-compact-meta">{formatDate(event.started_at)} · {artifactLabel(source_artifact)} · {source_artifact.author_role} · exact {span.kind} span</p>
       {quote ? (
-        <details className="provenance-details"><summary>View source path and surrounding record</summary><ol className="chain">
+        <details className="provenance-details" open><summary>Event → Artifact → exact Span</summary><ol className="chain">
           <li><span className="chain-type">Event</span><span>{TYPE_LABELS[event.event_type] ?? event.event_type}<small>{formatDate(event.started_at)}</small></span></li>
-          {summary_artifact && <li><span className="chain-type">AI Summary</span><span>{artifactLabel(summary_artifact)}<small>System-generated</small></span></li>}
-          <li><span className="chain-type">Source</span><span>{artifactLabel(source_artifact)}<small>{source_artifact.author_role} · created {formatDateTime(source_artifact.created_at)}</small></span></li>
+          {summary_artifact && <li><span className="chain-type">Artifact</span><span>{artifactLabel(summary_artifact)}<small>AI · system-generated</small></span></li>}
+          <li><span className="chain-type">Source Artifact</span><span>{artifactLabel(source_artifact)}<small>{source_artifact.author_role} · created {formatDateTime(source_artifact.created_at)}</small></span></li>
+          <li><span className="chain-type">Exact Span</span><span>{span.kind.replace(/_/g, ' ')}<small>Highlighted verbatim in the source below</small></span></li>
         </ol><div className="source-box"><ArtifactContent artifact={source_artifact} span={span} markRef={markRef} /></div></details>
       ) : (
         <div className="form-error">The provenance span could not be resolved; no source text is being claimed.</div>

@@ -335,6 +335,12 @@ export default function NewDoctorConsult({
         </div>
       </div>
 
+      <div className="consult-authority-note" aria-label="Consult record authority">
+        <span><b>RAW</b>Canonical Transcript is committed first and remains immutable.</span>
+        <span><b>AI</b>AI Summary is generated as an independent system Artifact.</span>
+        <span><b>{isNurse ? 'STAFF' : 'CLINICIAN'}</b>Human-authored notes remain the authoritative assessment layer.</span>
+      </div>
+
       <ol className="consult-steps" aria-label="Consult import progress">
         <li className={stage === 'paste' ? 'active' : 'complete'}><span>1</span>Paste transcript</li>
         <li className={stage === 'review' ? 'active' : ''}><span>2</span>Review segments</li>

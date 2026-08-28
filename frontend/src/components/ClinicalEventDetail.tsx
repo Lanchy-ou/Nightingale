@@ -100,6 +100,7 @@ export default function ClinicalEventDetail({
   }, [event.event_id, initialArtifactId, refreshKey]);
 
   const selectedArtifact = artifacts.find((artifact) => artifact.artifact_id === selectedId) ?? null;
+  const selectedBadge = selectedArtifact ? artifactBadge(selectedArtifact.artifact_type) : null;
   useEffect(() => {
     onContextState({ artifacts, selectedArtifact });
   }, [artifacts, selectedArtifact, onContextState]);
@@ -161,6 +162,12 @@ export default function ClinicalEventDetail({
         </div>
       </div>
 
+      <div className="event-detail-boundary" aria-label="Event record structure">
+        <span><b>Event</b>Real-world occurrence · {formatDateTime(event.started_at)}</span>
+        <span><b>Artifacts</b>{event.artifact_count} parallel representation{event.artifact_count === 1 ? '' : 's'}</span>
+        <span><b>Activity</b>Comments, revisions and audit remain inside this Event</span>
+      </div>
+
       {loading && <div className="loading-card">Loading Event lifecycle…</div>}
       {error && <div className="form-error">Could not load Event Detail: {error}</div>}
 
@@ -174,6 +181,7 @@ export default function ClinicalEventDetail({
                 const content = <>
                   <span className="lifecycle-dot" aria-hidden="true" />
                   <span>
+                    <b className={`lifecycle-kind ${item.kind}`}>{item.kind === 'event' ? 'Event start' : item.kind}</b>
                     <small>{formatDateTime(item.at)}</small>
                     <strong>{item.title}</strong>
                     <em>{item.detail}</em>
@@ -189,21 +197,24 @@ export default function ClinicalEventDetail({
           </div>
 
           <div className="event-reading-column">
-            <div className="artifact-reader">
+            <div className={`artifact-reader ${selectedBadge ? `artifact-${selectedBadge.cls}` : ''}`}>
               {selectedArtifact ? (
                 <>
                 <header className="artifact-reader-head">
-                  <div>
-                    <span className={`badge ${artifactBadge(selectedArtifact.artifact_type).cls}`}>
-                      {artifactBadge(selectedArtifact.artifact_type).badge}
+                  <div className="artifact-reader-title">
+                    <span className={`badge ${selectedBadge!.cls}`}>
+                      {selectedBadge!.badge}
                     </span>
-                    <h3>{artifactLabel(selectedArtifact)}</h3>
+                    <div>
+                      <h3>{artifactLabel(selectedArtifact)}</h3>
+                      <small>Artifact · recorded {formatDateTime(selectedArtifact.created_at)} · version {selectedArtifact.version}</small>
+                    </div>
                   </div>
                   <div className="artifact-authority">
                     {selectedArtifact.author_role === 'system' ? systemAuthority(selectedArtifact) : `${selectedArtifact.author_role}-authored`}
                   </div>
                 </header>
-                <div className="reader-scroll">
+                <div className="reader-scroll" aria-label={`${artifactLabel(selectedArtifact)} content`}>
                   <ArtifactContent artifact={selectedArtifact} />
                 </div>
                 {selectedArtifact.artifact_type === `${role}_note` && (

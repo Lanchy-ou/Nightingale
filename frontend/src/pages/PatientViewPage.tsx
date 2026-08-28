@@ -25,6 +25,22 @@ const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
   cancelled: 'Cancelled',
 };
 
+type PatientTab = 'today' | 'care' | 'checkin' | 'summaries';
+
+const PATIENT_TAB_PATHS: Record<PatientTab, string> = {
+  today: '/patient/today',
+  care: '/patient/care-plan',
+  checkin: '/patient/check-in',
+  summaries: '/patient/visit-summaries',
+};
+
+function patientTabFromPath(path = window.location.pathname): PatientTab {
+  if (path.startsWith('/patient/care-plan')) return 'care';
+  if (path.startsWith('/patient/check-in')) return 'checkin';
+  if (path.startsWith('/patient/visit-summaries')) return 'summaries';
+  return 'today';
+}
+
 export default function PatientViewPage({
   patientId,
   roleKey,
@@ -35,7 +51,7 @@ export default function PatientViewPage({
   onLogout?: () => void;
 }) {
   const [view, setView] = useState<PatientView | null>(null);
-  const [tab, setTab] = useState<'today' | 'care' | 'checkin' | 'summaries'>('today');
+  const [tab, setTab] = useState<PatientTab>(() => patientTabFromPath());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -74,8 +90,23 @@ export default function PatientViewPage({
     // error and pending response even if a host reuses this component.
     setTaskError(null);
     setPendingTaskId(null);
-    setTab('today');
+    setTab(patientTabFromPath());
   }, [patientId, roleKey]);
+
+  useEffect(() => {
+    if (window.location.pathname === '/patient') {
+      window.history.replaceState({}, '', PATIENT_TAB_PATHS.today);
+    }
+    const onPopState = () => setTab(patientTabFromPath());
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+
+  function navigateTab(next: PatientTab) {
+    const nextPath = PATIENT_TAB_PATHS[next];
+    if (window.location.pathname !== nextPath) window.history.pushState({}, '', nextPath);
+    setTab(next);
+  }
 
   async function transition(task: PatientTask, status: TaskStatus) {
     setPendingTaskId(task.task_id);
@@ -119,7 +150,7 @@ export default function PatientViewPage({
         </div>
         <nav className="patient-navigation" aria-label="Patient experience sections">
           {navigation.map(([key, label, icon]) => (
-            <button key={key} className={tab === key ? 'active' : ''} aria-current={tab === key ? 'page' : undefined} onClick={() => setTab(key)}>
+            <button key={key} className={tab === key ? 'active' : ''} aria-current={tab === key ? 'page' : undefined} onClick={() => navigateTab(key)}>
               <span aria-hidden="true">{icon}</span>{label}
             </button>
           ))}
@@ -165,16 +196,16 @@ export default function PatientViewPage({
                 <div className="patient-checkin-icon" aria-hidden="true">✦</div>
                 <h2>How are you feeling today?</h2>
                 <p>Share what has changed. Your update will be organised for your care team without changing your clinical plan.</p>
-                <button onClick={() => setTab('checkin')}>Start a Check-in <span aria-hidden="true">→</span></button>
+                <button onClick={() => navigateTab('checkin')}>Start a Check-in <span aria-hidden="true">→</span></button>
               </section>
             </div>
 
             <section className="patient-surface patient-instructions-preview">
-              <div className="patient-surface-head"><div><p>Patient-facing information</p><h2>Instructions from your care team</h2></div><button onClick={() => setTab('summaries')}>View all →</button></div>
+              <div className="patient-surface-head"><div><p>Patient-facing information</p><h2>Instructions from your care team</h2></div><button onClick={() => navigateTab('summaries')}>View all →</button></div>
               {view.visit_summaries.summaries.length === 0 ? <div className="patient-empty-compact">No visit summaries are available yet.</div> : (
                 <div className="patient-instruction-list">
                   {view.visit_summaries.summaries.slice(0, 2).map((summary) => (
-                    <button key={summary.artifact_id} onClick={() => setTab('summaries')}><span>{fmtLongDate(summary.event_time)}</span><div><strong>Care instruction</strong><p>{summary.instruction}</p></div><span aria-hidden="true">›</span></button>
+                    <button key={summary.artifact_id} onClick={() => navigateTab('summaries')}><span>{fmtLongDate(summary.event_time)}</span><div><strong>Care instruction</strong><p>{summary.instruction}</p></div><span aria-hidden="true">›</span></button>
                   ))}
                 </div>
               )}
@@ -185,6 +216,7 @@ export default function PatientViewPage({
         {tab === 'care' && (
           <>
             <header className="patient-view-heading"><p>Your care</p><h1>Care Plan</h1><span>Start your assigned actions, report when you are done, and wait for the clinic to confirm completion.</span></header>
+            <div className="patient-task-authority-note"><strong>What “Report done” means</strong><span>Your report tells the clinic you finished the action. It does not mark the task clinically complete until the clinic confirms it.</span></div>
             <div className="patient-care-grid">
               {taskGroups.map(({ key, label }) => (
                 <section className={`patient-surface patient-care-group patient-care-${key}`} key={key}>
@@ -203,7 +235,7 @@ export default function PatientViewPage({
             patientId={patientId}
             roleKey={roleKey}
             displayName={view.display_name}
-            onBack={() => setTab('today')}
+            onBack={() => navigateTab('today')}
           />
         )}
 

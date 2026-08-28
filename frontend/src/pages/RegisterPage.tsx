@@ -87,6 +87,7 @@ export default function RegisterPage() {
             <p className="muted">Accept your clinic invite</p>
           </div>
         </div>
+        <div className="auth-security-note"><strong>Invite-bound registration</strong><span>Your clinic, role and patient link cannot be changed by this form.</span></div>
 
         {state.kind === 'loading' && <p className="muted">Checking invite…</p>}
 

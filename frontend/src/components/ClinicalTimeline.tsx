@@ -41,11 +41,12 @@ function EventButton({ event, onOpen }: { event: Event; onOpen: (event: Event) =
     <button className="timeline-event-button" onClick={() => onOpen(event)}>
       <span className="timeline-node" aria-hidden="true" />
       <span className="timeline-event-copy">
+        <span className="timeline-event-kind">Medical Event</span>
         <strong>{eventLabel(event)}</strong>
         <small>{formatDateTime(event.started_at)}</small>
       </span>
       <span className="timeline-artifact-count">{event.artifact_count} artifacts</span>
-      <span aria-hidden="true">→</span>
+      <span className="timeline-open-event">Open <span aria-hidden="true">→</span></span>
     </button>
   );
 }
@@ -67,6 +68,10 @@ export default function ClinicalTimeline({
           <p className="view-subtitle">Real-world clinical Events, ordered by when they happened.</p>
         </div>
         <span className="record-count">{events.length} events</span>
+      </div>
+      <div className="timeline-boundary-note">
+        <strong>Event timeline</strong>
+        <span>Artifacts, Comments and Versions stay inside the Event they belong to.</span>
       </div>
       {items.length === 0 && (
         <div className="empty-state">

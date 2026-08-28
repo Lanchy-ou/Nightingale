@@ -43,6 +43,7 @@ export default function ClinicianSidebar({
 
       <button
         className={`sidebar-dashboard ${selectedPatientId === null ? 'active' : ''}`}
+        aria-current={selectedPatientId === null ? 'page' : undefined}
         onClick={onDashboard}
       >
         <span aria-hidden="true">⌂</span> Clinic dashboard
@@ -67,6 +68,7 @@ export default function ClinicianSidebar({
           <button
             key={patient.patient_id}
             className={patient.patient_id === selectedPatientId ? 'active' : ''}
+            aria-current={patient.patient_id === selectedPatientId ? 'page' : undefined}
             onClick={() => onSelectPatient(patient.patient_id)}
           >
             <span className="patient-list-avatar">{patient.name.slice(0, 1).toUpperCase()}</span>

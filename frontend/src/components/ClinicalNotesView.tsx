@@ -71,8 +71,15 @@ export default function ClinicalNotesView({
           <h2 id="notes-heading">Clinical Notes</h2>
           <p className="view-subtitle">A readable index of authored notes. Each note remains attached to its original Event and version history.</p>
         </div>
-        <span className="record-count">{notes.length} notes</span>
+        <div className="view-title-actions">
+          <div className="notes-authority-legend" aria-label="Note author authority">
+            <span className="badge clinician">CLINICIAN</span>
+            <span className="badge staff">STAFF</span>
+          </div>
+          <span className="record-count">{notes.length} notes</span>
+        </div>
       </div>
+      <div className="notes-boundary-note"><strong>Human-authored record</strong><span>AI summaries and raw sources remain separate Artifacts inside their Events.</span></div>
       {loading && <div className="loading-card">Loading patient notes and discussions…</div>}
       {error && <div className="form-error">Could not load Notes: {error}</div>}
       {!loading && !error && notes.length === 0 && comments.length === 0 && (

@@ -50,7 +50,7 @@ function routePath(route: ClinicalRoute): string {
 }
 
 function patientTabLabel(tab: PatientTab): string {
-  if (tab === 'glance') return 'Clinical Overview';
+  if (tab === 'glance') return 'Glance';
   return tab[0].toUpperCase() + tab.slice(1);
 }
 
@@ -61,7 +61,7 @@ function ContextEmpty({ role }: { role?: string }) {
       <div className="context-empty-icon" aria-hidden="true">↗</div>
       <p className="eyebrow">{staff ? 'Clinical support context' : 'Review context'}</p>
       <h3>{staff ? 'Open an Event or source' : 'Select supporting detail'}</h3>
-      <p>{staff ? 'Review evidence, add Staff Notes, coordinate Tasks, and collaborate without changing clinician-authored assessment.' : 'Open an Overview source or Event artifact without losing your place in the patient record.'}</p>
+      <p>{staff ? 'Review evidence, add Staff Notes, coordinate Tasks, and collaborate without changing clinician-authored assessment.' : 'Open a Glance source or Event artifact without losing your place in the patient record.'}</p>
       <div className="context-capabilities" aria-label="Available context tools">
         <span>Sources</span>{staff && <span>Staff Notes</span>}<span>Comments</span><span>History</span>
       </div>
@@ -157,6 +157,7 @@ function PatientWorkspace({
   const [eventContext, setEventContext] = useState<EventContextState>({ artifacts: [], selectedArtifact: null });
   const [initialArtifactId, setInitialArtifactId] = useState<string | null>(null);
   const [completion, setCompletion] = useState<DoctorConsultResult | null>(null);
+  const [contextDrawerOpen, setContextDrawerOpen] = useState(false);
   // Glance "Open Task" target: lands on the SPECIFIC task in the Tasks view.
   const [taskFocusId, setTaskFocusId] = useState<string | null>(null);
 
@@ -204,6 +205,7 @@ function PatientWorkspace({
     setInitialArtifactId(null);
     setTaskFocusId(null);
     setCompletion(null);
+    setContextDrawerOpen(false);
     setContextTab(identity.role === 'clinician' ? 'copilot' : 'source');
   }, [patientId, identity.role, identity.user_id]);
 
@@ -235,12 +237,14 @@ function PatientWorkspace({
     setProvenance(null);
     setCopilotEvidence(null);
     setContextTab(identity.role === 'clinician' ? 'copilot' : 'source');
+    setContextDrawerOpen(false);
     onNavigate({ kind: 'patient', patientId, mode: tab });
   }
 
   function openEvent(event: Event, artifactId: string | null = null) {
     setInitialArtifactId(artifactId);
     setContextTab('comments');
+    setContextDrawerOpen(false);
     onNavigate({ kind: 'patient', patientId, mode: 'event', eventId: event.event_id });
   }
 
@@ -249,6 +253,7 @@ function PatientWorkspace({
     setProvenance(null);
     setCopilotEvidence(null);
     setContextTab(identity.role === 'clinician' ? 'copilot' : 'source');
+    setContextDrawerOpen(false);
     onNavigate({ kind: 'patient', patientId, mode: 'tasks' });
   }
 
@@ -256,6 +261,7 @@ function PatientWorkspace({
     setProvenance(next);
     setCopilotEvidence(null);
     setContextTab('source');
+    setContextDrawerOpen(true);
   }
 
   function handleOpenCopilotEvidence(next: CopilotEvidence) {
@@ -263,6 +269,7 @@ function PatientWorkspace({
     setProvenance(null);
     setInitialArtifactId(next.artifact_id);
     setContextTab('source');
+    setContextDrawerOpen(true);
     onNavigate({ kind: 'patient', patientId, mode: 'event', eventId: next.event_id });
   }
 
@@ -278,6 +285,7 @@ function PatientWorkspace({
       .sort((a, b) => a.started_at.localeCompare(b.started_at)));
     setRefreshKey((value) => value + 1);
     setContextTab('comments');
+    setContextDrawerOpen(false);
     onNavigate({ kind: 'patient', patientId, mode: 'event', eventId: result.event.event_id });
   }
 
@@ -288,6 +296,7 @@ function PatientWorkspace({
     setEvents(nextEvents);
     setRefreshKey((value) => value + 1);
     setContextTab('comments');
+    setContextDrawerOpen(false);
     onNavigate({ kind: 'patient', patientId, mode: 'event', eventId: capture.event_id });
   }
 
@@ -307,10 +316,11 @@ function PatientWorkspace({
   function openContextMode() {
     if (provenance || copilotEvidence) setContextTab('source');
     else setContextTab(selectedEvent ? 'comments' : 'source');
+    setContextDrawerOpen(true);
   }
 
   return (
-    <div className="workspace-area" style={workspaceStyle}>
+    <div className={`workspace-area ${contextDrawerOpen ? 'context-drawer-open' : ''}`} style={workspaceStyle}>
       <main className="workspace-main">
         <header className="workspace-patient-header">
           <div className="patient-identity">
@@ -321,6 +331,14 @@ function PatientWorkspace({
             </div>
           </div>
           <div className="patient-primary-actions">
+            <button
+              className="secondary-button context-rail-toggle"
+              aria-expanded={contextDrawerOpen}
+              aria-controls="clinical-context-rail"
+              onClick={openContextMode}
+            >
+              Context
+            </button>
             {identity.role === 'staff' && <div className="workspace-role-chip"><strong>Nurse workspace</strong><span>Staff Notes · Tasks · collaboration</span></div>}
             {identity.role === 'clinician' && <button
               className="primary-button"
@@ -431,14 +449,16 @@ function PatientWorkspace({
         )}
       </main>
 
+      <button className="context-drawer-backdrop" aria-label="Close clinical context" onClick={() => setContextDrawerOpen(false)} />
       <PanelResizer label="Resize clinical context" value={contextWidth} min={280} max={520} direction={-1} onChange={onContextWidthChange} />
-      <aside className="context-panel" aria-label="Clinical context">
+      <aside id="clinical-context-rail" className="context-panel" aria-label="Clinical context">
         <div className="context-panel-head context-rail-head">
           <div>
             <p className="eyebrow">{contextTab === 'copilot' ? 'Evidence-bound assistant' : 'Review context'}</p>
             <h2>{contextTab === 'copilot' ? 'Clinical Copilot' : selectedArtifact ? artifactLabel(selectedArtifact) : 'Patient context'}</h2>
             <span className="context-patient-scope">{patient.name} only</span>
           </div>
+          <button className="context-rail-close" aria-label="Close clinical context" onClick={() => setContextDrawerOpen(false)}>✕</button>
         </div>
         {identity.role === 'clinician' && (
           <nav className="context-mode-tabs" aria-label="Clinical side panel modes">
@@ -460,7 +480,7 @@ function PatientWorkspace({
           {contextTab === 'source' && provenance && (
             <ProvenancePanel
               provenance={provenance}
-              onClose={() => { setProvenance(null); setContextTab(selectedEvent ? 'comments' : identity.role === 'clinician' ? 'copilot' : 'source'); }}
+              onClose={() => { setProvenance(null); setContextDrawerOpen(false); setContextTab(selectedEvent ? 'comments' : identity.role === 'clinician' ? 'copilot' : 'source'); }}
               onFocusEvent={(eventId) => onNavigate({ kind: 'patient', patientId, mode: 'event', eventId })}
             />
           )}
@@ -496,8 +516,8 @@ export default function ClinicianWorkspacePage({ roleKey, onLogout }: { roleKey:
   const [patients, setPatients] = useState<Patient[]>([]);
   const [route, setRoute] = useState<ClinicalRoute>(() => parseRoute());
   const [error, setError] = useState<string | null>(null);
-  const [sidebarWidth, setSidebarWidth] = useState(216);
-  const [contextWidth, setContextWidth] = useState(320);
+  const [sidebarWidth, setSidebarWidth] = useState(208);
+  const [contextWidth, setContextWidth] = useState(380);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -555,23 +575,23 @@ export default function ClinicianWorkspacePage({ roleKey, onLogout }: { roleKey:
       />
       <PanelResizer label="Resize patient navigation" value={sidebarWidth} min={196} max={310} direction={1} onChange={setSidebarWidth} />
       {route.kind === 'dashboard' ? (
-        <div className="workspace-area dashboard-area" style={workspaceStyle}>
+        <div className="workspace-area dashboard-area dashboard-context-collapsed" style={workspaceStyle}>
           <main className="workspace-main clinic-dashboard">
-            <p className="eyebrow">{identity.clinic_name}</p>
-            <h1>{identity.role === 'staff' ? 'Nurse workspace' : 'Clinic dashboard'}</h1>
-            <p className="dashboard-lead">{identity.role === 'staff' ? 'Open a clinic patient to review evidence, coordinate care, and record Nurse Consults.' : 'Choose an authorized clinic patient to open their longitudinal record.'}</p>
+            <div className="dashboard-heading-row">
+              <div><p className="eyebrow">{identity.clinic_name}</p><h1>{identity.role === 'staff' ? 'Nurse workspace' : 'Clinic dashboard'}</h1><p className="dashboard-lead">{identity.role === 'staff' ? 'Open a clinic patient to review evidence, coordinate care, and record Nurse Consults.' : 'Choose an authorized clinic patient to open their longitudinal record.'}</p></div>
+              <span className="dashboard-role-label">{identity.professional_title ?? identity.role}</span>
+            </div>
+            <div className="dashboard-scope-note"><strong>Clinic-scoped access</strong><span>{patients.length} authorized patient{patients.length === 1 ? '' : 's'} · enforced by the server</span></div>
             <div className="dashboard-patient-grid">
               {patients.map((patient) => (
                 <button key={patient.patient_id} onClick={() => navigate({ kind: 'patient', patientId: patient.patient_id, mode: 'glance' })}>
                   <span className="patient-list-avatar">{patient.name.slice(0, 1)}</span>
-                  <span><strong>{patient.name}</strong><small>{patient.patient_id}</small></span>
-                  <span aria-hidden="true">→</span>
+                  <span><strong>{patient.name}</strong><small>{patient.patient_id} · Clinic patient</small></span>
+                  <span className="dashboard-open-record">Open record <i aria-hidden="true">→</i></span>
                 </button>
               ))}
             </div>
           </main>
-          <PanelResizer label="Resize clinical context" value={contextWidth} min={280} max={520} direction={-1} onChange={setContextWidth} />
-          <aside className="context-panel"><ContextEmpty role={identity.role ?? undefined} /></aside>
         </div>
       ) : (
         <PatientWorkspace

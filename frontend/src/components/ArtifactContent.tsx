@@ -64,7 +64,7 @@ export default function ArtifactContent({
     return (
       <div className="artifact-content">
         {content.segments.map((seg: any) => (
-          <div key={seg.index} className="line">
+          <div key={seg.index} className={`line transcript-line speaker-${String(seg.speaker).toLowerCase().replace(/[^a-z0-9_-]/g, '-')}`}>
             <span className="speaker">{seg.speaker}</span>{' '}
             <HighlightedText text={seg.text} offset={matchOffset(s, 'segment', seg.index)} markRef={markRef} />
           </div>
@@ -102,7 +102,7 @@ export default function ArtifactContent({
     return (
       <div className="artifact-content">
         {content.messages.map((m: any, i: number) => (
-          <div key={m.id ?? i} className="line">
+          <div key={m.id ?? i} className={`line message-line speaker-${String(m.speaker).toLowerCase().replace(/[^a-z0-9_-]/g, '-')}`}>
             <span className="speaker">{m.speaker}</span>{' '}
             <HighlightedText text={m.text} offset={messageOffset(s, m, i + 1)} markRef={markRef} />
           </div>
