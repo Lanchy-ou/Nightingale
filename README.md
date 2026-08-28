@@ -202,7 +202,7 @@ In another terminal:
 
 ```powershell
 Set-Location frontend
-npm install
+npm ci
 $env:VITE_DEMO_AUTH='true'
 npm run dev
 ```
@@ -283,8 +283,11 @@ Clinical and patient pages poll capability metadata every ten seconds. When Voic
 
 ## Verification commands
 
+Run verification in a fresh terminal. Do not inherit the Demo Provider override:
+
 ```powershell
 Set-Location backend
+Remove-Item Env:NANTINGALE_LLM_PROVIDER -ErrorAction SilentlyContinue
 .venv\Scripts\python.exe -m pytest
 .venv\Scripts\python.exe -m pytest tests\security tests\integration -q
 .venv\Scripts\python.exe scripts\evaluate_transcripts.py --validate-corpus

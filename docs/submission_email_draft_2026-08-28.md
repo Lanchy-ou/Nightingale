@@ -1,6 +1,6 @@
 # Nightingale Submission Email Draft — 2026-08-28
 
-> Status: `NEEDS_OWNER_INPUT` for the submitter's exact name and the final verified Demo Video/attachment links. This draft has not been sent.
+> Status: `SUPERSEDED`. The owner reported that an earlier email contained the wrong repository link and that a corrected follow-up email was sent. This file remains a local draft record; the send itself was not performed or independently verified by the agent.
 
 ## Addressing
 
@@ -18,7 +18,7 @@ Nightingale is a synthetic-data prototype for a shared longitudinal patient reco
 
 Submission items:
 
-- Repository: `https://github.com/Lanchy-ou/Nantingale`
+- Repository: `https://github.com/Lanchy-ou/Nightingale`
 - Technical Brief: attach `Nightingale_Technical_Brief.pdf`
 - Demo Video: add only after the final file/link has been played end to end and access-checked
 - Final evidence manifest: `docs/final_submission_evidence_2026-08-28.md`

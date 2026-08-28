@@ -217,21 +217,20 @@ No CA trust-store installation or TLS bypass was performed. Temporary SQLCipher 
 
 ## 12. Repository/link/video/access checks
 
-- Repository configured remote: `https://github.com/Lanchy-ou/Nantingale`.
-- Unauthenticated HTTP check returned **404**, and public search did not discover this repository. Therefore recipient/submission-context access is **not verified** and repository visibility/access must not be changed without owner authorization.
+- Initial E5 check: the configured remote was `https://github.com/Lanchy-ou/Nantingale`; unauthenticated HTTP returned **404**, and public search did not discover the repository at that time.
+- Current update: the canonical repository is `https://github.com/Lanchy-ou/Nightingale`. An unauthenticated GitHub page now identifies it as **Public**, and public `main` resolves to `8fc747ccf4879cc1da13d6d12a7eb60caaf04866`.
 - Local submission zip: generated only after the final commit; upload/link remains owner-controlled.
 - Demo Video: **no file or link is present**. Full playback, duration, resolution, audio, journey coverage, and external access are `NOT_RUN`.
-- Email: draft prepared but not sent.
-- Upload/share/publication/visibility change: not performed and not authorized.
+- Email: the owner reported that an earlier email contained the wrong repository link and that a corrected follow-up email was sent. The send was owner-performed and was not independently verified by repository tooling.
+- Initial E5 check: no upload, sharing, publication, or visibility change was agent-performed or authorized. Current update: the owner made the repository public; the agent only verified the resulting public page.
 
 ## 13. NEEDS_OWNER_INPUT
 
 1. Exact submitter name for the required subject and signature.
 2. Actual 6–9 minute Demo Video file or link, recorded in product session mode and played from start to finish.
 3. Verification that the video visibly includes Patient Multi-turn Check-in, clinician review, and exact provenance.
-4. A repository or zip delivery path accessible to the intended recipient from the submitter's intended account/context.
-5. Final attachment/link check from that account/context.
-6. Separate explicit authorization before sending email, uploading/sharing files, publishing the repository, or changing access/visibility.
+4. Final attachment and Demo Video link check from the submitter's intended account/context.
+5. Separate explicit authorization before any further agent-performed email, upload, sharing, publication, or access/visibility change.
 
 ## 14. Final Git and verification attestation
 
