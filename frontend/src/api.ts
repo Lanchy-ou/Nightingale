@@ -2,6 +2,7 @@ import type {
   Artifact,
   AdminAccessAudit,
   AdminUser,
+  AdminSystemSettings,
   ArtifactVersion,
   AuditLog,
   Comment,
@@ -33,6 +34,7 @@ import type {
   VoiceCapabilities,
   VoiceCaptureMode,
   VoiceCaptureRecord,
+  VoiceModelStatus,
   VoiceReviewedSegment,
 } from './types';
 
@@ -153,6 +155,14 @@ function patch<T>(path: string, body: unknown): Promise<T> {
   });
 }
 
+function del<T>(path: string, body: unknown): Promise<T> {
+  return request<T>(path, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', ...headers() },
+    body: JSON.stringify(body),
+  });
+}
+
 function putAudio<T>(
   path: string,
   audio: Blob,
@@ -205,6 +215,28 @@ export const api = {
     ),
   getAdminAccessAudit: (signal?: AbortSignal) =>
     get<AdminAccessAudit[]>('/api/admin/access-audit', signal),
+  getAdminSystemSettings: (signal?: AbortSignal) =>
+    get<AdminSystemSettings>('/api/admin/system-settings', signal),
+  updateAdminSystemSettings: (
+    expectedVersion: number,
+    updates: { ai_mode?: 'local' | 'deepseek'; voice_enabled?: boolean },
+  ) => patch<AdminSystemSettings>('/api/admin/system-settings', {
+    expected_version: expectedVersion,
+    ...updates,
+  }),
+  storeDeepSeekKey: (expectedVersion: number, apiKey: string) =>
+    post<AdminSystemSettings>('/api/admin/system-settings/deepseek-key', {
+      expected_version: expectedVersion,
+      api_key: apiKey,
+    }),
+  removeDeepSeekKey: (expectedVersion: number) =>
+    del<AdminSystemSettings>('/api/admin/system-settings/deepseek-key', {
+      expected_version: expectedVersion,
+    }),
+  prepareVoiceModel: () =>
+    post<VoiceModelStatus>('/api/admin/system-settings/voice-model', {}),
+  getVoiceModelStatus: (signal?: AbortSignal) =>
+    get<VoiceModelStatus>('/api/admin/system-settings/voice-model/status', signal),
 
   getCurrentIdentity: (signal?: AbortSignal) => get<CurrentIdentity>(`/api/auth/session`, signal),
   getClinicPatients: (signal?: AbortSignal) => get<Patient[]>(`/api/patients`, signal),

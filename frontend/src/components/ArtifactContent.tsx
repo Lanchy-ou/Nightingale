@@ -42,6 +42,12 @@ function sectionLabel(key: string): string {
   return labels[key] ?? key.replace(/_/g, ' ').replace(/^./, (letter) => letter.toUpperCase());
 }
 
+function generationLabel(method: string | null | undefined, degraded: boolean | undefined): string {
+  if (degraded) return 'Safe fallback';
+  if (method === 'deepseek') return 'DeepSeek AI';
+  return 'Local deterministic';
+}
+
 export default function ArtifactContent({
   artifact,
   span,
@@ -87,7 +93,7 @@ export default function ArtifactContent({
             <h4>Nightingale AI questions and acknowledgements</h4>
             {aiMessages.map((message: any) => {
               const position = content.messages.indexOf(message) + 1;
-              return <div key={message.id ?? position} className="line checkin-ai-line"><span className="speaker">Nightingale AI{message.question_type ? ` · ${String(message.question_type).replace(/_/g, ' ')}` : ''}</span>{' '}<HighlightedText text={message.text} offset={messageOffset(s, message, position)} markRef={markRef} /></div>;
+              return <div key={message.id ?? position} className="line checkin-ai-line"><span className="speaker">{generationLabel(message.generation_method, message.degraded)}{message.question_type ? ` · ${String(message.question_type).replace(/_/g, ' ')}` : ''}</span>{' '}<HighlightedText text={message.text} offset={messageOffset(s, message, position)} markRef={markRef} /></div>;
             })}
           </section>
         </div>

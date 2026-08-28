@@ -91,3 +91,5 @@ class CopilotResponse(BaseModel):
     evidence: list[CopilotEvidenceOut]
     limitations: list[str]
     draft: CopilotDraftOut | None = None
+    generation_method: str = "unknown"
+    degraded: bool = False

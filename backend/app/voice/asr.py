@@ -14,6 +14,7 @@ from .contracts import ASRResult, ASRSegment, AuthorizedRecording
 FASTER_WHISPER_MODEL = "Systran/faster-whisper-base"
 FASTER_WHISPER_MODEL_REVISION = "a80717a3a48b1b28aa687bca146cb7301feae1b1"
 _REQUIRED_MODEL_FILES = {"config.json", "model.bin", "tokenizer.json"}
+DEFAULT_ASR_MODEL_PATH = Path(__file__).resolve().parents[2] / ".models" / "faster-whisper-base"
 
 
 class ASRClient(Protocol):
@@ -26,7 +27,7 @@ def configured_asr_provider() -> str:
 
 def configured_model_path() -> Path | None:
     raw = os.environ.get("NANTINGALE_ASR_MODEL_PATH", "").strip()
-    return Path(raw).expanduser().resolve() if raw else None
+    return Path(raw).expanduser().resolve() if raw else DEFAULT_ASR_MODEL_PATH.resolve()
 
 
 def asr_runtime_ready(provider: str | None = None) -> bool:

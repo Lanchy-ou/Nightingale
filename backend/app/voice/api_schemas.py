@@ -17,6 +17,8 @@ class VoiceCapabilitiesOut(BaseModel):
     provider: str
     asr_ready: bool
     allowed_modes: list[str]
+    eligible_modes: list[str]
+    disabled_reason: str | None
     accepted_mime_types: list[str]
     max_bytes: int
     max_duration_ms: int

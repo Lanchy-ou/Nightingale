@@ -14,6 +14,12 @@ import VoiceCapture from './VoiceCapture';
 
 type PendingMessage = { id: string; intent: PatientCheckInIntent; text: string };
 
+function aiLabel(method: string | null, degraded: boolean): string {
+  if (degraded) return 'Safe fallback';
+  if (method === 'deepseek') return 'DeepSeek AI';
+  return 'Local deterministic';
+}
+
 function newId(prefix: string): string {
   const value = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
     ? crypto.randomUUID()
@@ -282,7 +288,7 @@ export default function PatientCheckIn({
                   className={`patient-checkin-bubble ${message.role === 'patient' ? 'patient' : 'ai'}`}
                   key={message.message_id}
                 >
-                  <small>{message.role === 'patient' ? 'Patient' : 'Nightingale AI'}</small>
+                  <small>{message.role === 'patient' ? 'Patient' : aiLabel(message.generation_method, message.degraded)}</small>
                   <p>{message.text}</p>
                   {message.role === 'ai' && message.degraded && <em>Prepared with the safe fallback</em>}
                 </div>

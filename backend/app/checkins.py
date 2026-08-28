@@ -7,7 +7,6 @@ safety, state, question limits, authorization, and final provenance.
 """
 from __future__ import annotations
 
-import os
 import re
 from datetime import datetime
 
@@ -46,6 +45,7 @@ from .schemas import (
     CheckInSummaryResult,
     CheckInTurnResult,
 )
+from .system_settings import effective_ai_config
 
 MAX_CLARIFICATION_QUESTIONS = 4
 ACTIVE_STATUSES = {"active", "awaiting_confirmation"}
@@ -96,10 +96,6 @@ _UNSAFE_PROVIDER_LANGUAGE = re.compile(
 )
 
 
-def _provider_name() -> str:
-    return os.environ.get("NANTINGALE_LLM_PROVIDER", "deepseek")
-
-
 def _provider_meta(provider_name: str) -> tuple[str | None, str | None]:
     if provider_name == "deepseek":
         return "deepseek", "deepseek-v4-flash"
@@ -133,6 +129,7 @@ def _next_sequence(db: Session, session_id: str) -> int:
 
 
 def _message_payload(message: PatientCheckInMessage) -> dict:
+    generation = message.generation_metadata or {}
     return {
         "id": message.message_id,
         "speaker": message.role,
@@ -143,6 +140,8 @@ def _message_payload(message: PatientCheckInMessage) -> dict:
         "referenced_patient_message_ids": message.referenced_patient_message_ids,
         "response_to_message_id": message.response_to_message_id,
         "created_at": message.created_at.isoformat(),
+        "generation_method": generation.get("method"),
+        "degraded": bool(generation.get("degraded", False)),
     }
 
 
@@ -470,7 +469,13 @@ def _bounded_turn(
         ],
     }
     redaction = redact_content(context, _known_names(db, patient))
-    provider_name = _provider_name()
+    config = effective_ai_config(db)
+    provider_name = config.provider
+    client = (
+        build_client(provider_name)
+        if config.api_key is None
+        else build_client(provider_name, api_key=config.api_key)
+    )
     fallback_reason = None
     if _ADVICE_REQUEST.search(patient_message.text):
         # Medical-advice requests never depend on provider wording. A fixed
@@ -479,9 +484,7 @@ def _bounded_turn(
         fallback_reason = "bounded_medical_request"
     else:
         try:
-            result = build_client(provider_name).checkin_turn(
-                redaction.redacted, session.clarification_count
-            )
+            result = client.checkin_turn(redaction.redacted, session.clarification_count)
             patient_ids = {row.message_id for row in rows if row.role == "patient"}
             if not set(result.referenced_patient_message_ids).issubset(patient_ids):
                 raise InvalidOutputError("provider referenced a non-patient message")
@@ -891,10 +894,16 @@ def _summary_output(
         ]
     }
     redaction = redact_content(patient_content, _known_names(db, patient))
-    provider_name = _provider_name()
+    config = effective_ai_config(db)
+    provider_name = config.provider
+    client = (
+        build_client(provider_name)
+        if config.api_key is None
+        else build_client(provider_name, api_key=config.api_key)
+    )
     fallback_reason = None
     try:
-        result = build_client(provider_name).checkin_summary(redaction.redacted)
+        result = client.checkin_summary(redaction.redacted)
         patient_ids = {message.message_id for message in patient_messages}
         if set(result.referenced_patient_message_ids) != patient_ids:
             raise InvalidOutputError("summary must reference every patient message and no AI message")

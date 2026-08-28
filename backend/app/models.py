@@ -80,6 +80,14 @@ AUDIT_ACTIONS = (
     "checkin_start",
     "checkin_message",
     "checkin_state",
+    # Device-level Admin settings. Details are metadata-only and never keys.
+    "system_ai_mode_changed",
+    "system_key_rotated",
+    "system_key_removed",
+    "system_voice_changed",
+    "voice_model_started",
+    "voice_model_completed",
+    "voice_model_failed",
 )
 
 TASK_STATUSES = ("open", "in_progress", "reported_done", "completed", "cancelled")
@@ -91,6 +99,24 @@ class Clinic(Base):
 
     clinic_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+
+
+class SystemSettings(Base):
+    """One device-level settings row; secrets live outside the database."""
+
+    __tablename__ = "system_settings"
+
+    settings_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    deployment_id: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    ai_mode: Mapped[str] = mapped_column(String(32), nullable=False, default="local")
+    voice_enabled: Mapped[bool] = mapped_column(nullable=False, default=False)
+    deepseek_secret_ref: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    deepseek_key_suffix: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    deepseek_key_source: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    deepseek_verified_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    updated_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
 
 class User(Base):
@@ -164,6 +190,14 @@ class Artifact(Base):
     ingestion_key: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)
     # Metadata-only generation record for AI artifacts (never prompt/raw text).
     generation_metadata: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+    @property
+    def generation_method(self) -> str | None:
+        return (self.generation_metadata or {}).get("method")
+
+    @property
+    def degraded(self) -> bool:
+        return bool((self.generation_metadata or {}).get("degraded", False))
 
 
 class ArtifactStorageState(Base):

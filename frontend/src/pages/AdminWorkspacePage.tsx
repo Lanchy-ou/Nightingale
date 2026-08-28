@@ -2,8 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { ApiError, api } from '../api';
 import type { AdminAccessAudit, AdminUser, CurrentIdentity } from '../types';
 import AdminInvitesPage from './AdminInvitesPage';
+import AdminSettingsPage from './AdminSettingsPage';
 
-type AdminTab = 'overview' | 'invites' | 'audit';
+type AdminTab = 'overview' | 'invites' | 'audit' | 'settings';
 
 function formatDate(value: string | null): string {
   if (!value) return '—';
@@ -122,6 +123,7 @@ export default function AdminWorkspacePage({
           <button className={tab === 'overview' ? 'active' : ''} onClick={() => selectTab('overview')}>Overview</button>
           <button className={tab === 'invites' ? 'active' : ''} onClick={() => selectTab('invites')}>Invites</button>
           <button className={tab === 'audit' ? 'active' : ''} onClick={() => selectTab('audit')}>Access &amp; security audit</button>
+          <button className={tab === 'settings' ? 'active' : ''} onClick={() => selectTab('settings')}>AI &amp; Voice settings</button>
         </nav>
         <p className="scope-note">{identity.clinic_name}<br />Clinic-scoped oversight · server enforced</p>
         <button className="sidebar-logout" onClick={onLogout}>Logout</button>
@@ -131,7 +133,7 @@ export default function AdminWorkspacePage({
         <header className="admin-workspace-head">
           <div>
             <p className="eyebrow">Identity and access oversight</p>
-            <h1>{tab === 'overview' ? 'Admin Overview' : tab === 'invites' ? 'Clinic Invites' : 'Access & Security Audit'}</h1>
+            <h1>{tab === 'overview' ? 'Admin Overview' : tab === 'invites' ? 'Clinic Invites' : tab === 'audit' ? 'Access & Security Audit' : 'AI & Voice Settings'}</h1>
             <p>{identity.clinic_name} · Administrative controls never grant clinical authoring authority.</p>
           </div>
           <span className="admin-role-badge">Admin</span>
@@ -195,6 +197,7 @@ export default function AdminWorkspacePage({
             )}
           </section>
         )}
+        {!loading && tab === 'settings' && <AdminSettingsPage />}
       </main>
     </div>
   );

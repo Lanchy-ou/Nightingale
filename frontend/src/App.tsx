@@ -9,6 +9,13 @@ import RegisterPage from './pages/RegisterPage';
 
 const PATIENT_ID = 'pat_001'; // staff/admin pre-C2 minimal demo path
 
+function adminTabFromPath(path: string): 'overview' | 'invites' | 'audit' | 'settings' {
+  if (path.startsWith('/admin/invites')) return 'invites';
+  if (path.startsWith('/admin/audit')) return 'audit';
+  if (path.startsWith('/admin/settings')) return 'settings';
+  return 'overview';
+}
+
 // ---------------------------------------------------------------------------
 // Development demo mode. Only active when VITE_DEMO_AUTH=true (the backend
 // additionally requires NANTINGALE_DEMO_AUTH=true). The role toolbar is never
@@ -20,7 +27,12 @@ function DemoApp() {
   const roleKey = `${selected.role}:${selected.userId}`;
 
   function changeRole(i: number) {
-    setRole(ROLE_USERS[i].userId, ROLE_USERS[i].role);
+    const next = ROLE_USERS[i];
+    setRole(next.userId, next.role);
+    const nextPath = next.role === 'clinician' || next.role === 'staff'
+      ? '/clinical'
+      : next.role === 'admin' ? '/admin' : '/patient';
+    window.history.replaceState({}, '', nextPath);
     setRoleIndex(i);
   }
 
@@ -50,6 +62,8 @@ function DemoApp() {
         ) : (
           <AdminWorkspacePage
             identity={{ user_id: selected.userId, role: 'admin', clinic_id: 'clinic_001', patient_id: null, display_name: 'Nightingale Admin', professional_title: null, clinic_name: 'Nightingale Demo Clinic', authenticated: true }}
+            initialTab={adminTabFromPath(window.location.pathname)}
+            onNavigate={(tab) => window.history.pushState({}, '', tab === 'overview' ? '/admin' : `/admin/${tab}`)}
             onLogout={() => undefined}
           />
         )}
@@ -168,7 +182,7 @@ function SessionApp() {
   }
 
   if (role === 'admin') {
-    const initialTab = path.startsWith('/admin/invites') ? 'invites' : path.startsWith('/admin/audit') ? 'audit' : 'overview';
+    const initialTab = adminTabFromPath(path);
     return (
       <div className="app" key={productKey}>
         <div className="product-root">

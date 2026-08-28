@@ -27,6 +27,7 @@ from .api import (
     patient_view,
     patients,
     sources,
+    system_settings,
     tasks,
     transcripts,
     voice,
@@ -84,6 +85,7 @@ app.include_router(checkins.router)
 app.include_router(copilot.router)
 app.include_router(audit.router)
 app.include_router(sources.router)
+app.include_router(system_settings.router)
 app.include_router(tasks.router)
 app.include_router(transcripts.router)
 app.include_router(voice.router)

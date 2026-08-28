@@ -456,4 +456,6 @@ def answer_query(
         evidence=[item.out() for item in evidence_list],
         limitations=limitations,
         draft=draft,
+        generation_method=provider_name,
+        degraded=status != "ok",
     )

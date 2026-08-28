@@ -21,6 +21,11 @@ type LifecycleItem = {
   artifact?: Artifact;
 };
 
+function systemAuthority(artifact: Artifact): string {
+  const method = artifact.degraded ? 'Safe fallback' : artifact.generation_method === 'deepseek' ? 'DeepSeek AI' : 'Local deterministic';
+  return `${method} · system-generated · not a clinician assessment`;
+}
+
 const AUDIT_LABELS: Record<string, string> = {
   conflict: 'Edit conflict recorded',
   edit_note: 'Note updated',
@@ -195,7 +200,7 @@ export default function ClinicalEventDetail({
                     <h3>{artifactLabel(selectedArtifact)}</h3>
                   </div>
                   <div className="artifact-authority">
-                    {selectedArtifact.author_role === 'system' ? 'System-generated · not a clinician assessment' : `${selectedArtifact.author_role}-authored`}
+                    {selectedArtifact.author_role === 'system' ? systemAuthority(selectedArtifact) : `${selectedArtifact.author_role}-authored`}
                   </div>
                 </header>
                 <div className="reader-scroll">

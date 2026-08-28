@@ -39,6 +39,8 @@ export interface Artifact {
   created_at: string;
   version: number;
   provenance_pointer: ProvenancePointer | null;
+  generation_method?: string | null;
+  degraded?: boolean;
 }
 
 export interface FeatureFlags {
@@ -218,6 +220,8 @@ export interface VoiceCapabilities {
   provider: string;
   asr_ready: boolean;
   allowed_modes: VoiceCaptureMode[];
+  eligible_modes: VoiceCaptureMode[];
+  disabled_reason: 'disabled_by_admin' | 'model_not_ready' | null;
   accepted_mime_types: string[];
   max_bytes: number;
   max_duration_ms: number;
@@ -305,6 +309,40 @@ export interface AdminAccessAudit {
   target_id: string;
   details: Record<string, string> | null;
   created_at: string;
+}
+
+export interface AdminSystemSettings {
+  scope: 'device';
+  version: number;
+  updated_at: string;
+  ai: {
+    mode: 'local' | 'deepseek';
+    provider: 'local' | 'deepseek';
+    key_configured: boolean;
+    key_suffix: string | null;
+    key_source: 'credential_manager' | 'environment' | null;
+    verified_at: string | null;
+    online_text_egress: boolean;
+  };
+  voice: {
+    enabled: boolean;
+    provider: string;
+    model_status: 'missing' | 'downloading' | 'ready' | 'failed';
+    model: string;
+    revision: string;
+    download_bytes_approx: number;
+    storage_mode: 'sqlite' | 'sqlcipher';
+    warning: string | null;
+    error_code: string | null;
+  };
+}
+
+export interface VoiceModelStatus {
+  status: 'missing' | 'downloading' | 'ready' | 'failed';
+  error_code: string | null;
+  model: string;
+  revision: string;
+  download_bytes_approx: number;
 }
 
 // --- D1 Identity, Invite, Login and Session ---
@@ -491,6 +529,8 @@ export interface CopilotResponse {
   evidence: CopilotEvidence[];
   limitations: string[];
   draft: CopilotDraft | null;
+  generation_method: string;
+  degraded: boolean;
 }
 
 export interface PatientView {

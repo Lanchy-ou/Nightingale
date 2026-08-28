@@ -59,6 +59,46 @@ class Base(DeclarativeBase):
     pass
 
 
+def migrate_d2_schema(target_engine: Engine = engine) -> None:
+    """Upgrade a pre-D2 demo schema with first-class Tasks and Glance linkage.
+
+    Existing Highlight rows keep a NULL ``task_id``. The unique index enforces
+    the permanent one-Task-to-one-Highlight contract without inventing links
+    for historical data.
+    """
+    from . import models as _core_models  # noqa: F401
+    from .models import Task
+
+    inspector = inspect(target_engine)
+    if "highlights" not in inspector.get_table_names():
+        raise RuntimeError("highlights table is missing; initialize the demo schema first")
+    Task.__table__.create(bind=target_engine, checkfirst=True)
+    with target_engine.begin() as connection:
+        inspector = inspect(connection)
+        existing = {column["name"] for column in inspector.get_columns("highlights")}
+        if "task_id" not in existing:
+            connection.execute(
+                text(
+                    "ALTER TABLE highlights ADD COLUMN task_id VARCHAR(64) "
+                    "REFERENCES tasks (task_id)"
+                )
+            )
+        unique_columns = {
+            tuple(item.get("column_names") or [])
+            for item in [
+                *inspector.get_unique_constraints("highlights"),
+                *[index for index in inspector.get_indexes("highlights") if index.get("unique")],
+            ]
+        }
+        if ("task_id",) not in unique_columns:
+            connection.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS uq_highlight_task "
+                    "ON highlights (task_id)"
+                )
+            )
+
+
 def migrate_e2_schema(target_engine: Engine = engine) -> None:
     """Upgrade an existing SQLite/SQLCipher demo schema to E2 in place.
 
@@ -66,6 +106,7 @@ def migrate_e2_schema(target_engine: Engine = engine) -> None:
     idempotent migration preserves the existing final score as the E2 base and
     creates the append-only feedback table without reading clinical content.
     """
+    migrate_d2_schema(target_engine)
     with target_engine.begin() as connection:
         inspector = inspect(connection)
         if "highlights" not in inspector.get_table_names():
@@ -182,6 +223,7 @@ def migrate_phase_e_schema(target_engine: Engine = engine) -> None:
 
     VoiceCaptureRecord.__table__.create(bind=target_engine, checkfirst=True)
     migrate_patient_checkin_schema(target_engine)
+    migrate_system_settings_schema(target_engine)
 
 
 def migrate_patient_checkin_schema(target_engine: Engine = engine) -> None:
@@ -191,6 +233,14 @@ def migrate_patient_checkin_schema(target_engine: Engine = engine) -> None:
 
     PatientCheckInSession.__table__.create(bind=target_engine, checkfirst=True)
     PatientCheckInMessage.__table__.create(bind=target_engine, checkfirst=True)
+
+
+def migrate_system_settings_schema(target_engine: Engine = engine) -> None:
+    """Create the device-level settings table without inventing a secret."""
+    from . import models as _core_models  # noqa: F401
+    from .models import SystemSettings
+
+    SystemSettings.__table__.create(bind=target_engine, checkfirst=True)
 
 
 def get_db():

@@ -29,6 +29,7 @@ from app.models import (
     PatientCheckInMessage,
     PatientCheckInSession,
     Task,
+    SystemSettings,
     User,
     UserCredential,
 )
@@ -68,6 +69,7 @@ def seed(db: Session) -> None:
     # Clear in FK-safe order (children first). D1 identity tables reference
     # users/patients/clinics and are cleared before them.
     db.execute(delete(VoiceCaptureRecord))
+    db.execute(delete(SystemSettings))
     db.execute(delete(PatientCheckInMessage))
     db.execute(delete(PatientCheckInSession))
     db.execute(delete(AuditLog))

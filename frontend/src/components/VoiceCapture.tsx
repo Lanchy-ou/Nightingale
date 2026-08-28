@@ -78,6 +78,7 @@ export default function VoiceCapture({
 }: VoiceCaptureProps) {
   const [state, dispatch] = useReducer(voiceCaptureReducer, undefined, initialVoiceCaptureState);
   const [capabilities, setCapabilities] = useState<VoiceCapabilities | null>(null);
+  const [capabilitiesError, setCapabilitiesError] = useState(false);
   const [consent, setConsent] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [audio, setAudio] = useState<Blob | null>(null);
@@ -119,13 +120,31 @@ export default function VoiceCapture({
 
   useEffect(() => {
     const controller = new AbortController();
-    api.getVoiceCapabilities(controller.signal)
-      .then(setCapabilities)
+    const refresh = () => api.getVoiceCapabilities(controller.signal)
+      .then((next) => { setCapabilities(next); setCapabilitiesError(false); })
       .catch((error: any) => {
-        if (error?.name !== 'AbortError') setCapabilities(null);
+        if (error?.name !== 'AbortError') setCapabilitiesError(true);
       });
-    return () => controller.abort();
+    void refresh();
+    const poll = window.setInterval(() => void refresh(), 10_000);
+    return () => { window.clearInterval(poll); controller.abort(); };
   }, [boundaryKey]);
+
+  useEffect(() => {
+    if (!capabilities || (
+      capabilities.enabled
+      && capabilities.asr_ready
+      && capabilities.allowed_modes.includes(captureMode)
+    )) return;
+    releaseAll();
+    setConsent(false);
+    setAudio(null);
+    setPreviewUrl(null);
+    setCapture(null);
+    setDrafts([]);
+    dispatch({ type: 'RESET' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [capabilities?.enabled, capabilities?.asr_ready, capabilities?.allowed_modes.join(','), captureMode]);
 
   useEffect(() => {
     releaseAll();
@@ -142,11 +161,25 @@ export default function VoiceCapture({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [boundaryKey, patientId, captureMode]);
 
-  if (!capabilities?.enabled
-      || !capabilities.asr_ready
-      || !capabilities.allowed_modes.includes(captureMode)) {
+  if (capabilities && !capabilities.eligible_modes.includes(captureMode)) {
     return null;
   }
+  if (!capabilities || !capabilities.enabled || !capabilities.asr_ready) {
+    const reason = capabilitiesError
+      ? 'Voice status is unavailable.'
+      : capabilities?.disabled_reason === 'model_not_ready'
+        ? 'The local speech model is not installed. Ask an Admin to prepare it.'
+        : capabilities
+          ? 'Voice Capture is disabled by Admin.'
+          : 'Checking Voice Capture status…';
+    return (
+      <section aria-label="Voice capture" className="voice-capture voice-capture-product voice-capture-unavailable">
+        <div className="voice-capture-heading"><div><p className="eyebrow">Local voice adapter</p><h2>Record and review</h2></div><span>Unavailable</span></div>
+        <p>{reason}</p>
+      </section>
+    );
+  }
+  if (!capabilities.allowed_modes.includes(captureMode)) return null;
   const activeCapabilities = capabilities;
 
   async function startRecording() {

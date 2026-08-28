@@ -10,7 +10,6 @@ Transaction order (per M4 §10):
 """
 from __future__ import annotations
 
-import os
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -26,6 +25,7 @@ from ..ids import new_id, stable_id
 from ..llm_client import build_client
 from ..models import Artifact, Event, Highlight, Patient
 from ..role_context import RoleContext
+from ..system_settings import effective_ai_config
 from ..schemas import (
     DoctorConsultCreate,
     DoctorConsultOut,
@@ -37,10 +37,6 @@ from ..schemas import (
 )
 
 router = APIRouter(prefix="/api", tags=["sources"])
-
-
-def _provider_name() -> str:
-    return os.environ.get("NANTINGALE_LLM_PROVIDER", "deepseek")
 
 
 def _derive_summary_id(source_artifact_id: str, summary_type: str) -> str:
@@ -91,8 +87,13 @@ def _ingest_common(
     ctx: RoleContext,
     patient_visible: bool,
 ):
-    provider_name = _provider_name()
-    client = build_client(provider_name)
+    config = effective_ai_config(db)
+    provider_name = config.provider
+    client = (
+        build_client(provider_name)
+        if config.api_key is None
+        else build_client(provider_name, api_key=config.api_key)
+    )
 
     summary_id = _derive_summary_id(raw.artifact_id, summary_type)
     existing = db.get(Artifact, summary_id)

@@ -115,6 +115,8 @@ PERMISSIONS: dict[str, dict[str, bool]] = {
         "admin_update_account": True,
         "admin_revoke_sessions": True,
         "admin_read_access_audit": True,
+        "admin_read_system_settings": True,
+        "admin_update_system_settings": True,
         "read_tasks": True,
         "read_task_provenance": True,
         "read_patient_checkin": True,

@@ -247,6 +247,13 @@ class MockLLMClient:
         )
 
 
+class LocalLLMClient(MockLLMClient):
+    """Key-free product mode: deterministic dialogue, extractive summary fallback."""
+
+    def summarize(self, redacted: RedactedContent, flow_type: str) -> AISummaryResult:
+        raise ProviderUnavailableError("local deterministic summary")
+
+
 _SYSTEM_PROMPT = (
     "You are a clinical scribe assistant. You receive a de-identified clinical "
     "conversation and must return a concise summary plus structured candidate "
@@ -317,11 +324,30 @@ class DeepSeekAdapter:
     => InvalidOutputError -> fallback.
     """
 
-    def __init__(self, model: str = "deepseek-v4-flash"):
+    def __init__(self, model: str = "deepseek-v4-flash", api_key: str | None = None):
         self.model = model
+        self.api_key = api_key
 
     def _key(self) -> str | None:
-        return os.environ.get("DEEPSEEK_API_KEY") or os.environ.get("Natingale_API_KEY")
+        return self.api_key or os.environ.get("DEEPSEEK_API_KEY") or os.environ.get("Natingale_API_KEY")
+
+    def verify_connection(self) -> None:
+        """Validate one candidate key with a no-PHI, schema-free probe."""
+        key = self._key()
+        if not key:
+            raise ProviderUnavailableError("no DeepSeek API key configured")
+        try:
+            from anthropic import Anthropic
+
+            client = Anthropic(api_key=key, base_url=DEEPSEEK_BASE_URL)
+            client.messages.create(
+                model=self.model,
+                max_tokens=8,
+                system="Return exactly OK.",
+                messages=[{"role": "user", "content": "Connection check. No patient data."}],
+            )
+        except Exception as e:
+            raise ProviderProtocolError(f"DeepSeek connection check failed: {type(e).__name__}")
 
     def summarize(self, redacted: RedactedContent, flow_type: str) -> AISummaryResult:
         key = self._key()
@@ -439,7 +465,11 @@ class DeepSeekAdapter:
 
 def build_client(provider: str = "mock", **kwargs) -> LLMClient:
     if provider == "mock":
+        kwargs.pop("api_key", None)
         return MockLLMClient(**kwargs)
     if provider == "deepseek":
         return DeepSeekAdapter(**kwargs)
+    if provider == "local":
+        kwargs.pop("api_key", None)
+        return LocalLLMClient(**kwargs)
     raise ValueError(f"unknown provider: {provider}")

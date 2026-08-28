@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
@@ -15,6 +14,7 @@ from ..db import get_db
 from ..ids import stable_id
 from ..models import Patient
 from ..role_context import RoleContext
+from ..system_settings import effective_voice_enabled, get_settings
 from ..voice.api_schemas import (
     VoiceAudioMetadataOut,
     VoiceCapabilitiesOut,
@@ -70,31 +70,34 @@ _MODE_SPEAKERS = {
 ACCEPTED_AUDIO_MIME_TYPES = ["audio/webm", "audio/ogg", "audio/wav"]
 
 
-def _voice_enabled() -> bool:
-    return os.environ.get("NANTINGALE_VOICE_ENABLED", "false").strip().lower() == "true"
+def _voice_enabled(db: Session) -> bool:
+    return effective_voice_enabled(db)
 
 
-def _require_voice_enabled() -> None:
-    if not _voice_enabled():
+def _require_voice_enabled(db: Session) -> None:
+    if not _voice_enabled(db):
         raise resource_not_found()
-    provider = _asr_provider()
+    provider = _asr_provider(db)
     if provider not in {"mock", "faster_whisper"}:
         raise HTTPException(status_code=503, detail="Voice transcription is unavailable")
     if provider == "faster_whisper" and not asr_runtime_ready("faster_whisper"):
         raise HTTPException(status_code=503, detail="Local voice transcription is unavailable")
 
 
-def _asr_provider() -> str:
-    return configured_asr_provider()
+def _asr_provider(db: Session) -> str:
+    return "faster_whisper" if get_settings(db) is not None else configured_asr_provider()
 
 
 @router.get("/capabilities", response_model=VoiceCapabilitiesOut)
-def voice_capabilities(ctx: RoleContext = Depends(require_auth)):
-    provider = _asr_provider()
-    enabled = _voice_enabled()
-    allowed_modes = [
+def voice_capabilities(
+    db: Session = Depends(get_db), ctx: RoleContext = Depends(require_auth)
+):
+    provider = _asr_provider(db)
+    enabled = _voice_enabled(db)
+    eligible_modes = [
         mode for mode, role in _MODE_ROLE.items() if role == ctx.role
-    ] if enabled else []
+    ]
+    allowed_modes = eligible_modes if enabled else []
     # The mock remains an automated-test adapter and never exposes product UI.
     asr_ready = provider == "faster_whisper" and asr_runtime_ready(provider)
     return VoiceCapabilitiesOut(
@@ -102,6 +105,12 @@ def voice_capabilities(ctx: RoleContext = Depends(require_auth)):
         provider=provider,
         asr_ready=asr_ready,
         allowed_modes=allowed_modes,
+        eligible_modes=eligible_modes,
+        disabled_reason=(
+            None if enabled and asr_ready
+            else "disabled_by_admin" if not enabled
+            else "model_not_ready"
+        ),
         accepted_mime_types=ACCEPTED_AUDIO_MIME_TYPES,
         max_bytes=MAX_AUDIO_BYTES,
         max_duration_ms=MAX_AUDIO_DURATION_MS,
@@ -240,7 +249,7 @@ def create_capture(
     db: Session = Depends(get_db),
     ctx: RoleContext = Depends(require_auth),
 ):
-    _require_voice_enabled()
+    _require_voice_enabled(db)
     patient = db.get(Patient, body.patient_id)
     if patient is None:
         raise resource_not_found()
@@ -321,7 +330,6 @@ def get_capture(
     db: Session = Depends(get_db),
     ctx: RoleContext = Depends(require_auth),
 ):
-    _require_voice_enabled()
     capture = _get_capture(db, capture_id)
     _authorize_capture(capture, ctx, "read_voice_capture")
     return _capture_out(capture)
@@ -333,7 +341,6 @@ def get_capture_audio(
     db: Session = Depends(get_db),
     ctx: RoleContext = Depends(require_auth),
 ):
-    _require_voice_enabled()
     capture = _get_capture(db, capture_id)
     _authorize_capture(capture, ctx, "read_voice_audio")
     if capture.audio_bytes is None:
@@ -354,7 +361,7 @@ async def upload_capture_audio(
     db: Session = Depends(get_db),
     ctx: RoleContext = Depends(require_auth),
 ):
-    _require_voice_enabled()
+    _require_voice_enabled(db)
     capture = _get_capture(db, capture_id)
     _authorize_capture(capture, ctx, "upload_voice_audio")
     upload_key = _operation_key(idempotency_key, "upload")
@@ -470,7 +477,7 @@ def transcribe_capture(
     db: Session = Depends(get_db),
     ctx: RoleContext = Depends(require_auth),
 ):
-    _require_voice_enabled()
+    _require_voice_enabled(db)
     capture = _get_capture(db, capture_id)
     _authorize_capture(capture, ctx, "transcribe_voice_capture")
     if capture.transcribe_key == body.idempotency_key:
@@ -519,7 +526,7 @@ def transcribe_capture(
         metadata=metadata,
     )
     try:
-        result = build_asr_client(_asr_provider()).transcribe(recording)
+        result = build_asr_client(_asr_provider(db)).transcribe(recording)
     except Exception:
         result = ASRResult(
             provider="unavailable",
@@ -671,7 +678,7 @@ def review_capture_segments(
     db: Session = Depends(get_db),
     ctx: RoleContext = Depends(require_auth),
 ):
-    _require_voice_enabled()
+    _require_voice_enabled(db)
     capture = _get_capture(db, capture_id)
     _authorize_capture(capture, ctx, "review_voice_transcript")
     if capture.revision != body.expected_revision:
@@ -715,7 +722,7 @@ def confirm_capture(
     db: Session = Depends(get_db),
     ctx: RoleContext = Depends(require_auth),
 ):
-    _require_voice_enabled()
+    _require_voice_enabled(db)
     capture = _get_capture(db, capture_id)
     _authorize_capture(capture, ctx, "confirm_voice_transcript")
     if capture.confirm_key == body.idempotency_key and capture.status == CaptureStatus.PROCESSED.value:

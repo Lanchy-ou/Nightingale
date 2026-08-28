@@ -32,6 +32,13 @@ ACCESS_AUDIT_ACTIONS = {
     "session_revoked",
     "account_disabled",
     "account_reactivated",
+    "system_ai_mode_changed",
+    "system_key_rotated",
+    "system_key_removed",
+    "system_voice_changed",
+    "voice_model_started",
+    "voice_model_completed",
+    "voice_model_failed",
 }
 
 

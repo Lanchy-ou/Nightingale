@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 
 
 class ClinicOut(BaseModel):
@@ -47,6 +47,8 @@ class ArtifactOut(BaseModel):
     created_at: datetime
     version: int
     provenance_pointer: dict | None
+    generation_method: str | None = None
+    degraded: bool = False
 
 
 class HighlightOut(BaseModel):
@@ -588,6 +590,79 @@ class AdminAccessAuditOut(BaseModel):
     target_id: str
     details: dict | None
     created_at: datetime
+
+
+class AdminAISettingsOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["local", "deepseek"]
+    provider: Literal["local", "deepseek"]
+    key_configured: bool
+    key_suffix: str | None
+    key_source: Literal["credential_manager", "environment"] | None
+    verified_at: datetime | None
+    online_text_egress: bool
+
+
+class AdminVoiceSettingsOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool
+    provider: str
+    model_status: Literal["missing", "downloading", "ready", "failed"]
+    model: str
+    revision: str
+    download_bytes_approx: int
+    storage_mode: Literal["sqlite", "sqlcipher"]
+    warning: str | None
+    error_code: str | None
+
+
+class AdminSystemSettingsOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scope: Literal["device"] = "device"
+    version: int
+    ai: AdminAISettingsOut
+    voice: AdminVoiceSettingsOut
+    updated_at: datetime
+
+
+class AdminSystemSettingsUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    expected_version: int = Field(ge=1)
+    ai_mode: Literal["local", "deepseek"] | None = None
+    voice_enabled: bool | None = None
+
+    @model_validator(mode="after")
+    def requires_change(self):
+        if self.ai_mode is None and self.voice_enabled is None:
+            raise ValueError("at least one setting is required")
+        return self
+
+
+class AdminDeepSeekKeyRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    expected_version: int = Field(ge=1)
+    api_key: SecretStr = Field(min_length=8, max_length=512)
+
+
+class AdminSettingsVersionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    expected_version: int = Field(ge=1)
+
+
+class VoiceModelStatusOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["missing", "downloading", "ready", "failed"]
+    error_code: str | None
+    model: str
+    revision: str
+    download_bytes_approx: int
 
 
 # --- M6 Patient View (explicit field projection; extra keys are forbidden) ---

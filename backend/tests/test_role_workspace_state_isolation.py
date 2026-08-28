@@ -41,9 +41,13 @@ def test_nurse_preview_and_confirm_are_separate_from_doctor_authority():
 
 
 def test_consult_state_is_cleared_across_patient_or_role_remount():
+    app = _read("frontend/src/App.tsx")
     consult = _read("frontend/src/components/NewDoctorConsult.tsx")
     workspace = _read("frontend/src/pages/ClinicianWorkspacePage.tsx")
 
+    assert "window.history.replaceState({}, '', nextPath);" in app
+    assert "? '/clinical'" in app
+    assert "next.role === 'admin' ? '/admin' : '/patient'" in app
     assert "abortRef.current?.abort();" in consult
     assert "setText('');" in consult
     assert "setNormalization(null);" in consult

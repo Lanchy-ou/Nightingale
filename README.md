@@ -130,6 +130,10 @@ Current local synthetic evidence is maintenance timing and one shadow compressio
 
 Voice is default-off. The local adapter uses pinned `Systran/faster-whisper-base`, CPU int8, `local_files_only=True`, and in-memory PyAV container validation. Audio stays in an encrypted SQLCipher BLOB and never enters `LLMClient` or E3 compression.
 
+The trusted device Admin can manage this instance at `/admin/settings`. `Local Private` and Voice Off are the safe defaults. A DeepSeek key must pass a live connection check before it is stored under a versioned Windows Credential Manager reference; plaintext keys are never stored in the database, browser storage, API responses, Audit, or logs. Saving Admin settings makes the database authoritative immediately, while `DEEPSEEK_API_KEY` remains a first-start compatibility path. Removing a key switches the instance back to Local Private.
+
+The same page reports the pinned Voice model revision and can start one background download into the server-owned ignored model directory. Voice cannot be enabled until the model is ready. Development SQLite is limited to synthetic audio and shows a warning; production Voice requires SQLCipher. Disabling Voice rejects new capture/upload/transcribe/confirm work but preserves existing recordings, transcripts, and provenance.
+
 The adapter does not perform diarization and does not invent confidence. Machine segments begin with unknown speaker and require role-bounded human review, explicit issue resolution, and continuous canonical indexes before confirmation. Physical-microphone capture, noisy/code-switching accuracy, clinical accuracy, and production throughput are not claimed.
 
 The current final regression environment does not contain the ignored local model/audio inputs, so two real-local-ASR tests are explicitly skipped. Historical dated evidence records one observed synthetic local slice; current E4 status is therefore implemented with limits, not a fresh end-to-end ASR rerun.
@@ -247,7 +251,7 @@ Detailed commands and boundaries are in `docs/d5_deployment_security_decisions.m
 
 ### Optional local Voice preparation
 
-Voice is not required for Patient Multi-turn Check-in and remains default-off.
+Voice is not required for Patient Multi-turn Check-in and remains default-off. The preferred Windows review flow is Admin → AI & Voice settings → Download local model → enable Voice. The command below remains available for technical/offline preparation.
 
 ```powershell
 Set-Location backend
@@ -257,7 +261,7 @@ $env:NANTINGALE_ASR_PROVIDER='faster_whisper'
 $env:NANTINGALE_ASR_MODEL_PATH='<private-model-directory>'
 ```
 
-The runtime never downloads a model during a request.
+Clinical and patient pages poll capability metadata every ten seconds. When Voice is disabled or the model is unavailable, the capture entry remains visible with the exact reason and any active microphone stream is released.
 
 ## Verification commands
 
@@ -292,7 +296,7 @@ Current pre-E5 evidence: backend 509 passed / 2 explicit real-local-ASR-input sk
 - Local single-process/single-machine architecture, not distributed deployment.
 - DeepSeek full Patient Check-in journey is not currently verified because the strict live Summary failed and fell back.
 - D3 frozen Provider layer is `NOT_RUN`; deterministic fallback results are separate.
-- E4 is default-off and currently lacks the ignored model/audio inputs needed to rerun two real-local-ASR tests.
+- E4 is default-off per device; real local ASR evidence depends on the ignored model and synthetic audio being present on that reviewer device.
 - Voice has no diarization and no physical-microphone evidence in the final run.
 - Self-learning is bounded interaction weighting, not clinical learning.
 - Data decay is a shadow payload policy, not demonstrated total storage reduction.
