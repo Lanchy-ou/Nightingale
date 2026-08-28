@@ -1007,6 +1007,7 @@ button.lifecycle-item.active { background: #eaf5f1; border-radius: 8px; }
 .task-actions-menu summary { list-style: none; color: var(--clinical-brand); cursor: pointer; font-size: 10px; }
 .task-actions-menu summary::-webkit-details-marker { display: none; }
 .task-actions-menu[open] > div { position: absolute; z-index: 12; right: 0; top: calc(100% + 4px); width: 125px; padding: 5px; display: grid; gap: 3px; background: #fff; border: 1px solid var(--clinical-border); border-radius: 8px; box-shadow: 0 12px 24px rgba(30,74,61,.14); }
+.clinical-task-table tbody tr:last-child .task-actions-menu[open] > div { top: auto; bottom: calc(100% + 4px); }
 .task-actions-menu button { padding: 6px 7px; border: 0; border-radius: 5px; background: transparent; color: #315e50; text-align: left; font-size: 10px; }
 .task-actions-menu button:hover { background: #edf5f2; }
 

@@ -273,6 +273,13 @@ function PatientWorkspace({
     onNavigate({ kind: 'patient', patientId, mode: 'event', eventId: next.event_id });
   }
 
+  function handleOpenComments() {
+    setProvenance(null);
+    setCopilotEvidence(null);
+    setContextTab('comments');
+    setContextDrawerOpen(true);
+  }
+
   function changed() {
     setEventRefreshKey((value) => value + 1);
     setRefreshKey((value) => value + 1);
@@ -440,6 +447,7 @@ function PatientWorkspace({
             refreshKey={eventRefreshKey}
             onBack={() => openTab('timeline')}
             onChanged={changed}
+            onOpenComments={handleOpenComments}
             onContextState={updateContextState}
             role={identity.role ?? ''}
           />
