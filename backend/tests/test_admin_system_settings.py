@@ -1,6 +1,36 @@
-from sqlalchemy import select
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 
+from sqlalchemy import func, select
+
+from app.db import SessionLocal
 from app.models import AuditLog, SystemSettings
+from app.system_settings import SETTINGS_ID, ensure_settings
+
+
+def test_concurrent_first_read_initializes_one_device_row(monkeypatch):
+    barrier = Barrier(2)
+    from app import system_settings
+
+    original = system_settings._bootstrap_values
+
+    def synchronized_bootstrap():
+        values = original()
+        barrier.wait(timeout=5)
+        return values
+
+    monkeypatch.setattr(system_settings, "_bootstrap_values", synchronized_bootstrap)
+
+    def load_once():
+        with SessionLocal() as db:
+            return ensure_settings(db).settings_id
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(lambda _: load_once(), range(2)))
+
+    assert results == [SETTINGS_ID, SETTINGS_ID]
+    with SessionLocal() as db:
+        assert db.scalar(select(func.count()).select_from(SystemSettings)) == 1
 
 
 def test_admin_settings_are_device_scoped_safe_defaults_and_admin_only(

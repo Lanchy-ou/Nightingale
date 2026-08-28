@@ -16,6 +16,20 @@ function adminTabFromPath(path: string): 'overview' | 'invites' | 'audit' | 'set
   return 'overview';
 }
 
+function roleHomePath(role: string | null | undefined): string {
+  if (role === 'clinician' || role === 'staff') return '/clinical';
+  if (role === 'admin') return '/admin';
+  if (role === 'patient') return '/patient';
+  return '/login';
+}
+
+function pathBelongsToRole(path: string, role: string | null | undefined): boolean {
+  if (role === 'clinician' || role === 'staff') return path.startsWith('/clinical');
+  if (role === 'admin') return path.startsWith('/admin');
+  if (role === 'patient') return path.startsWith('/patient');
+  return false;
+}
+
 // ---------------------------------------------------------------------------
 // Development demo mode. Only active when VITE_DEMO_AUTH=true (the backend
 // additionally requires NANTINGALE_DEMO_AUTH=true). The role toolbar is never
@@ -88,24 +102,43 @@ function SessionApp() {
   const [booting, setBooting] = useState(true);
   const [path, setPath] = useState(() => window.location.pathname);
 
+  function activateIdentity(next: CurrentIdentity, forceHome = false) {
+    const nextPath = forceHome || !pathBelongsToRole(window.location.pathname, next.role)
+      ? roleHomePath(next.role)
+      : window.location.pathname;
+    if (window.location.pathname !== nextPath) {
+      window.history.replaceState({}, '', nextPath);
+    }
+    setPath(nextPath);
+    setSessionIdentity(next);
+    setIdentity(next);
+  }
+
   useEffect(() => {
     // 401 anywhere in product mode -> clear sensitive state and return to Login.
     setUnauthorizedHandler(() => {
       setIdentity(null);
       setSessionIdentity(null);
       if (window.location.pathname !== '/login') {
-        window.history.pushState({}, '', '/login');
+        window.history.replaceState({}, '', '/login');
       }
+      setPath('/login');
     });
 
     // Refresh restores identity from the server session, never from localStorage.
     api
       .getSession()
-      .then((identity) => {
-        setSessionIdentity(identity);
-        setIdentity(identity);
+      .then((identity) => activateIdentity(identity))
+      .catch(() => {
+        setIdentity(null);
+        setSessionIdentity(null);
+        const currentPath = window.location.pathname;
+        const nextPath = currentPath.startsWith('/register') ? currentPath : '/login';
+        if (currentPath !== nextPath) {
+          window.history.replaceState({}, '', nextPath);
+        }
+        setPath(nextPath);
       })
-      .catch(() => setIdentity(null))
       .finally(() => setBooting(false));
 
     const onPopState = () => setPath(window.location.pathname);
@@ -115,6 +148,13 @@ function SessionApp() {
       setUnauthorizedHandler(null);
     };
   }, []);
+
+  useEffect(() => {
+    if (!identity || pathBelongsToRole(path, identity.role)) return;
+    const nextPath = roleHomePath(identity.role);
+    window.history.replaceState({}, '', nextPath);
+    setPath(nextPath);
+  }, [identity, path]);
 
   const logout = useCallback(async () => {
     try {
@@ -126,7 +166,7 @@ function SessionApp() {
     setSessionIdentity(null);
     setPath('/login');
     if (window.location.pathname !== '/login') {
-      window.history.pushState({}, '', '/login');
+      window.history.replaceState({}, '', '/login');
     }
   }, []);
 
@@ -141,7 +181,7 @@ function SessionApp() {
 
   if (!identity) {
     if (path.startsWith('/register')) return <RegisterPage />;
-    return <LoginPage onAuthenticated={(next) => { setSessionIdentity(next); setIdentity(next); }} />;
+    return <LoginPage onAuthenticated={(next) => activateIdentity(next, true)} />;
   }
 
   const role = identity.role ?? '';

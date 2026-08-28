@@ -48,6 +48,12 @@ def test_consult_state_is_cleared_across_patient_or_role_remount():
     assert "window.history.replaceState({}, '', nextPath);" in app
     assert "? '/clinical'" in app
     assert "next.role === 'admin' ? '/admin' : '/patient'" in app
+    assert "function roleHomePath(role: string | null | undefined)" in app
+    assert "function pathBelongsToRole(path: string, role: string | null | undefined)" in app
+    assert "activateIdentity(next, true)" in app
+    assert "setPath('/login');" in app
+    assert "if (!identity || pathBelongsToRole(path, identity.role)) return;" in app
+    assert "const nextPath = currentPath.startsWith('/register') ? currentPath : '/login';" in app
     assert "abortRef.current?.abort();" in consult
     assert "setText('');" in consult
     assert "setNormalization(null);" in consult

@@ -290,6 +290,8 @@ git diff --check
 
 Current pre-E5 evidence: backend 509 passed / 2 explicit real-local-ASR-input skips; security/integration 22 passed; Patient Check-in 29 passed; D3 corpus/runtime and D4 frozen eval passed; three frontend Node checks and the 59-module production build passed. The dated final manifest records the final-commit rerun and any later changes.
 
+Post-E5 Admin settings and frontend pre-visual repairs are tracked separately in `docs/frontend_previsual_repair_evidence_2026-08-28.md`. That current working-tree verification collected 524 backend tests (522 passed / 2 explicit local-ASR-input skips), passed the 60-module production build, and re-ran four-role product-session browser acceptance. It does not rewrite the historical E5 evidence.
+
 ## Known limits
 
 - Synthetic-data prototype only; no real PHI or production medical use.
@@ -309,6 +311,7 @@ Current pre-E5 evidence: backend 509 passed / 2 explicit real-local-ASR-input sk
 - Candidate requirements: `2026 72 Hour Build_ Nightingale Candidate Brief 2.pdf`
 - Attribution: `ATTRIBUTION.txt`
 - Final evidence: `docs/final_submission_evidence_2026-08-28.md`
+- Frontend pre-visual repair evidence: `docs/frontend_previsual_repair_evidence_2026-08-28.md`
 - Demo runbook: `docs/demo_video_runbook_2026-08-28.md`
 - Submission email draft: `docs/submission_email_draft_2026-08-28.md`
 - Technical Brief: `output/pdf/Nightingale_Technical_Brief.pdf`

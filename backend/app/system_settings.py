@@ -6,6 +6,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime
 
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from .credential_store import CredentialStoreError, read_secret
@@ -51,10 +52,19 @@ def ensure_settings(db: Session) -> SystemSettings:
     row = get_settings(db)
     if row is not None:
         return row
-    row = SystemSettings(**_bootstrap_values())
-    db.add(row)
+    # A first read may arrive concurrently from two tabs or two React mounts.
+    # Let the database choose the single winner instead of racing two ORM
+    # INSERTs for the fixed device primary key.
+    db.execute(
+        sqlite_insert(SystemSettings)
+        .values(**_bootstrap_values())
+        .on_conflict_do_nothing(index_elements=[SystemSettings.settings_id])
+    )
     db.commit()
-    return db.get(SystemSettings, SETTINGS_ID)
+    row = db.get(SystemSettings, SETTINGS_ID)
+    if row is None:
+        raise RuntimeError("System settings initialization failed")
+    return row
 
 
 def effective_ai_config(db: Session) -> EffectiveAIConfig:

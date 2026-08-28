@@ -1104,3 +1104,16 @@ E5 has completed every repository-local packaging action that does not require o
 - **Permanent non-claim**: no final Demo Video exists in the workspace, so E5 and the overall submission are `NOT SUBMISSION READY`. Browser runtime QA and a runbook are not video evidence.
 - **Access boundary**: the configured GitHub URL returned 404 to an unauthenticated check. Do not change repository visibility, publish, upload/share files, or send email without a separate owner instruction.
 - **NEEDS_OWNER_INPUT**: exact submitter name; actual 6–9 minute product-mode Demo Video and end-to-end playback; recipient-accessible repository/zip and video delivery; final attachment/link check from the intended submitter context; separate authorization for external actions.
+
+---
+
+## 34. Frontend Pre-visual Repair Status (2026-08-28)
+
+Status: `REPAIR_IMPLEMENTED_AND_REVERIFIED`. This is an additive post-E5 working-tree repair record; it does not rewrite historical E5 evidence or authorize commit/push.
+
+- **Admin settings concurrency**: fixed-device bootstrap is an atomic SQLite/SQLCipher conflict-ignore insert. Concurrent first HTTP reads return the same version-1 row without a 500.
+- **Product routing**: login/restore/history use role-canonical paths; logout, 401, and revoked-session restore clear identity and normalize to `/login` while preserving `/register` when unauthenticated.
+- **Clinical layout**: product shells use full viewport height. At 1024, Context is bounded to 280 px and Event Detail stacks lifecycle/reader to protect the central work area; 1440/1280/1024 have no page-level horizontal overflow.
+- **Accessibility/mobile**: solid focus rings cover native controls, disclosures, and resizers; dark-sidebar focus uses white. Critical small metadata is darker/larger. Patient navigation/logout/Task actions have a 44 px minimum height.
+- **Verification**: backend 524 collected / 522 passed / 2 explicit local-ASR-input skips; frontend Node checks and 60-module build passed; D3/D4, dependencies, secret scan, diff check, four-role product sessions, concurrent Admin reads, Patient request isolation, and zero browser console warnings/errors passed.
+- **Evidence**: `Task_Card/Frontend_Previsual_Repair_Task_Card.md` and `docs/frontend_previsual_repair_evidence_2026-08-28.md` are authoritative for this repair only.
