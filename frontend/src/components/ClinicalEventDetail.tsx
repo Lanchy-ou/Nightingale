@@ -43,6 +43,7 @@ export default function ClinicalEventDetail({
   refreshKey,
   onBack,
   onChanged,
+  onOpenComments,
   onContextState,
   role,
 }: {
@@ -51,6 +52,7 @@ export default function ClinicalEventDetail({
   refreshKey: number;
   onBack: () => void;
   onChanged: () => void;
+  onOpenComments: () => void;
   onContextState: (state: EventContextState) => void;
   role: string;
 }) {
@@ -157,6 +159,7 @@ export default function ClinicalEventDetail({
           <p className="view-subtitle">Occurred {formatDateTime(event.started_at)}</p>
         </div>
         <div className="event-detail-actions">
+          <button className="secondary-button" onClick={onOpenComments}>Comments</button>
           <button className="secondary-button" onClick={() => setComposerMode((current) => current === 'note' ? null : 'note')}>{role === 'clinician' ? 'Add clinician note' : 'Add staff note'}</button>
           <button className="secondary-button" onClick={() => setComposerMode((current) => current === 'task' ? null : 'task')}>Create task</button>
         </div>

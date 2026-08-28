@@ -77,6 +77,18 @@ def test_staff_task_verification_affordance_is_explicit():
     assert ">Verify complete</button>" in tasks
 
 
+def test_event_comments_are_visible_and_last_task_menu_opens_upward():
+    event = _read("frontend/src/components/ClinicalEventDetail.tsx")
+    workspace = _read("frontend/src/pages/ClinicianWorkspacePage.tsx")
+    styles = _read("frontend/src/index.css")
+    assert 'onOpenComments: () => void;' in event
+    assert 'onClick={onOpenComments}>Comments</button>' in event
+    assert "setContextTab('comments');" in workspace
+    assert "setContextDrawerOpen(true);" in workspace
+    assert ".clinical-task-table tbody tr:last-child .task-actions-menu[open] > div" in styles
+    assert "bottom: calc(100% + 4px)" in styles
+
+
 def test_workspace_tabs_and_copilot_composer_use_stable_equal_width_layouts():
     workspace = _read("frontend/src/pages/ClinicianWorkspacePage.tsx")
     copilot = _read("frontend/src/components/CopilotPanel.tsx")
