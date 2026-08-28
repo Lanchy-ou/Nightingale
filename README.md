@@ -329,8 +329,8 @@ journeys. This is synthetic UI/authorization coverage, not clinical validation.
 - Self-learning is bounded interaction weighting, not clinical learning.
 - Data decay is a shadow payload policy, not demonstrated total storage reduction.
 - Copilot confirmation tokens are short-lived but not persisted as one-time records; a multi-worker deployment needs a shared confirmation secret.
-- No independent clinical usability study, production load test, public hosting, penetration test, or regulatory assessment was performed.
-- E5 cannot be called Submission Ready until a real 6–9 minute Demo Video is recorded and played end-to-end, the submitter name is supplied, and final attachment/link access is verified.
+- No independent clinical usability study, production load test, public application hosting, penetration test, or regulatory assessment was performed.
+- Repository-local verification and packaging are complete. Demo Video playback and email delivery are owner-controlled external evidence and are not stored or independently verified in this repository.
 
 ## Evidence and deliverables
 
@@ -342,4 +342,4 @@ journeys. This is synthetic UI/authorization coverage, not clinical validation.
 - Submission email draft: `docs/submission_email_draft_2026-08-28.md`
 - Technical Brief: `output/pdf/Nightingale_Technical_Brief.pdf`
 
-The final evidence manifest is authoritative for commit hashes, exact command outcomes, Provider/ASR status, missing owner inputs, and Submission Ready status.
+The final evidence manifest is authoritative for its dated command outcomes and capability boundaries. Current external delivery status is owner-controlled and may be newer than that dated manifest.

@@ -1096,14 +1096,14 @@ The bounded Patient Multi-turn Check-in is complete after an independent adversa
 
 ---
 
-## 33. E5 Final Submission Package Status (2026-08-28)
+## 33. E5 Repository Package and External Delivery Status (2026-08-28)
 
-E5 has completed every repository-local packaging action that does not require owner identity, media, external sharing, or recipient-account access. The English README, attribution, 3-page rendered Technical Brief, dated evidence manifest, Demo Video runbook, email draft, security/performance evidence, and final verification commands are present.
+The repository-local E5 package is complete. The English README, attribution, 3-page rendered Technical Brief, dated evidence manifest, Demo Video runbook, superseded email draft record, security/performance evidence, and final verification commands are present.
 
-- **Capability freeze**: E1/E2/E3 and Patient Multi-turn Check-in are `IMPLEMENTED_AND_VERIFIED`; E4 Voice is `IMPLEMENTED_WITH_LIMITS`; E5 is not complete while owner inputs are absent.
-- **Permanent non-claim**: no final Demo Video exists in the workspace, so E5 and the overall submission are `NOT SUBMISSION READY`. Browser runtime QA and a runbook are not video evidence.
-- **Access boundary**: the configured GitHub URL returned 404 to an unauthenticated check. Do not change repository visibility, publish, upload/share files, or send email without a separate owner instruction.
-- **NEEDS_OWNER_INPUT**: exact submitter name; actual 6–9 minute product-mode Demo Video and end-to-end playback; recipient-accessible repository/zip and video delivery; final attachment/link check from the intended submitter context; separate authorization for external actions.
+- **Capability freeze**: E1/E2/E3 and Patient Multi-turn Check-in are `IMPLEMENTED_AND_VERIFIED`; E4 Voice is `IMPLEMENTED_WITH_LIMITS`. These capability classifications are independent of external email or video delivery.
+- **Repository access**: the canonical repository is public at `https://github.com/Lanchy-ou/Nightingale`. The earlier unauthenticated 404 remains only as a dated historical observation in the evidence manifest.
+- **External delivery boundary**: Demo Video playback, recipient access to external links, and email delivery are owner-controlled evidence outside the repository. The owner reported that a corrected follow-up email was sent; the agent did not independently verify the external send or video playback.
+- **Permanent non-claim**: browser runtime QA and a runbook are not substitutes for a recorded Demo Video. External delivery status must not be converted into clinical validation, production readiness, or a claim that unobserved media playback occurred.
 
 ---
 
