@@ -134,6 +134,7 @@ export default function CopilotPanel({
 
   return (
     <section className="copilot-panel" aria-label="Copilot">
+      <div className="copilot-authority-strip"><strong>Evidence-bound Copilot</strong><span>Claims stay separated as source facts, inferences or unknowns. Nothing is saved without explicit confirmation.</span></div>
       <div className="copilot-conversation" aria-live="polite">
         {!response && !busy && !error && <div className="copilot-welcome"><p className="eyebrow">Current review</p><h3>Ask about this patient record</h3><p>Answers separate source facts, comparison inferences and unknowns. Open any citation to inspect its exact source span.</p></div>}
         {busy && <div className="copilot-thinking">Checking bounded evidence…</div>}

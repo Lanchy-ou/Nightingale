@@ -16,6 +16,20 @@ function priorityLabel(h: Highlight): string {
   return 'Clinical context';
 }
 
+function prioritySymbol(h: Highlight): string {
+  if (h.feature_flags.explicit_risk) return '!';
+  if (h.feature_flags.unresolved_task) return '○';
+  if (h.feature_flags.symptom_change) return '↗';
+  return '◇';
+}
+
+function reviewState(h: Highlight, reviewRole: string): string {
+  if (h.feature_flags.clinician_confirmed) return 'Clinician-reviewed';
+  if (reviewRole === 'staff' && h.status === 'accepted') return 'Staff-reviewed';
+  if (h.review_status === 'needs_review') return 'Needs review';
+  return 'Suggested for review';
+}
+
 function learnedPriority(h: Highlight) {
   if (h.adaptive_adjustment === 0) return null;
   const sign = h.adaptive_adjustment > 0 ? '+' : '';
@@ -43,10 +57,17 @@ export default function GlancePanel({
   const [highlights, setHighlights] = useState<Highlight[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [selectedHighlightId, setSelectedHighlightId] = useState<string | null>(null);
 
   const refresh = useCallback(async (signal?: AbortSignal) => {
     try {
-      setHighlights((await api.getGlance(patientId, signal)).highlights);
+      const nextHighlights = (await api.getGlance(patientId, signal)).highlights;
+      setHighlights(nextHighlights);
+      setSelectedHighlightId((current) => (
+        current && nextHighlights.some((highlight) => highlight.highlight_id === current)
+          ? current
+          : nextHighlights[0]?.highlight_id ?? null
+      ));
       setError(null);
     } catch (e: any) {
       if (e?.name !== 'AbortError') setError(String(e));
@@ -83,7 +104,7 @@ export default function GlancePanel({
     return h.task_id ? (
       <button className="source-action" onClick={() => onOpenTasks?.(h.task_id!)}>Open task</button>
     ) : (
-      <button className="source-action" onClick={() => viewSource(h.highlight_id)}>View exact source</button>
+      <button className="source-action" onClick={() => viewSource(h.highlight_id)}>View Source</button>
     );
   }
 
@@ -94,59 +115,102 @@ export default function GlancePanel({
         <div>
           <button onClick={() => setStatus(h.highlight_id, 'accepted')}>{reviewRole === 'staff' ? 'Acknowledge' : 'Confirm'}</button>
           <button onClick={() => setStatus(h.highlight_id, 'pinned')}>{reviewRole === 'staff' ? 'Keep visible' : 'Keep on top'}</button>
-          <button onClick={() => setStatus(h.highlight_id, 'rejected')}>Hide from Overview</button>
+          <button onClick={() => setStatus(h.highlight_id, 'rejected')}>Hide from Glance</button>
         </div>
       </details>
     );
   }
 
-  const primary = highlights.slice(0, 2);
-  const supporting = highlights.slice(2);
+  const selectedHighlight = highlights.find((highlight) => highlight.highlight_id === selectedHighlightId) ?? highlights[0] ?? null;
 
   return (
-    <section className="glance-panel clinical-view" aria-labelledby="clinical-overview-heading">
-      <div className="view-title-row">
+    <section className="glance-panel clinical-view" aria-labelledby="glance-heading">
+      <div className="view-title-row glance-navigator-heading">
         <div>
           <p className="eyebrow">Patient summary</p>
-          <h2 id="clinical-overview-heading">Clinical Overview</h2>
-          <p className="view-subtitle">Current priorities and recent changes, ordered for clinical review.</p>
+          <h2 id="glance-heading">Glance</h2>
+          <p className="view-subtitle">What matters now · select a priority to inspect without losing Glance context.</p>
         </div>
-        <span className="record-count">Top {highlights.length}</span>
+        <div className="glance-heading-tools">
+          <div className="authority-legend" aria-label="Artifact authority legend">
+            <span className="raw">RAW</span>
+            <span className="ai">AI</span>
+            <span className="clinician">CLINICIAN</span>
+            <span className="staff">STAFF</span>
+          </div>
+          <span className="record-count">{highlights.length} current items</span>
+        </div>
       </div>
-      <details className="glance-review-help"><summary>How review controls work</summary><p>{reviewRole === 'staff' ? <><strong>Acknowledge</strong> records Staff review, <strong>Keep visible</strong> pins the item, and <strong>Hide</strong> removes it from the Overview. Staff review never becomes clinician confirmation.</> : <><strong>Confirm</strong> marks a priority as clinician-reviewed, <strong>Keep on top</strong> pins it, and <strong>Hide</strong> removes it from the Overview.</>} None of these actions creates or edits a clinical note. Review feedback can change the bounded soft priority of future similar AI suggestions within this clinic; it never changes a clinical fact, Task, or source.</p></details>
+      <details className="glance-review-help"><summary>How review controls work</summary><p>{reviewRole === 'staff' ? <><strong>Acknowledge</strong> records Staff review, <strong>Keep visible</strong> pins the item, and <strong>Hide</strong> removes it from Glance. Staff review never becomes clinician confirmation.</> : <><strong>Confirm</strong> marks a priority as clinician-reviewed, <strong>Keep on top</strong> pins it, and <strong>Hide</strong> removes it from Glance.</>} None of these actions creates or edits a clinical note. Review feedback can change the bounded soft priority of future similar AI suggestions within this clinic; it never changes a clinical fact, Task, or source.</p></details>
       {loading && <div className="loading-card">Loading precomputed priorities…</div>}
       {error && <div className="form-error">{error}</div>}
       {!loading && highlights.length === 0 && <div className="empty-state"><h3>No current highlights</h3><p>Nothing has been prioritized for this patient.</p></div>}
-      {primary.length > 0 && <div className="glance-section-label"><span>Current priorities</span><small>{primary.length} to review</small></div>}
-      {primary.map((h) => (
-        <article key={h.highlight_id} className={`highlight-card highlight-primary ${h.status}`}>
-          <span className="risk-dot" style={{ background: riskColor(h) }} aria-hidden="true" />
-          <div className="highlight-body">
-            <div className="highlight-kicker"><span>{priorityLabel(h)}</span>{h.feature_flags.clinician_confirmed ? <span className="confirmed-tag">Clinician-reviewed</span> : reviewRole === 'staff' && h.status === 'accepted' ? <span className="staff-reviewed-tag">Staff-reviewed</span> : null}</div>
-            <div className="highlight-text">{h.text}</div>
-            <div className="highlight-reason">{h.risk_reason}</div>
-            {learnedPriority(h)}
-            <div className="highlight-actions">
-              {sourceAction(h)}
-              {h.task_id == null && h.feature_flags.unresolved_task && onOpenTasks && (
-                <span className="unresolved-tag">Unresolved task</span>
-              )}
-              {reviewMenu(h)}
-              {h.review_status === 'needs_review' && (
-                <span className="needs-review-tag">Needs review</span>
-              )}
+      {!loading && selectedHighlight && (
+        <div className="glance-navigator">
+          <section className="glance-index-panel" aria-label="Glance priority index">
+            <header>
+              <div><span>Priority index</span><small>Stable Glance index</small></div>
+              <strong>{highlights.length}</strong>
+            </header>
+            <div className="glance-index-list">
+              {highlights.map((highlight, index) => {
+                const selected = highlight.highlight_id === selectedHighlight.highlight_id;
+                return (
+                  <article key={highlight.highlight_id} className={`glance-index-item ${highlight.status} ${selected ? 'selected' : ''}`}>
+                    <span className="glance-index-risk" style={{ background: riskColor(highlight) }} aria-hidden="true" />
+                    <button
+                      type="button"
+                      className="glance-index-select"
+                      aria-current={selected ? 'true' : undefined}
+                      onClick={() => setSelectedHighlightId(highlight.highlight_id)}
+                    >
+                      <span className="glance-index-kicker"><b>{prioritySymbol(highlight)} {priorityLabel(highlight)}</b><em>{String(index + 1).padStart(2, '0')}</em></span>
+                      <strong>{highlight.text}</strong>
+                      <small>{reviewState(highlight, reviewRole)}</small>
+                    </button>
+                    <div className="glance-index-actions">{sourceAction(highlight)}{reviewMenu(highlight)}</div>
+                  </article>
+                );
+              })}
             </div>
-          </div>
-        </article>
-      ))}
-      {supporting.length > 0 && <div className="glance-section-label supporting"><span>Additional findings</span><small>Each item retains its review status</small></div>}
-      {supporting.length > 0 && <div className="glance-context-list">{supporting.map((h) => (
-        <article key={h.highlight_id} className={`glance-context-row ${h.status}`}>
-          <span className="context-risk-dot" style={{ background: riskColor(h) }} aria-hidden="true" />
-          <div><div className="context-row-top"><span className="context-row-label">{priorityLabel(h)}</span><span className={`context-review-state ${h.feature_flags.clinician_confirmed ? 'reviewed' : ''}`}>{h.feature_flags.clinician_confirmed ? 'Clinician-reviewed' : 'Suggested for review'}</span></div><strong>{h.text}</strong><small>{h.risk_reason}</small>{learnedPriority(h)}</div>
-          <div className="context-row-actions">{sourceAction(h)}{reviewMenu(h)}</div>
-        </article>
-      ))}</div>}
+          </section>
+
+          <article className={`glance-detail-panel ${selectedHighlight.status}`} aria-live="polite">
+            <header className="glance-detail-head">
+              <span className="glance-detail-type"><b>{prioritySymbol(selectedHighlight)}</b>{priorityLabel(selectedHighlight)}</span>
+              <span className={`glance-detail-state ${selectedHighlight.feature_flags.clinician_confirmed ? 'reviewed' : ''}`}>{reviewState(selectedHighlight, reviewRole)}</span>
+            </header>
+            <h3>{selectedHighlight.text}</h3>
+            <p className="glance-detail-reason">{selectedHighlight.risk_reason}</p>
+
+            <section className="glance-detail-block">
+              <span>Next action</span>
+              <p>{selectedHighlight.task_id ? 'Open the linked Task, then review its state in the patient record.' : 'Open the exact source, verify the supporting span, then record the appropriate review decision.'}</p>
+            </section>
+
+            <section className="glance-detail-evidence">
+              <span>Evidence linkage</span>
+              <dl>
+                <div><dt>Event</dt><dd>Linked medical Event</dd></div>
+                <div><dt>Artifact</dt><dd>{selectedHighlight.artifact_id ? 'Derived Artifact linked' : 'No derived Artifact'}</dd></div>
+                <div><dt>Exact span</dt><dd>{selectedHighlight.source_span ? `${selectedHighlight.source_span.kind} source available` : 'No exact span claimed'}</dd></div>
+              </dl>
+            </section>
+
+            <section className="glance-detail-block authority">
+              <span>Authority and state</span>
+              <p>{selectedHighlight.feature_flags.clinician_confirmed ? 'This priority has been clinician-reviewed. Its raw, AI and human-authored Artifacts remain separate.' : 'This is a suggested priority, not clinician confirmation. Opening its source does not change clinical authority.'}</p>
+            </section>
+
+            {learnedPriority(selectedHighlight)}
+            <div className="glance-detail-actions">
+              {sourceAction(selectedHighlight)}
+              {reviewMenu(selectedHighlight)}
+              {selectedHighlight.review_status === 'needs_review' && <span className="needs-review-tag">Needs review</span>}
+            </div>
+          </article>
+        </div>
+      )}
     </section>
   );
 }

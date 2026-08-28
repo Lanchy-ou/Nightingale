@@ -138,6 +138,7 @@ export default function AdminWorkspacePage({
           </div>
           <span className="admin-role-badge">Admin</span>
         </header>
+        <div className="admin-boundary-note"><strong>Administrative oversight only</strong><span>Account and security controls do not grant access to clinical authoring actions.</span></div>
 
         {loading && <div className="loading-card">Loading clinic oversight…</div>}
         {error && <div className="form-error" role="alert">{error}</div>}

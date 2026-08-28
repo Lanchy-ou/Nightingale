@@ -287,6 +287,7 @@ export default function ClinicalTasksView({
   return (
     <section className="clinical-view tasks-view" aria-labelledby="tasks-heading">
       <div className="view-title-row"><div><p className="eyebrow">Who must do what next</p><h2 id="tasks-heading">Care Tasks</h2><p className="view-subtitle">Review active work first; create a new task only when needed.</p></div><div className="view-title-actions"><span className="record-count">{tasks.length} tasks</span><button className="primary-button" onClick={() => setShowCreate((current) => !current)}>{showCreate ? 'Close form' : 'New task'}</button></div></div>
+      <div className="task-authority-note"><strong>Task authority</strong><span>Patient “Report done” means reported_done and still requires explicit clinic verification before completion.</span></div>
       {error && <div className="form-error">{error}</div>}
       {showCreate && <div className="task-create-card">
         <div className="task-create-head"><div><p className="eyebrow">New follow-up action</p><h3>New task</h3><p>Choose the clinical Event this task belongs to.</p></div><button className="link-btn" onClick={() => setShowCreate(false)}>Close</button></div>

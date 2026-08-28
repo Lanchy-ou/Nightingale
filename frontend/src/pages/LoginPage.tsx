@@ -48,6 +48,7 @@ export default function LoginPage({
             <p className="muted">Shared longitudinal care record</p>
           </div>
         </div>
+        <div className="auth-security-note"><strong>Secure clinic access</strong><span>Your role and permitted workspace are determined by the authenticated server session.</span></div>
         <h2>Sign in</h2>
         <form onSubmit={submit} className="auth-form">
           <label htmlFor="login-email">Email</label>
