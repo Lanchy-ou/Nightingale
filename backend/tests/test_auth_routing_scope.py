@@ -109,10 +109,10 @@ def test_cross_clinic_session_still_uniform_404():
     absent = c.get("/api/patients/pat_does_not_exist")
     assert cross.status_code == absent.status_code == 404
     assert cross.json() == absent.json()
-    # Own-clinic directory returns only own-clinic rows (none seeded).
+    # Own-clinic directory returns only the other clinic's synthetic patient.
     own = c.get("/api/patients")
     assert own.status_code == 200
-    assert own.json() == []
+    assert {row["patient_id"] for row in own.json()} == {fixture.PATIENT_OTHER_ID}
 
 
 def test_cross_clinic_glance_and_artifacts_uniform_404():
@@ -131,7 +131,12 @@ def test_clinician_session_reaches_clinic_shell_data():
     directory = c.get("/api/patients")
     assert directory.status_code == 200
     ids = {p["patient_id"] for p in directory.json()}
-    assert ids == {fixture.PATIENT_ID, fixture.PATIENT_B_ID}
+    assert ids == {
+        fixture.PATIENT_ID,
+        fixture.PATIENT_B_ID,
+        fixture.PATIENT_TASK_ID,
+        fixture.PATIENT_DENSE_ID,
+    }
     assert c.get(f"/api/patients/{fixture.PATIENT_ID}/glance").status_code == 200
     # Clinician can create clinician notes, not staff notes (unchanged matrix).
     ok = c.post(

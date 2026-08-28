@@ -110,7 +110,7 @@ export default function AdminSettingsPage() {
       {error && <div className="form-error" role="alert">{error}</div>}
       <section className="admin-surface admin-setting-card">
         <div className="admin-section-head"><div><p className="eyebrow">AI &amp; privacy</p><h2>AI mode</h2></div><span className={`admin-status ${settings.ai.mode === 'deepseek' ? 'active' : ''}`}>{settings.ai.mode === 'deepseek' ? 'AI API' : 'Local Private'}</span></div>
-        <p className="settings-copy">Choose whether Nightingale uses private on-device responses or the configured online AI API. Only redacted text may cross the Provider boundary.</p>
+        <p className="settings-copy">Choose whether Nightingale uses private on-device responses or the configured online AI API. Only redacted text may cross the provider boundary.</p>
         <div className="settings-active-mode" aria-label="Current AI mode">
           <span className="settings-active-mark" aria-hidden="true">✓</span>
           <div><small>Currently active</small><strong>{settings.ai.mode === 'deepseek' ? 'AI API' : 'Local Private'}</strong><span>{settings.ai.mode === 'deepseek' ? 'Uses the verified API key after redaction' : 'On-device deterministic responses · no API key'}</span></div>
@@ -125,18 +125,40 @@ export default function AdminSettingsPage() {
           <div className="settings-setup-intro"><strong>Set up AI API</strong><span>Enter and verify a key below. Nightingale will enable AI API automatically after the test succeeds.</span></div>
         )}
         <div className="settings-key-panel">
-          <div><strong>AI API key</strong><span>{settings.ai.key_configured ? `Configured · ••••${settings.ai.key_suffix}` : 'Not configured'}</span><small>{settings.ai.key_source ? `${settings.ai.key_source.replace('_', ' ')} · ${formatDate(settings.ai.verified_at)}` : 'Stored only in Windows Credential Manager after verification.'}</small></div>
-          <label>New or replacement key<input type="password" value={key} autoComplete="off" onChange={(event) => setKey(event.target.value)} placeholder="Enter your own AI API key" /></label>
-          <div className="settings-actions"><button disabled={busy !== null || !key.trim()} onClick={() => void saveKey()}>{busy === 'key' ? 'Verifying…' : 'Test, save and enable'}</button>{settings.ai.key_configured && <button className="secondary-button" disabled={busy !== null} onClick={() => void removeKey()}>Remove key</button>}</div>
+          <div className="settings-key-status">
+            <span className="settings-key-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M7.5 10V7.5a4.5 4.5 0 0 1 9 0V10M6 10h12v9H6z" /></svg>
+            </span>
+            <div>
+              <span className="settings-key-label">API credential</span>
+              <strong>AI API key</strong>
+              <span className={`settings-key-state ${settings.ai.key_configured ? 'configured' : ''}`}>{settings.ai.key_configured ? `Configured · ••••${settings.ai.key_suffix}` : 'Not configured'}</span>
+            </div>
+            <small>{settings.ai.key_source ? `${settings.ai.key_source.replace('_', ' ')} · ${formatDate(settings.ai.verified_at)}` : 'Stored in Windows Credential Manager only after verification.'}</small>
+          </div>
+          <div className="settings-key-form">
+            <div className="settings-key-field">
+              <label htmlFor="admin-ai-api-key">New or replacement key</label>
+              <div className="settings-key-input-row">
+                <input id="admin-ai-api-key" type="password" value={key} autoComplete="off" autoCapitalize="none" spellCheck={false} onChange={(event) => setKey(event.target.value)} placeholder="Enter your own AI API key" />
+                <button className="primary-button" disabled={busy !== null || !key.trim()} onClick={() => void saveKey()}>{busy === 'key' ? 'Verifying…' : 'Test, save and enable'}</button>
+              </div>
+            </div>
+            <div className="settings-key-foot">
+              <small>The key is verified before it is saved. Nightingale never displays the full value again.</small>
+              {settings.ai.key_configured && <button className="settings-remove-key" disabled={busy !== null} onClick={() => void removeKey()}>Remove key</button>}
+            </div>
+          </div>
         </div>
       </section>
 
       <section className="admin-surface admin-setting-card">
         <div className="admin-section-head"><div><p className="eyebrow">Local capture</p><h2>Voice Capture</h2></div><label className="settings-switch"><input type="checkbox" checked={settings.voice.enabled} disabled={busy !== null || !voiceReady} onChange={(event) => void update({ voice_enabled: event.target.checked })} /><span>{settings.voice.enabled ? 'On' : 'Off'}</span></label></div>
+        <p className="settings-copy">Manage the on-device speech model used for synthetic Doctor, Nurse and Patient Check-in recordings.</p>
         <div className="settings-status-grid"><div><span>ASR provider</span><strong>faster-whisper · Local CPU</strong></div><div><span>Model</span><strong>{settings.voice.model}</strong><small>{settings.voice.model_status}</small></div><div><span>Storage</span><strong>{settings.voice.storage_mode}</strong></div></div>
         {settings.voice.warning && <div className="settings-warning">{settings.voice.warning}</div>}
         {settings.voice.model_status !== 'ready' && <div className="settings-model-row"><div><strong>Local model required</strong><span>Fixed revision · approximately 148 MB · no audio leaves this device.</span>{settings.voice.error_code && <small>Last attempt: {settings.voice.error_code.replace(/_/g, ' ')}</small>}</div><button disabled={busy !== null || settings.voice.model_status === 'downloading'} onClick={() => void prepareModel()}>{settings.voice.model_status === 'downloading' ? 'Downloading…' : 'Download local model'}</button></div>}
-        {voiceReady && <p className="settings-ready">Model ready. Admin can enable Doctor, Nurse and Patient Check-in recording for this device.</p>}
+        {voiceReady && <div className="settings-ready"><span aria-hidden="true">✓</span><p><strong>Model ready</strong>Admin can enable Doctor, Nurse and Patient Check-in recording for this device.</p></div>}
       </section>
     </div>
   );

@@ -417,11 +417,12 @@ def test_cli_runner_dry_run_apply_and_rerun_are_safe_and_idempotent(tmp_path):
     dry = run("--dry-run")
     assert dry["mode"] == "dry-run"
     assert dry["updated_count"] == 0
-    assert dry["tier_counts"] == {"cold": 1, "hot": 12, "warm": 1}
+    expected_tiers = {"cold": 8, "hot": 31, "warm": 11}
+    assert dry["tier_counts"] == expected_tiers
 
     first = run("--apply")
     second = run("--apply")
-    assert first["updated_count"] == 14
+    assert first["updated_count"] == sum(expected_tiers.values()) == 50
     assert second["updated_count"] == 0
     assert first["tier_counts"] == second["tier_counts"]
     assert "not total database savings" in first["limitation"]

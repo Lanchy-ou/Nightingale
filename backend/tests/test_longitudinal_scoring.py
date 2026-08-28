@@ -8,7 +8,12 @@ from sqlalchemy import select
 from app.highlights import extract_text, locate_span
 from app.models import Artifact, Highlight
 from seed import fixture
-from seed.highlights import SEED_AS_OF, group_repeated_entity_keys, is_recent
+from seed.highlights import (
+    SEED_AS_OF,
+    group_repeated_entity_keys,
+    group_repeated_patient_entity_keys,
+    is_recent,
+)
 
 
 def _hl(db, hid: str) -> Highlight:
@@ -43,6 +48,15 @@ def test_group_repeated_requires_two_distinct_events():
     assert group_repeated_entity_keys([("task:x", "e1"), ("task:x", "e1")]) == set()
 
 
+def test_group_repeated_never_crosses_patient_records():
+    assert group_repeated_patient_entity_keys(
+        [("p1", "symptom:x", "e1"), ("p2", "symptom:x", "e2")]
+    ) == set()
+    assert group_repeated_patient_entity_keys(
+        [("p1", "symptom:x", "e1"), ("p1", "symptom:x", "e2")]
+    ) == {("p1", "symptom:x")}
+
+
 def test_recency_computed_from_as_of(db_session):
     recent = {
         "hl_headache_worsening",  # 08-20
@@ -73,8 +87,13 @@ def test_fixture_candidates_do_not_hand_fill_structural_flags():
 
 
 def test_seed_unresolved_task_flag_matches_real_task_provenance(db_session):
+    expected_ids = {
+        "hl_blood_test_pending",
+        "hl_maya_bp_log",
+        "hl_daniel_physio",
+    }
     for highlight in db_session.scalars(select(Highlight)).all():
-        expected = highlight.highlight_id == "hl_blood_test_pending"
+        expected = highlight.highlight_id in expected_ids
         assert highlight.feature_flags["unresolved_task"] is expected
 
 

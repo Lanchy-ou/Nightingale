@@ -75,8 +75,13 @@ def test_admin_lists_only_clinic_users_with_sanitized_account_metadata(
         fixture.USER_CLINICIAN_ID,
         fixture.USER_ADMIN_ID,
         fixture.USER_PATIENT_B_ID,
+        fixture.USER_PATIENT_TASK_ID,
+        fixture.USER_PATIENT_DENSE_ID,
+        fixture.USER_STAFF_2_ID,
+        fixture.USER_CLINICIAN_2_ID,
     }
     assert fixture.USER_CLINICIAN_B_ID not in {row["user_id"] for row in rows}
+    assert fixture.USER_PATIENT_OTHER_ID not in {row["user_id"] for row in rows}
     assert all(
         set(row)
         == {

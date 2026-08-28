@@ -6,7 +6,7 @@ import json
 from sqlalchemy import select
 
 from app.highlights import extract_text, locate_span
-from app.models import Artifact, ArtifactVersion, Clinic, Event, Highlight, Patient, User
+from app.models import Artifact, ArtifactVersion, Clinic, Comment, Event, Highlight, Patient, Task, User
 from seed import fixture
 
 
@@ -18,11 +18,19 @@ def test_fixture_shape(db_session):
     assert len(db_session.scalars(select(Clinic)).all()) == 2
     users = db_session.scalars(select(User)).all()
     assert {u.role for u in users} == {"patient", "staff", "clinician", "admin"}
-    assert len(db_session.scalars(select(Patient)).all()) == 2
+    assert len(users) == len(fixture.DEMO_EMAILS) == 11
+    patients = db_session.scalars(select(Patient)).all()
+    assert len(patients) == 5
+    assert sum(patient.clinic_id == fixture.CLINIC_ID for patient in patients) == 4
+    assert sum(patient.clinic_id == fixture.CLINIC_B_ID for patient in patients) == 1
 
 
 def test_event_timeline_dates_and_types(db_session):
-    events = db_session.scalars(select(Event).order_by(Event.started_at)).all()
+    events = db_session.scalars(
+        select(Event)
+        .where(Event.patient_id == fixture.PATIENT_ID)
+        .order_by(Event.started_at)
+    ).all()
     assert [e.event_type for e in events] == [
         "historical_review",
         "historical_review",
@@ -46,7 +54,7 @@ def test_ai_artifacts_are_system_authored(db_session):
     ai_artifacts = db_session.scalars(
         select(Artifact).where(Artifact.artifact_type.in_(ai_types))
     ).all()
-    assert len(ai_artifacts) == 4  # pre, nurse, doctor, follow-up summaries
+    assert len(ai_artifacts) == 11
     for a in ai_artifacts:
         assert a.author_role == "system"
         assert a.author_id is None
@@ -159,9 +167,14 @@ def test_all_candidate_quotes_anchor(db_session):
         assert extract_text(src.content, span) == cand["quote"]
 
 
-def test_nine_highlights_seeded(db_session):
+def test_all_highlights_seeded_for_their_own_patient(db_session):
     highlights = db_session.scalars(select(Highlight)).all()
-    assert len(highlights) == len(fixture.HIGHLIGHT_CANDIDATES) == 9
+    assert len(highlights) == len(fixture.HIGHLIGHT_CANDIDATES) == 14
+    expected_patient = {
+        candidate["highlight_id"]: candidate.get("patient_id", fixture.PATIENT_ID)
+        for candidate in fixture.HIGHLIGHT_CANDIDATES
+    }
+    assert {highlight.highlight_id: highlight.patient_id for highlight in highlights} == expected_patient
 
 
 def test_d2_task_glance_mapping_is_explicit(db_session):
@@ -170,7 +183,10 @@ def test_d2_task_glance_mapping_is_explicit(db_session):
     pending = db_session.get(Highlight, "hl_blood_test_pending")
     assert pending.task_id == fixture.TASK_BLOOD_TEST
     others = db_session.scalars(
-        select(Highlight).where(Highlight.highlight_id != "hl_blood_test_pending")
+        select(Highlight).where(
+            Highlight.patient_id == fixture.PATIENT_ID,
+            Highlight.highlight_id != "hl_blood_test_pending",
+        )
     ).all()
     assert all(highlight.task_id is None for highlight in others)
 
@@ -179,9 +195,65 @@ def test_d1_demo_credentials_argon2_hashed_for_all_seeded_users(db_session):
     from app.models import UserCredential
 
     credentials = db_session.scalars(select(UserCredential)).all()
-    assert len(credentials) == len(fixture.DEMO_EMAILS) == 6
+    assert len(credentials) == len(fixture.DEMO_EMAILS) == 11
     for credential in credentials:
         # Argon2id hash only; the shared demo password is never stored raw.
         assert credential.password_hash.startswith("$argon2")
         assert fixture.DEMO_PASSWORD not in credential.password_hash
         assert credential.email_normalized in fixture.DEMO_EMAILS.values()
+
+
+def test_expansion_scenarios_are_purpose_built_and_deterministic(db_session):
+    counts = {
+        patient_id: len(
+            db_session.scalars(
+                select(Event).where(Event.patient_id == patient_id)
+            ).all()
+        )
+        for patient_id in (
+            fixture.PATIENT_ID,
+            fixture.PATIENT_B_ID,
+            fixture.PATIENT_TASK_ID,
+            fixture.PATIENT_DENSE_ID,
+            fixture.PATIENT_OTHER_ID,
+        )
+    }
+    assert counts == {
+        fixture.PATIENT_ID: 7,
+        fixture.PATIENT_B_ID: 0,
+        fixture.PATIENT_TASK_ID: 5,
+        fixture.PATIENT_DENSE_ID: 12,
+        fixture.PATIENT_OTHER_ID: 3,
+    }
+    assert sum(counts.values()) == 27
+
+
+def test_expansion_tasks_and_collaboration_cover_demo_states(db_session):
+    maya_log = db_session.get(Task, fixture.TASK_MAYA_BP_LOG)
+    assert maya_log.status == "reported_done"
+    assert maya_log.patient_visible is True
+    assert maya_log.assigned_user_id == fixture.USER_PATIENT_TASK_ID
+
+    maya_review = db_session.get(Task, fixture.TASK_MAYA_LAB_REVIEW)
+    assert maya_review.status == "open"
+    assert maya_review.patient_visible is False
+    assert maya_review.assigned_role == "staff"
+
+    daniel_open = db_session.get(Task, fixture.TASK_DANIEL_PHYSIO)
+    daniel_done = db_session.get(Task, fixture.TASK_DANIEL_EXERCISE_LOG)
+    assert (daniel_open.status, daniel_done.status) == ("open", "completed")
+
+    comments = db_session.scalars(select(Comment)).all()
+    assert len(comments) == 3
+    assert {comment.author_role for comment in comments} == {"staff", "clinician"}
+    assert {comment.resolved for comment in comments} == {False, True}
+
+
+def test_other_clinic_patient_never_appears_in_primary_clinic(db_session):
+    other = db_session.get(Patient, fixture.PATIENT_OTHER_ID)
+    assert other.clinic_id == fixture.CLINIC_B_ID
+    other_events = db_session.scalars(
+        select(Event).where(Event.patient_id == other.patient_id)
+    ).all()
+    assert len(other_events) == 3
+    assert {event.clinic_id for event in other_events} == {fixture.CLINIC_B_ID}

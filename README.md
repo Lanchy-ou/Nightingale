@@ -213,6 +213,24 @@ Demo mode exposes a role selector and legacy identity headers. Do not use it as 
 
 Leave `VITE_DEMO_AUTH` and `NANTINGALE_DEMO_AUTH` unset/false. Open the frontend, log in with a seeded synthetic account, and let the server-side session cookie determine the role and patient binding. The canonical seeded password is documented in `backend/seed/fixture.py` for local synthetic demonstration only.
 
+### Synthetic demo scenarios
+
+The deterministic fixture keeps Alice Tan as the primary seven-Event story and
+adds purpose-built records for UI and scope validation:
+
+- Ben Lim: sparse patient with no Events (empty states);
+- Maya Rahman: five Events, reported-done patient action, internal staff queue,
+  exact-source Glance items, and resolved collaboration;
+- Daniel Koh: twelve cross-year Events, long Timeline, current open action, and
+  completed historical action;
+- Leah Ong: three Events in `Other Demo Clinic`, visible only to that clinic.
+
+The primary clinic also has a second synthetic clinician and nurse. Optional
+patient logins are `maya@demo.clinic` and `daniel@demo.clinic`; the other-clinic
+journey uses `doctor@other-demo.clinic` and `leah@other-demo.clinic`. All use the
+same local synthetic demo password as the original accounts. These records are
+hand-written and contain no real patient data or external dataset material.
+
 ### Existing schema migration
 
 ```powershell
@@ -291,6 +309,11 @@ git diff --check
 Current pre-E5 evidence: backend 509 passed / 2 explicit real-local-ASR-input skips; security/integration 22 passed; Patient Check-in 29 passed; D3 corpus/runtime and D4 frozen eval passed; three frontend Node checks and the 59-module production build passed. The dated final manifest records the final-commit rerun and any later changes.
 
 Post-E5 Admin settings and frontend pre-visual repairs are tracked separately in `docs/frontend_previsual_repair_evidence_2026-08-28.md`. That current working-tree verification collected 524 backend tests (522 passed / 2 explicit local-ASR-input skips), passed the 60-module production build, and re-ran four-role product-session browser acceptance. It does not rewrite the historical E5 evidence.
+
+The later deterministic demo-data expansion collects 532 backend tests (530
+passed / the same 2 explicit local-ASR-input skips), preserves Alice's canonical
+story, and adds sparse, task-heavy, dense-history, and cross-clinic browser
+journeys. This is synthetic UI/authorization coverage, not clinical validation.
 
 ## Known limits
 
