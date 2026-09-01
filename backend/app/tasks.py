@@ -18,7 +18,8 @@ from sqlalchemy.orm import Session
 
 from .highlights import compute_score
 from .ids import new_id
-from .models import Highlight, Task
+from .models import Artifact, Highlight, Task
+from .provenance_binding import create_source_binding
 
 UNRESOLVED_TASK_STATUSES = {"open", "in_progress", "reported_done"}
 
@@ -200,6 +201,8 @@ def link_task_highlight(db: Session, task: Task) -> Highlight:
                     return candidate
 
     now = datetime.now()
+    source = db.get(Artifact, task.source_artifact_id) if task.source_artifact_id else None
+    source_version, quote_hash = create_source_binding(source, task.source_span)
     highlight = Highlight(
         highlight_id=new_id("hl"),
         patient_id=task.patient_id,
@@ -207,6 +210,8 @@ def link_task_highlight(db: Session, task: Task) -> Highlight:
         artifact_id=task.source_artifact_id,
         source_artifact_id=task.source_artifact_id,
         source_span=task.source_span,
+        source_artifact_version=source_version,
+        source_quote_sha256=quote_hash,
         task_id=task.task_id,
         text=task.title,
         risk_reason=f"Unresolved care task ({task.assigned_role})",

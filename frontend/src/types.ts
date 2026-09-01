@@ -102,6 +102,10 @@ export interface ProvenanceResult {
   span: Span;
   quote: string | null;
   conflict_artifact: Artifact | null;
+  bound_source_version: number | null;
+  current_source_version: number | null;
+  source_changed: boolean;
+  binding_status: string;
 }
 
 export interface Comment {

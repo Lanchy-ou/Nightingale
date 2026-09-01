@@ -1117,3 +1117,17 @@ Status: `REPAIR_IMPLEMENTED_AND_REVERIFIED`. This is an additive post-E5 working
 - **Accessibility/mobile**: solid focus rings cover native controls, disclosures, and resizers; dark-sidebar focus uses white. Critical small metadata is darker/larger. Patient navigation/logout/Task actions have a 44 px minimum height.
 - **Verification**: backend 524 collected / 522 passed / 2 explicit local-ASR-input skips; frontend Node checks and 60-module build passed; D3/D4, dependencies, secret scan, diff check, four-role product sessions, concurrent Admin reads, Patient request isolation, and zero browser console warnings/errors passed.
 - **Evidence**: `Task_Card/Frontend_Previsual_Repair_Task_Card.md` and `docs/frontend_previsual_repair_evidence_2026-08-28.md` are authoritative for this repair only.
+
+---
+
+## 35. Current Execution Phase F1 — Real-Clinic Feedback Hardening（2026-09-01）
+
+The official 16-scenario real-clinic feedback is a common challenge-wide stress test, not a finding that every listed failure occurred in this repository. `Task_Card/F1_Real_Clinic_Feedback_Hardening_Task_Card.md` is the owner-approved priority and execution contract for the 48-hour revision window.
+
+- **A — discuss, approve, then implement one risk at a time**: clinic-isolation defense in depth; application/edge/third-party logging and retention boundary; explicit Provider total timeout; Importance meaning/falsification; Self-Learning surfaced-only bias and fatigue safeguards. Scenarios 14–15 are the core optimization focus.
+- **B — after A**: clinic onboarding; synthetic Malay-English-Hokkien evaluation; separately designed real-time alerting; delivery/receipt lifecycle; patient-instruction publication/correction/withdrawal.
+- **C — after A/B**: non-email patient access. Identity, recovery, record binding and message delivery must remain separate security decisions.
+- **D — preserve and re-audit**: redaction ordering, returning-error fallback, note concurrency, allergy-conflict review, and immutable Highlight provenance. Do not refactor these safeguards unless regression evidence requires it.
+- **Permanent workflow**: inspect the real journey -> explain/challenge the design -> owner approval -> failing regression -> minimum implementation -> targeted/full tests -> production build -> relevant product-session browser acceptance -> update the readiness ledger.
+- **Current local repair state at F1 entry**: scenario 13 allergy-conflict handling and scenario 16 source-version/hash provenance are implemented and verified in the working tree; they must be committed before being described as repository-delivered capability.
+- **No implicit authorization**: the task card organizes future work but does not authorize implementation, future merge/push, Provider spend, external delivery, or third-party service/account changes.

@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from .ai_pipeline import AnchoredCandidate, PipelineOutput, persist_derived
 from .audit import add_audit
+from .conflicts import clinical_assertion_sources, find_conflict
 from .extraction import normalize_entity_key
 from .highlights import compute_score, extract_text
 from .ids import stable_id
@@ -949,6 +950,10 @@ def _summary_output(
     anchored: list[AnchoredCandidate] = []
     source_facts: list[dict] = []
     recompute: list[str] = []
+    clinician_records = clinical_assertion_sources(db, patient.patient_id)
+    allergy_records = clinical_assertion_sources(
+        db, patient.patient_id, include_staff_and_nurse=True
+    )
     for candidate in result.candidates:
         source_message = by_id.get(candidate.patient_message_id)
         if source_message is None:
@@ -979,18 +984,37 @@ def _summary_output(
             "symptom_change": candidate.symptom_change,
             "repeated_mentions": bool(existing),
         }
+        review_status = None
+        conflict_with = None
+        risk_reason = candidate.risk_reason
+        conflict = find_conflict(
+            entity_key,
+            candidate.assertion_value,
+            allergy_records if candidate.entity_type == "allergy" else clinician_records,
+            candidate_entity_type=candidate.entity_type,
+            candidate_text=candidate.text,
+            candidate_quote=candidate.quote,
+        )
+        if conflict is not None:
+            conflict_with, _ = conflict
+            review_status = "needs_review"
+            risk_reason = (
+                "allergy statements conflict across patient and clinical records; review required"
+                if candidate.entity_type == "allergy"
+                else "conflicts with clinician-authored record; review required"
+            )
         anchored.append(
             AnchoredCandidate(
                 text=candidate.text,
-                risk_reason=candidate.risk_reason,
+                risk_reason=risk_reason,
                 entity_type=candidate.entity_type,
                 entity_key=entity_key,
                 assertion_value=candidate.assertion_value,
                 span=span,
                 feature_flags=flags,
                 score=compute_score(flags),
-                review_status=None,
-                conflict_with_artifact_id=None,
+                review_status=review_status,
+                conflict_with_artifact_id=conflict_with,
             )
         )
         source_facts.append(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 
 from sqlalchemy import select
 
@@ -43,6 +44,25 @@ class CapturingClient:
                 entity_type="symptom",
                 assertion_value=None,
                 symptom_change=True,
+            )],
+        )
+
+
+class AllergyConflictClient(CapturingClient):
+    def checkin_summary(self, redacted):
+        self.summary_payload = redacted
+        first = redacted.content["messages"][0]
+        return CheckInSummaryResult(
+            summary=first["text"],
+            referenced_patient_message_ids=[m["id"] for m in redacted.content["messages"]],
+            candidates=[CheckInSummaryCandidate(
+                text="No known allergies",
+                patient_message_id=first["id"],
+                quote=first["text"],
+                risk_reason="Patient reported no known allergies",
+                entity_type="allergy",
+                assertion_value="none",
+                symptom_change=False,
             )],
         )
 
@@ -148,3 +168,69 @@ def test_ai_messages_and_unconfirmed_draft_cannot_be_fact_sources(
         card["quote"] != "What has changed since your last update?"
         for card in copilot.json()["evidence"]
     )
+
+
+def test_patient_allergy_denial_conflicting_with_staff_record_requires_review_and_surfaces(
+    patient_client, clinician_client, db_session, monkeypatch
+):
+    staff_record = Artifact(
+        artifact_id="art_staff_penicillin_allergy",
+        event_id=fixture.EVT_NURSE_0821,
+        artifact_type="staff_note",
+        author_role="staff",
+        author_id=fixture.USER_STAFF_ID,
+        content={"note": "Penicillin allergy recorded by nurse."},
+        created_at=datetime(2026, 8, 21, 9, 30),
+        version=1,
+        provenance_pointer=None,
+    )
+    db_session.add(staff_record)
+    db_session.commit()
+
+    client = AllergyConflictClient()
+    monkeypatch.setenv("NANTINGALE_LLM_PROVIDER", "mock")
+    monkeypatch.setattr("app.checkins.build_client", lambda *_args, **_kwargs: client)
+    session_id = "checkin-allergy-conflict-001"
+    patient_client.post(
+        f"/api/patients/{fixture.PATIENT_ID}/check-ins", json={"session_id": session_id}
+    )
+    sent = patient_client.post(
+        f"/api/check-ins/{session_id}/messages",
+        json={
+            "message_id": "patient-allergy-denial-001",
+            "intent": "answer",
+            "text": "I have no known allergies.",
+        },
+    )
+    assert sent.status_code == 200, sent.text
+    patient_client.post(
+        f"/api/check-ins/{session_id}/messages",
+        json={"message_id": "patient-allergy-end-001", "intent": "no_more", "text": ""},
+    )
+    submitted = patient_client.post(
+        f"/api/check-ins/{session_id}/submit",
+        json={"expected_status": "awaiting_confirmation"},
+    )
+    assert submitted.status_code == 200, submitted.text
+
+    highlight = db_session.scalar(select(Highlight).where(
+        Highlight.event_id == submitted.json()["event_id"],
+        Highlight.entity_type == "allergy",
+    ))
+    assert highlight is not None
+    assert highlight.review_status == "needs_review"
+    assert highlight.conflict_with_artifact_id == staff_record.artifact_id
+    assert "allergy statements conflict" in highlight.risk_reason
+
+    glance = clinician_client.get(f"/api/patients/{fixture.PATIENT_ID}/glance")
+    assert glance.status_code == 200
+    assert highlight.highlight_id in {
+        item["highlight_id"] for item in glance.json()["highlights"]
+    }
+    provenance = clinician_client.get(
+        f"/api/highlights/{highlight.highlight_id}/provenance"
+    )
+    assert provenance.status_code == 200
+    assert provenance.json()["quote"] == "I have no known allergies."
+    assert provenance.json()["conflict_artifact"]["artifact_id"] == staff_record.artifact_id
+    assert provenance.json()["conflict_artifact"]["author_role"] == "staff"

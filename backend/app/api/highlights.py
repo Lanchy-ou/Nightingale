@@ -11,8 +11,9 @@ from sqlalchemy.orm import Session
 from ..audit import add_audit
 from ..authz import authorize, require_auth, resource_not_found
 from ..db import get_db
-from ..highlights import GLANCE_LIMIT, compute_score, extract_text, status_transitions
+from ..highlights import GLANCE_LIMIT, compute_score, status_transitions
 from ..models import Artifact, Event, Highlight, Patient
+from ..provenance_binding import resolve_highlight_source
 from ..role_context import RoleContext
 from ..schemas import (
     ArtifactOut,
@@ -43,13 +44,13 @@ def get_glance(
             Highlight.status != "rejected",
         )
     ).all()
-    # Deterministic ordering (H1): pinned first, then score desc, then record
-    # time, then a stable final tiebreak so identical rows never depend on DB
-    # return order.
+    # Deterministic safety ordering (H1): pinned first, then unresolved clinical
+    # conflicts, score desc, record time, and a stable final tiebreak.
     highlights = sorted(
         highlights,
         key=lambda h: (
             h.status != "pinned",
+            h.review_status != "needs_review",
             -h.importance_score,
             h.created_at,
             h.highlight_id,
@@ -78,6 +79,7 @@ def get_provenance(
     source = db.get(Artifact, hl.source_artifact_id)
     if source is None:
         raise resource_not_found()
+    resolution = resolve_highlight_source(db, hl)
 
     summary = None
     if hl.artifact_id != hl.source_artifact_id:
@@ -89,14 +91,27 @@ def get_provenance(
     if hl.review_status == "needs_review" and hl.conflict_with_artifact_id:
         conflict_artifact = db.get(Artifact, hl.conflict_with_artifact_id)
 
+    source_out = ArtifactOut.model_validate(source)
+    if resolution.content is not None and resolution.bound_version is not None:
+        source_out = source_out.model_copy(
+            update={
+                "content": resolution.content,
+                "version": resolution.bound_version,
+            }
+        )
+
     return ProvenanceOut(
         highlight_id=hl.highlight_id,
         event=EventBrief.model_validate(event),
         summary_artifact=ArtifactOut.model_validate(summary) if summary else None,
-        source_artifact=ArtifactOut.model_validate(source),
+        source_artifact=source_out,
         span=hl.source_span,
-        quote=extract_text(source.content, hl.source_span),
+        quote=resolution.quote,
         conflict_artifact=ArtifactOut.model_validate(conflict_artifact) if conflict_artifact else None,
+        bound_source_version=resolution.bound_version,
+        current_source_version=resolution.current_version,
+        source_changed=resolution.source_changed,
+        binding_status=resolution.status,
     )
 
 

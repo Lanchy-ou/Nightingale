@@ -93,11 +93,11 @@ Current evidence distinguishes the layers:
 
 ## Provenance and authority
 
-Every suggested Highlight stores its Event, AI Summary Artifact, raw source Artifact, and exact source Span. A failed quote restore or span resolution drops the candidate. Fuzzy matching is prohibited.
+Every suggested Highlight stores its Event, AI Summary Artifact, raw source Artifact, exact source Span, source Artifact version, and SHA-256 of the exact quote. A failed quote restore or span resolution drops the candidate. If an editable source changes later, provenance resolves the verified historical snapshot and labels the source as updated; a missing snapshot or hash mismatch fails closed instead of silently pointing at current text. Fuzzy matching is prohibited.
 
 For Patient Check-in, candidate facts must name one patient `message_id` and copy a verbatim quote from that message. AI questions and acknowledgements can never become patient facts, Highlights, or Copilot evidence. AI summaries are system-authored and clearly separated from clinician/staff-authored material.
 
-If patient/AI-derived content conflicts with a clinician-authored record, the clinician artifact remains authoritative or the candidate is marked for review. AI never overwrites a clinician note, staff note, patient instruction, or raw source.
+If patient/AI-derived content conflicts with a clinician-authored record, the clinician artifact remains authoritative or the candidate is marked for review. Deterministic allergy checks also flag contradictions against human-authored Staff Notes and confirmed Nurse Consult transcripts without choosing which statement is true; unresolved conflicts surface ahead of normal Glance suggestions. AI never overwrites a clinician note, staff note, patient instruction, or raw source.
 
 ## RBAC and identity
 
@@ -337,6 +337,8 @@ journeys. This is synthetic UI/authorization coverage, not clinical validation.
 - Candidate requirements: `2026 72 Hour Build_ Nightingale Candidate Brief 2.pdf`
 - Attribution: `ATTRIBUTION.txt`
 - Final evidence: `docs/final_submission_evidence_2026-08-28.md`
+- Current real-clinic readiness ledger: `docs/real_clinic_readiness_status_2026-08-31.md`
+- Active real-clinic hardening phase: `Task_Card/F1_Real_Clinic_Feedback_Hardening_Task_Card.md`
 - Frontend pre-visual repair evidence: `docs/frontend_previsual_repair_evidence_2026-08-28.md`
 - Demo runbook: `docs/demo_video_runbook_2026-08-28.md`
 - Submission email draft: `docs/submission_email_draft_2026-08-28.md`

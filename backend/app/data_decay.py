@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from .importance_learning import compose_score, requested_adaptive_adjustment
 from .models import Artifact, ArtifactStorageState, Event, Highlight, Task, User
+from .provenance_binding import current_source_matches_binding
 from .tasks import UNRESOLVED_TASK_STATUSES, resolve_exact_span
 
 POLICY_VERSION = "decay-v1"
@@ -208,7 +209,7 @@ def _provenance_verified(
 ) -> bool:
     for highlight in related_highlights:
         if highlight.source_artifact_id == artifact.artifact_id:
-            if resolve_exact_span(artifact.content, highlight.source_span) is None:
+            if not current_source_matches_binding(highlight, artifact):
                 return False
         if (
             highlight.artifact_id == artifact.artifact_id
@@ -222,7 +223,7 @@ def _provenance_verified(
                 or pointer.get("artifact_id") != highlight.source_artifact_id
                 or source is None
                 or source.event_id != event.event_id
-                or resolve_exact_span(source.content, highlight.source_span) is None
+                or not current_source_matches_binding(highlight, source)
             ):
                 return False
 

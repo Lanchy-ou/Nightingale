@@ -40,6 +40,8 @@ def test_every_highlight_has_complete_provenance_pointer(db_session):
             "section",
         }
         assert "index" in h.source_span
+        assert h.source_artifact_version == 1
+        assert len(h.source_quote_sha256) == 64
 
 
 def test_provenance_resolves_hop_by_hop(db_session):
@@ -74,3 +76,51 @@ def test_ai_scribed_highlights_satisfy_same_rules(db_session):
         assert derived.author_role == "system"
         src = db_session.get(Artifact, h.source_artifact_id)
         assert extract_text(src.content, h.source_span) is not None
+
+
+def test_provenance_stays_bound_to_original_version_after_source_edit(
+    clinician_client,
+):
+    before = clinician_client.get(
+        "/api/highlights/hl_medication_existing/provenance"
+    )
+    assert before.status_code == 200
+    assert before.json()["quote"] == "Start propranolol 20 mg daily"
+    assert before.json()["binding_status"] == "current"
+
+    edited = clinician_client.patch(
+        f"/api/artifacts/{fixture.ART_HIST_2026_NOTE}",
+        json={
+            "content": {"assessment": "No known allergies recorded."},
+            "expected_version": 1,
+        },
+    )
+    assert edited.status_code == 200, edited.text
+    assert edited.json()["version"] == 2
+
+    after = clinician_client.get(
+        "/api/highlights/hl_medication_existing/provenance"
+    )
+    assert after.status_code == 200
+    body = after.json()
+    assert body["quote"] == "Start propranolol 20 mg daily"
+    assert body["source_artifact"]["version"] == 1
+    assert body["source_changed"] is True
+    assert body["bound_source_version"] == 1
+    assert body["current_source_version"] == 2
+    assert body["binding_status"] == "historical"
+
+
+def test_provenance_hash_mismatch_fails_closed(
+    clinician_client, db_session
+):
+    highlight = db_session.get(Highlight, "hl_medication_existing")
+    highlight.source_quote_sha256 = "0" * 64
+    db_session.commit()
+
+    response = clinician_client.get(
+        "/api/highlights/hl_medication_existing/provenance"
+    )
+    assert response.status_code == 200
+    assert response.json()["quote"] is None
+    assert response.json()["binding_status"] == "hash_mismatch"

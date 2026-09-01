@@ -238,6 +238,10 @@ class Highlight(Base):
     artifact_id: Mapped[str | None] = mapped_column(String(64), nullable=True)  # derived-from (AI summary / note)
     source_artifact_id: Mapped[str | None] = mapped_column(String(64), nullable=True)  # contains the quote
     source_span: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # Immutable provenance binding. The span is interpreted against this exact
+    # source version and verified with the original quote hash.
+    source_artifact_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source_quote_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # D2 explicit Task↔Glance mapping: exactly one Task may own a Highlight and
     # exactly one Highlight may represent a Task. Never inferred from the Event.
     task_id: Mapped[str | None] = mapped_column(

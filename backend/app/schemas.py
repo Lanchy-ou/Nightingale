@@ -106,6 +106,10 @@ class ProvenanceOut(BaseModel):
     span: dict
     quote: str | None
     conflict_artifact: ArtifactOut | None = None
+    bound_source_version: int | None = None
+    current_source_version: int | None = None
+    source_changed: bool = False
+    binding_status: str
 
 
 class CommentOut(BaseModel):

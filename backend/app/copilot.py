@@ -28,6 +28,7 @@ from .copilot_models import (
 )
 from .highlights import extract_text, locate_span
 from .models import Artifact, Event, Highlight, Patient, Task, User
+from .provenance_binding import resolve_highlight_source
 from .redaction import redact_content
 
 MAX_PROVIDER_EVIDENCE = 12
@@ -256,7 +257,17 @@ def _matters_rows(db: Session, patient: Patient, events: list[Event]) -> list[tu
         Highlight.status != "rejected",
     )).all()
     for highlight in sorted(highlights, key=lambda item: (item.status != "pinned", -item.importance_score, item.highlight_id))[:5]:
-        _append_exact(rows, patient, db.get(Event, highlight.event_id), db.get(Artifact, highlight.source_artifact_id), highlight.source_span)
+        resolution = resolve_highlight_source(db, highlight)
+        # Historical Highlight provenance remains visible to humans, but
+        # Copilot only uses a current, hash-verified source in current answers.
+        if resolution.status == "current":
+            _append_exact(
+                rows,
+                patient,
+                db.get(Event, highlight.event_id),
+                resolution.source,
+                highlight.source_span,
+            )
     tasks = db.scalars(select(Task).where(
         Task.patient_id == patient.patient_id,
         Task.status.in_(("open", "in_progress", "reported_done")),

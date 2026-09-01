@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from app.highlights import compute_score, locate_span
 from app.importance_learning import score_new_candidate
 from app.models import Artifact, Event, Highlight
+from app.provenance_binding import create_source_binding
 from app.tasks import unresolved_task_exists
 
 from . import fixture
@@ -80,6 +81,8 @@ def generate_highlights(db: Session) -> list[str]:
     # 3. build highlights with computed structural flags + score.
     created: list[str] = []
     for cand, span, event in anchored:
+        source = db.get(Artifact, cand["source_artifact_id"])
+        source_version, quote_hash = create_source_binding(source, span)
         entity_key = cand.get("entity_key")
         patient_id = cand.get("patient_id", fixture.PATIENT_ID)
         repeated = bool(entity_key and (patient_id, entity_key) in repeated_keys)
@@ -111,6 +114,8 @@ def generate_highlights(db: Session) -> list[str]:
                 artifact_id=cand["artifact_id"],
                 source_artifact_id=cand["source_artifact_id"],
                 source_span=span,
+                source_artifact_version=source_version,
+                source_quote_sha256=quote_hash,
                 task_id=cand.get("task_id"),
                 text=cand["text"],
                 risk_reason=cand["risk_reason"],

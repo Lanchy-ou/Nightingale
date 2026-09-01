@@ -39,6 +39,11 @@ export default function ProvenancePanel({
         </div>
         <button onClick={onClose} aria-label="Close source viewer">✕</button>
       </div>
+      {provenance.source_changed && (
+        <div className="verification-callout">
+          This source was updated after the highlight was created. Showing the verified original version v{provenance.bound_source_version}; the current source is v{provenance.current_source_version}.
+        </div>
+      )}
       {quote && <blockquote className="source-quote-preview">“{quote}”</blockquote>}
       <p className="provenance-compact-meta">{formatDate(event.started_at)} · {artifactLabel(source_artifact)} · {source_artifact.author_role} · exact {span.kind} span</p>
       {quote ? (
@@ -54,12 +59,12 @@ export default function ProvenancePanel({
       {conflict_artifact && (
         <div className="conflict-box">
           <span className="needs-review-tag">Needs review</span>
-          <span>conflicts with clinician-authored note</span>
+          <span>conflicts with another clinical record</span>
           <button
             className="link-btn"
             onClick={() => onFocusEvent(conflict_artifact.event_id)}
           >
-            Jump to clinician note
+            Jump to conflicting record
           </button>
         </div>
       )}

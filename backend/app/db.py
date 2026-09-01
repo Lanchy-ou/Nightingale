@@ -7,6 +7,7 @@ command line, repository file or log.
 """
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
@@ -202,6 +203,89 @@ def migrate_e3_schema(target_engine: Engine = engine) -> None:
         )
 
 
+def migrate_highlight_source_binding_schema(target_engine: Engine = engine) -> None:
+    """Add immutable Highlight source-version/hash binding and backfill safely."""
+    with target_engine.begin() as connection:
+        inspector = inspect(connection)
+        if "highlights" not in inspector.get_table_names():
+            raise RuntimeError("highlights table is missing; initialize the demo schema first")
+        highlight_columns = {
+            column["name"] for column in inspector.get_columns("highlights")
+        }
+        additions = {
+            "source_artifact_version": "INTEGER",
+            "source_quote_sha256": "VARCHAR(64)",
+        }
+        for column, ddl in additions.items():
+            if column not in highlight_columns:
+                connection.execute(
+                    text(f"ALTER TABLE highlights ADD COLUMN {column} {ddl}")
+                )
+
+        # Some migration tests intentionally use skeletal legacy tables. Real
+        # pre-migration databases have these source/content columns; only those
+        # databases are eligible for deterministic in-place backfill.
+        highlight_columns = {
+            column["name"] for column in inspect(connection).get_columns("highlights")
+        }
+        artifact_columns = {
+            column["name"] for column in inspect(connection).get_columns("artifacts")
+        }
+        if not {
+            "source_artifact_id",
+            "source_span",
+            "source_artifact_version",
+            "source_quote_sha256",
+        }.issubset(highlight_columns) or not {
+            "artifact_id",
+            "content",
+            "version",
+        }.issubset(artifact_columns):
+            return
+
+        from .provenance_binding import quote_sha256
+        from .tasks import resolve_exact_span
+
+        rows = connection.execute(
+            text(
+                "SELECT highlight_id, source_artifact_id, source_span "
+                "FROM highlights WHERE source_artifact_id IS NOT NULL "
+                "AND source_span IS NOT NULL AND "
+                "(source_artifact_version IS NULL OR source_quote_sha256 IS NULL)"
+            )
+        ).mappings()
+        for row in rows:
+            source = connection.execute(
+                text(
+                    "SELECT content, version FROM artifacts "
+                    "WHERE artifact_id = :artifact_id"
+                ),
+                {"artifact_id": row["source_artifact_id"]},
+            ).mappings().first()
+            if source is None:
+                continue
+            content = source["content"]
+            span = row["source_span"]
+            if isinstance(content, str):
+                content = json.loads(content)
+            if isinstance(span, str):
+                span = json.loads(span)
+            quote = resolve_exact_span(content, span)
+            if not quote:
+                continue
+            connection.execute(
+                text(
+                    "UPDATE highlights SET source_artifact_version = :version, "
+                    "source_quote_sha256 = :quote_hash WHERE highlight_id = :highlight_id"
+                ),
+                {
+                    "version": source["version"],
+                    "quote_hash": quote_sha256(quote),
+                    "highlight_id": row["highlight_id"],
+                },
+            )
+
+
 def migrate_phase_e_schema(target_engine: Engine = engine) -> None:
     """Idempotently upgrade an existing synthetic Demo through E1-E4."""
     with target_engine.begin() as connection:
@@ -215,6 +299,7 @@ def migrate_phase_e_schema(target_engine: Engine = engine) -> None:
             )
 
     migrate_e3_schema(target_engine)
+    migrate_highlight_source_binding_schema(target_engine)
 
     # Import only after Base exists so all FK target tables and the E4 table
     # are registered without creating a second metadata registry.

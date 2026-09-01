@@ -24,7 +24,13 @@ from seed import fixture
 TIE_CREATED_AT = datetime(2026, 8, 26, 12, 0)
 
 
-def _insert_highlight(db, hid: str, status: str = "suggested", score: int = 1) -> None:
+def _insert_highlight(
+    db,
+    hid: str,
+    status: str = "suggested",
+    score: int = 1,
+    review_status: str | None = None,
+) -> None:
     db.add(
         Highlight(
             highlight_id=hid,
@@ -45,7 +51,7 @@ def _insert_highlight(db, hid: str, status: str = "suggested", score: int = 1) -
             entity_key=None,
             assertion_value=None,
             conflict_with_artifact_id=None,
-            review_status=None,
+            review_status=review_status,
         )
     )
     db.commit()
@@ -72,6 +78,23 @@ def test_glance_pinned_priority_unaffected_by_tiebreak(clinician_client, db_sess
     ids = [h["highlight_id"] for h in r.json()["highlights"]]
     assert ids[0] == "pinned_one"  # pinned wins even at equal score
     assert ids[1:] == ["a_first", "b_second"]  # tiebreak still holds within a group
+
+
+def test_needs_review_surfaces_ahead_of_normal_suggestions(clinician_client, db_session):
+    for index in range(6):
+        _insert_highlight(db_session, f"normal_{index}", score=10 - index)
+    _insert_highlight(
+        db_session,
+        "allergy_conflict",
+        score=0,
+        review_status="needs_review",
+    )
+
+    response = clinician_client.get(f"/api/patients/{fixture.PATIENT_B_ID}/glance")
+    assert response.status_code == 200
+    ids = [item["highlight_id"] for item in response.json()["highlights"]]
+    assert "allergy_conflict" in ids
+    assert ids[0] == "allergy_conflict"
 
 
 def test_accept_recomputes_score_and_is_immediately_visible(clinician_client, db_session):

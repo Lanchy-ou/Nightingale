@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from .ids import new_id
 from .models import Artifact, Event, Highlight, ImportanceFeedback
-from .tasks import resolve_exact_span
+from .provenance_binding import current_source_matches_binding
 
 FEEDBACK_KEYS = frozenset(
     {"symptom", "medication", "task", "risk", "allergy", "follow_up", "other"}
@@ -88,8 +88,7 @@ def record_feedback(
         or not isinstance(pointer, dict)
         or pointer.get("event_id") != event.event_id
         or pointer.get("artifact_id") != source.artifact_id
-        or highlight.source_span is None
-        or resolve_exact_span(source.content, highlight.source_span) is None
+        or not current_source_matches_binding(highlight, source)
     ):
         return None
 

@@ -13,8 +13,8 @@ from dataclasses import dataclass
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .conflicts import find_conflict
-from .deterministic_pipeline import build_fallback, extract_text_leaves
+from .conflicts import clinical_assertion_sources, find_conflict
+from .deterministic_pipeline import build_fallback
 from .extraction import validate_candidate
 from .highlights import compute_score, extract_text, locate_span
 from .importance_learning import (
@@ -29,6 +29,7 @@ from .llm_client import (
     ProviderUnavailableError,
 )
 from .models import Artifact, Event, Highlight, Patient, User
+from .provenance_binding import create_source_binding
 from .redaction import redact_content, restore_placeholders, unresolved_placeholders
 
 logger = logging.getLogger("nantingale.ai_pipeline")
@@ -68,24 +69,6 @@ def _known_names(db: Session, patient_id: str, clinic_id: str) -> list[str]:
     for u in db.scalars(select(User).where(User.clinic_id == clinic_id)).all():
         names.append(u.name)
     return names
-
-
-def _clinician_notes(db: Session, patient_id: str) -> list[tuple[str, str]]:
-    notes: list[tuple[str, str]] = []
-    events = db.scalars(
-        select(Event)
-        .where(Event.patient_id == patient_id)
-        .order_by(Event.started_at.desc())  # most recent clinician note wins
-    ).all()
-    for evt in events:
-        for a in db.scalars(
-            select(Artifact).where(
-                Artifact.event_id == evt.event_id, Artifact.artifact_type == "clinician_note"
-            )
-        ).all():
-            text = " ".join(extract_text_leaves(a.content))
-            notes.append((a.artifact_id, text))
-    return notes
 
 
 def _anchor(raw: dict, result, mapping: dict, use_restore: bool):
@@ -181,7 +164,10 @@ def run_pipeline(
         anchored, _, _ = _anchor(raw, fb, {}, use_restore=False)
 
     # 3. flags + conflict + score
-    clinician_notes = _clinician_notes(db, event.patient_id)
+    clinician_records = clinical_assertion_sources(db, event.patient_id)
+    allergy_records = clinical_assertion_sources(
+        db, event.patient_id, include_staff_and_nurse=True
+    )
     candidates: list[AnchoredCandidate] = []
     recompute_existing: list[str] = []
     for c, span in anchored:
@@ -204,11 +190,22 @@ def run_pipeline(
         review_status = None
         conflict_with = None
         risk_reason = c.risk_reason
-        conflict = find_conflict(c.entity_key, c.assertion_value, clinician_notes)
+        conflict = find_conflict(
+            c.entity_key,
+            c.assertion_value,
+            allergy_records if c.entity_type == "allergy" else clinician_records,
+            candidate_entity_type=c.entity_type,
+            candidate_text=c.text,
+            candidate_quote=c.quote,
+        )
         if conflict is not None:
             conflict_with, _ = conflict
             review_status = "needs_review"
-            risk_reason = "conflicts with clinician-authored record; review required"
+            risk_reason = (
+                "allergy statements conflict across patient and clinical records; review required"
+                if c.entity_type == "allergy"
+                else "conflicts with clinician-authored record; review required"
+            )
 
         candidates.append(
             AnchoredCandidate(
@@ -298,6 +295,7 @@ def persist_derived(
     for ac in output.candidates:
         quote = extract_text(source_artifact.content, ac.span)
         hid = f"hl_{stable_id(source_artifact.artifact_id, quote, ac.entity_key)}"
+        source_version, quote_hash = create_source_binding(source_artifact, ac.span)
         learned = score_new_candidate(
             db,
             clinic_id=event.clinic_id,
@@ -314,6 +312,8 @@ def persist_derived(
                 artifact_id=summary_id,
                 source_artifact_id=source_artifact.artifact_id,
                 source_span=ac.span,
+                source_artifact_version=source_version,
+                source_quote_sha256=quote_hash,
                 text=ac.text,
                 risk_reason=ac.risk_reason,
                 feature_flags=ac.feature_flags,
