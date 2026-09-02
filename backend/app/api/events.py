@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from ..authz import PATIENT_VISIBLE_ARTIFACT_TYPES, authorize, require_auth, resource_not_found
 from ..db import get_db
+from ..clinic_scope import load_event
 from ..checkin_visibility import require_checkin_event_visible
 from ..models import Artifact, Event
 from ..role_context import RoleContext
@@ -21,7 +22,7 @@ def list_artifacts(
     db: Session = Depends(get_db),
     ctx: RoleContext = Depends(require_auth),
 ):
-    event = db.get(Event, event_id)
+    event = load_event(db, ctx, event_id)
     if event is None:
         raise resource_not_found()
     authorize(ctx, "read_artifacts", event.clinic_id, event.patient_id)

@@ -78,6 +78,8 @@ export interface Highlight {
     reason?: string;
     protection_applied?: boolean;
   };
+  score_rule_version: string;
+  score_factors: Record<string, any>;
   status: string;
   status_history: { from: string; to: string; at: string }[];
   created_at: string;
@@ -87,6 +89,93 @@ export interface Highlight {
   assertion_value: string | null;
   conflict_with_artifact_id: string | null;
   review_status: string | null;
+  task_context: {
+    task_kind: string;
+    workflow_id: string | null;
+    assigned_role: string;
+    status: string;
+    attention_class: string;
+    verification_outcome: string;
+    verification_overdue?: boolean;
+    due_at: string | null;
+    escalate_at: string | null;
+    escalated_at: string | null;
+    creation_method: string;
+  } | null;
+  glance_explanation: Record<string, any> | null;
+  ranking_rule_version: string | null;
+}
+
+export interface CoverageDecision {
+  decision_id: string;
+  highlight_id: string;
+  text: string;
+  entity_type: string | null;
+  task_id: string | null;
+  eligible: boolean;
+  exclusion_reason: string | null;
+  priority_band: number;
+  base_score: number;
+  shadow_adjustment: number;
+  shadow_score: number;
+  base_rank: number | null;
+  shadow_rank: number | null;
+  surfaced_base: boolean;
+  surfaced_shadow: boolean;
+  source_binding_status: string;
+  factor_snapshot: Record<string, any>;
+}
+
+export interface CoverageReview {
+  run_id: string;
+  patient_id: string;
+  viewer_role: 'staff' | 'clinician';
+  serving_mode: 'base_only';
+  shadow_policy: string;
+  shadow_only: true;
+  evaluated_at: string;
+  base_top_five: CoverageDecision[];
+  eligible_unsurfaced: CoverageDecision[];
+  excluded: CoverageDecision[];
+}
+
+export interface LearningSignal {
+  signal_id: string;
+  decision_id: string;
+  clinic_id: string;
+  actor_id: string;
+  actor_role: string;
+  signal_type: 'explicit_demotion' | 'quality_issue' | 'outcome_label';
+  reason_code: string;
+  feedback_key: string;
+  signal_value: number;
+  eligible_for_shadow: boolean;
+  ineligibility_reason: string | null;
+  independence_key: string;
+  policy_version: string;
+  supersedes_signal_id: string | null;
+  created_at: string;
+}
+
+export interface LearningEvaluation {
+  evaluation_id: string;
+  clinic_id: string;
+  policy_version: string;
+  run_ids: string[];
+  metrics: Record<string, any>;
+  created_by: string;
+  created_at: string;
+}
+
+export interface LearningStatus {
+  serving_mode: 'base_only';
+  shadow_only: true;
+  active_policy: string;
+  frozen: boolean;
+  frozen_at: string | null;
+  signal_cutoff_at: string | null;
+  policies: { version_name: string; active: boolean; serving_mode: string; shadow_policy: string }[];
+  latest_evaluation: LearningEvaluation | null;
 }
 
 export interface ProvenanceResult {
@@ -470,6 +559,19 @@ export interface ClinicalTask extends PatientTask {
   source_artifact_id: string | null;
   source_span: Span | null;
   description: string;
+  task_kind: 'care_action' | 'patient_report_review' | 'clinician_priority_review';
+  workflow_id: string | null;
+  attention_class: 'routine' | 'priority_review';
+  creation_method: 'human' | 'system_routed';
+  verification_outcome: 'pending' | 'verified' | 'corrected' | 'unable_to_verify' | 'not_required';
+  escalate_at: string | null;
+  escalated_at: string | null;
+  review_outcome: 'no_action' | 'monitor_or_record' | 'action_required' | null;
+  time_sensitivity: 'routine' | 'time_sensitive' | null;
+  follow_up_task_id: string | null;
+  routing_metadata: Record<string, any>;
+  source_artifact_version: number | null;
+  source_quote_sha256: string | null;
   assigned_role: 'patient' | 'staff' | 'clinician';
   assigned_user_id: string | null;
   created_by: string;
@@ -490,6 +592,28 @@ export interface TaskProvenance {
   source_artifact: Artifact | null;
   span: Span | null;
   quote: string | null;
+}
+
+export interface PatientReviewCandidate {
+  review_item_id: string;
+  highlight_id: string;
+  text: string;
+  entity_type: string | null;
+  source_artifact_id: string | null;
+  source_span: Span | null;
+  review_status: string | null;
+  review_outcome: 'pending' | 'verified' | 'corrected' | 'unable_to_verify';
+  correction_artifact_id: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+}
+
+export interface PatientReviewContext {
+  task: ClinicalTask;
+  summary_artifact_id: string;
+  generation_method: string | null;
+  degraded: boolean;
+  candidates: PatientReviewCandidate[];
 }
 
 // --- D4 Evidence-Bound Clinician Copilot ---------------------------------

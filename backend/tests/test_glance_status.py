@@ -19,8 +19,8 @@ def test_glance_returns_top_5_sorted_desc(clinician_client):
     assert r.status_code == 200
     hs = r.json()["highlights"]
     assert len(hs) == 5
-    scores = [h["importance_score"] for h in hs]
-    assert scores == sorted(scores, reverse=True)
+    bands = [h["glance_explanation"]["priority_band"] for h in hs]
+    assert bands == sorted(bands)
     ids = {h["highlight_id"] for h in hs}
     assert "hl_medication_existing" not in ids
 

@@ -10,7 +10,6 @@
 from __future__ import annotations
 
 import json
-import logging
 import os
 import re
 from typing import Protocol
@@ -18,9 +17,8 @@ from typing import Protocol
 from .extraction import AISummaryResult, Candidate
 from .schemas import CheckInSummaryCandidate, CheckInSummaryResult, CheckInTurnResult
 from .redaction import RedactedContent
+from .operational_logging import emit_log
 from .copilot_models import CopilotProviderClaim, CopilotProviderResult
-
-logger = logging.getLogger("nantingale.llm")
 
 DEEPSEEK_BASE_URL = "https://api.deepseek.com/anthropic"
 
@@ -221,6 +219,20 @@ class MockLLMClient:
         candidates: list[CheckInSummaryCandidate] = []
         for message in messages:
             lowered = message["text"].lower()
+            priority_text = re.sub(
+                r"\b(?:no|not|without)\s+(?:urgent|severe|worse|worsening)\b",
+                "",
+                lowered,
+            )
+            priority_codes: list[str] = []
+            if re.search(r"\b(worse|worsening|much worse|getting worse)\b", priority_text):
+                priority_codes.append("patient_explicit_worsening")
+            if re.search(r"\b(severe|extreme|unbearable|10 out of 10|9 out of 10)\b", priority_text):
+                priority_codes.append("patient_explicit_severe_intensity")
+            if re.search(r"\b(urgent|call me|contact me|need help now)\b", priority_text):
+                priority_codes.append("patient_requests_urgent_contact")
+            if re.search(r"\b(medicine|medication|drug|allergy|allergic)\b", lowered):
+                priority_codes.append("patient_reports_medication_or_allergy_concern")
             if re.search(r"\b(done|completed|finished|appointment|blood test|follow-up|task)\b", lowered):
                 entity_type = "task"
                 label = "Patient-reported care action progress"
@@ -239,6 +251,8 @@ class MockLLMClient:
                 entity_type=entity_type,
                 assertion_value=None,
                 symptom_change=bool(re.search(r"\b(better|worse|improv|changed|more|less)\b", lowered)),
+                priority_review_reason_codes=priority_codes,
+                suggested_route="priority_review" if priority_codes else "routine",
             ))
         return CheckInSummaryResult(
             summary=summary,
@@ -304,7 +318,11 @@ _CHECKIN_SUMMARY_SYSTEM_PROMPT = (
     '{"summary":str,"referenced_patient_message_ids":[str],"candidates":['
     '{"text":str,"patient_message_id":str,"quote":str,"risk_reason":str,'
     '"entity_type":"symptom|medication|allergy|chief_complaint|task|risk",'
-    '"assertion_value":str|null,"symptom_change":bool}]}. '
+    '"assertion_value":str|null,"symptom_change":bool,'
+    '"priority_review_reason_codes":["patient_explicit_worsening|patient_explicit_severe_intensity|patient_requests_urgent_contact|patient_reports_medication_or_allergy_concern"],'
+    '"suggested_route":"routine|priority_review"}]}. '
+    "Use priority_review only when the patient explicitly states one of the approved reasons; "
+    "do not infer clinical severity. "
     "Every quote must be verbatim from the named patient message and every id must be copied from input."
 )
 
@@ -369,11 +387,12 @@ class DeepSeekAdapter:
 
         usage = getattr(resp, "usage", None)
         if usage is not None:
-            logger.info(
-                "deepseek usage model=%s input=%s output=%s",
-                self.model,
-                getattr(usage, "input_tokens", None),
-                getattr(usage, "output_tokens", None),
+            emit_log(
+                "provider_usage",
+                model=self.model,
+                input_tokens=getattr(usage, "input_tokens", None),
+                output_tokens=getattr(usage, "output_tokens", None),
+                level="info",
             )
 
         text = "".join(

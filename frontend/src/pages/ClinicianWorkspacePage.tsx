@@ -19,13 +19,14 @@ import ClinicalTasksView from '../components/ClinicalTasksView';
 import ClinicianSidebar from '../components/ClinicianSidebar';
 import CommentThread from '../components/CommentThread';
 import CopilotPanel from '../components/CopilotPanel';
+import CoverageReview from '../components/CoverageReview';
 import GlancePanel from '../components/GlancePanel';
 import NewDoctorConsult from '../components/NewDoctorConsult';
 import VoiceCapture from '../components/VoiceCapture';
 import ProvenancePanel from '../components/ProvenancePanel';
 import RevisionPanel from '../components/RevisionPanel';
 
-type PatientTab = 'glance' | 'timeline' | 'notes' | 'tasks';
+type PatientTab = 'glance' | 'coverage' | 'timeline' | 'notes' | 'tasks';
 type ClinicalRoute =
   | { kind: 'dashboard' }
   | { kind: 'patient'; patientId: string; mode: PatientTab | 'new' | 'event'; eventId?: string };
@@ -36,7 +37,7 @@ function parseRoute(): ClinicalRoute {
   const patientId = parts[2];
   if (parts[3] === 'consults' && parts[4] === 'new') return { kind: 'patient', patientId, mode: 'new' };
   if (parts[3] === 'events' && parts[4]) return { kind: 'patient', patientId, mode: 'event', eventId: parts[4] };
-  if (['glance', 'timeline', 'notes', 'tasks'].includes(parts[3])) {
+  if (['glance', 'coverage', 'timeline', 'notes', 'tasks'].includes(parts[3])) {
     return { kind: 'patient', patientId, mode: parts[3] as PatientTab };
   }
   return { kind: 'patient', patientId, mode: 'glance' };
@@ -51,6 +52,7 @@ function routePath(route: ClinicalRoute): string {
 
 function patientTabLabel(tab: PatientTab): string {
   if (tab === 'glance') return 'Glance';
+  if (tab === 'coverage') return 'Coverage';
   return tab[0].toUpperCase() + tab.slice(1);
 }
 
@@ -191,7 +193,7 @@ function PatientWorkspace({
     // patientId is a remount boundary, and route transitions clear context that
     // does not belong to the newly opened mode.
     if (route.mode !== 'event') setEventContext({ artifacts: [], selectedArtifact: null });
-    if (route.mode === 'glance' || route.mode === 'timeline' || route.mode === 'notes' || route.mode === 'tasks' || route.mode === 'new') {
+    if (route.mode === 'glance' || route.mode === 'coverage' || route.mode === 'timeline' || route.mode === 'notes' || route.mode === 'tasks' || route.mode === 'new') {
       setInitialArtifactId(null);
     }
   }, [route.mode]);
@@ -364,7 +366,7 @@ function PatientWorkspace({
 
         {route.mode !== 'new' && (
           <nav className={`workspace-tabs ${route.mode === 'event' ? 'with-event-detail' : ''}`} aria-label="Patient workspace views">
-            {(['glance', 'timeline'] as PatientTab[]).map((tab) => (
+            {(['glance', 'coverage', 'timeline'] as PatientTab[]).map((tab) => (
               <button
                 key={tab}
                 className={route.mode === tab ? 'active' : ''}
@@ -392,6 +394,9 @@ function PatientWorkspace({
         {route.mode === 'glance' && (
           <GlancePanel key={`glance:${refreshKey}`} patientId={patientId} onViewSource={handleViewSource} onOpenTasks={handleOpenTask} reviewRole={identity.role ?? undefined} />
         )}
+        {route.mode === 'coverage' && (
+          <CoverageReview patientId={patientId} identity={identity} onViewSource={handleViewSource} />
+        )}
         {route.mode === 'timeline' && <ClinicalTimeline events={events} onOpenEvent={openEvent} />}
         {route.mode === 'notes' && (
           <ClinicalNotesView
@@ -411,6 +416,7 @@ function PatientWorkspace({
             onFocusHandled={() => setTaskFocusId(null)}
             onChanged={changed}
             onOpenEvent={openEvent}
+            onViewSource={handleViewSource}
           />
         )}
         {route.mode === 'new' && (identity.role === 'clinician' || identity.role === 'staff') && (

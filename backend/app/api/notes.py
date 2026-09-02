@@ -19,6 +19,7 @@ from ..authz import authorize, note_edit_action, require_auth, resource_not_foun
 from ..checkin_visibility import require_checkin_event_visible
 from ..copilot_confirmation import audit_details, validate_confirmation_token
 from ..db import get_db
+from ..clinic_scope import load_artifact_with_event, load_event
 from ..ids import new_id
 from ..models import Artifact, ArtifactVersion, Event
 from ..revisions import diff_text
@@ -50,19 +51,23 @@ def _validate_patient_instruction(content: dict) -> None:
         raise HTTPException(status_code=422, detail="Invalid patient instruction")
 
 
-def _event(db: Session, event_id: str) -> Event:
-    event = db.get(Event, event_id)
+def _event(db: Session, ctx: RoleContext, event_id: str) -> Event:
+    event = load_event(db, ctx, event_id)
     if event is None:
         raise resource_not_found()
     require_checkin_event_visible(db, event_id)
     return event
 
 
-def _artifact_with_event(db: Session, artifact_id: str) -> tuple[Artifact, Event]:
-    artifact = db.get(Artifact, artifact_id)
-    if artifact is None:
+def _artifact_with_event(
+    db: Session, ctx: RoleContext, artifact_id: str
+) -> tuple[Artifact, Event]:
+    scoped = load_artifact_with_event(db, ctx, artifact_id)
+    if scoped is None:
         raise resource_not_found()
-    return artifact, _event(db, artifact.event_id)
+    artifact, event = scoped
+    require_checkin_event_visible(db, event.event_id)
+    return artifact, event
 
 
 def _record_conflict(db: Session, ctx: RoleContext, event: Event, artifact_id: str, expected_version: int) -> None:
@@ -88,8 +93,11 @@ def _record_conflict(db: Session, ctx: RoleContext, event: Event, artifact_id: s
     db.commit()
 
 
-def _conflict_response(db: Session, artifact_id: str, expected_version: int) -> JSONResponse:
-    current = db.get(Artifact, artifact_id)
+def _conflict_response(
+    db: Session, ctx: RoleContext, artifact_id: str, expected_version: int
+) -> JSONResponse:
+    scoped = load_artifact_with_event(db, ctx, artifact_id)
+    current = scoped[0] if scoped is not None else None
     return JSONResponse(
         status_code=409,
         content={
@@ -111,7 +119,7 @@ def create_note(
     db: Session = Depends(get_db),
     ctx: RoleContext = Depends(require_auth),
 ):
-    event = _event(db, event_id)
+    event = _event(db, ctx, event_id)
     # author_role is derived from role context only; never trusted from client.
     authorize(ctx, f"write_{body.artifact_type}", event.clinic_id, event.patient_id)
     if body.artifact_type == "patient_instruction":
@@ -177,7 +185,7 @@ def edit_artifact(
     db: Session = Depends(get_db),
     ctx: RoleContext = Depends(require_auth),
 ):
-    artifact, event = _artifact_with_event(db, artifact_id)
+    artifact, event = _artifact_with_event(db, ctx, artifact_id)
     # Scope must be checked before artifact-type branching; otherwise a caller
     # from another clinic can distinguish editable from non-editable resources.
     authorize(ctx, "read_artifacts", event.clinic_id, event.patient_id)
@@ -188,7 +196,7 @@ def edit_artifact(
 
     if body.expected_version != artifact.version:
         _record_conflict(db, ctx, event, artifact_id, body.expected_version)
-        return _conflict_response(db, artifact_id, body.expected_version)
+        return _conflict_response(db, ctx, artifact_id, body.expected_version)
 
     new_version = artifact.version + 1
     # Atomic compare-and-swap: version only bumps if still at expected_version.
@@ -199,7 +207,7 @@ def edit_artifact(
     )
     if result.rowcount != 1:
         _record_conflict(db, ctx, event, artifact_id, body.expected_version)
-        return _conflict_response(db, artifact_id, body.expected_version)
+        return _conflict_response(db, ctx, artifact_id, body.expected_version)
 
     db.add(
         ArtifactVersion(
@@ -226,8 +234,8 @@ def edit_artifact(
         to_version=new_version,
     )
     db.commit()
-    artifact = db.get(Artifact, artifact_id)
-    return artifact
+    scoped = load_artifact_with_event(db, ctx, artifact_id)
+    return scoped[0] if scoped is not None else None
 
 
 @router.post("/artifacts/{artifact_id}/revert", response_model=ArtifactOut)
@@ -237,7 +245,7 @@ def revert_artifact(
     db: Session = Depends(get_db),
     ctx: RoleContext = Depends(require_auth),
 ):
-    artifact, event = _artifact_with_event(db, artifact_id)
+    artifact, event = _artifact_with_event(db, ctx, artifact_id)
     authorize(ctx, "read_artifacts", event.clinic_id, event.patient_id)
     action = note_edit_action(artifact.artifact_type)
     if action is None:
@@ -255,7 +263,7 @@ def revert_artifact(
 
     if body.expected_version != artifact.version:
         _record_conflict(db, ctx, event, artifact_id, body.expected_version)
-        return _conflict_response(db, artifact_id, body.expected_version)
+        return _conflict_response(db, ctx, artifact_id, body.expected_version)
 
     new_version = artifact.version + 1
     result = db.execute(
@@ -265,7 +273,7 @@ def revert_artifact(
     )
     if result.rowcount != 1:
         _record_conflict(db, ctx, event, artifact_id, body.expected_version)
-        return _conflict_response(db, artifact_id, body.expected_version)
+        return _conflict_response(db, ctx, artifact_id, body.expected_version)
 
     db.add(
         ArtifactVersion(
@@ -292,8 +300,8 @@ def revert_artifact(
         to_version=new_version,
     )
     db.commit()
-    artifact = db.get(Artifact, artifact_id)
-    return artifact
+    scoped = load_artifact_with_event(db, ctx, artifact_id)
+    return scoped[0] if scoped is not None else None
 
 
 @router.get("/artifacts/{artifact_id}/versions", response_model=list[ArtifactVersionOut])
@@ -302,7 +310,7 @@ def list_versions(
     db: Session = Depends(get_db),
     ctx: RoleContext = Depends(require_auth),
 ):
-    artifact, event = _artifact_with_event(db, artifact_id)
+    artifact, event = _artifact_with_event(db, ctx, artifact_id)
     authorize(ctx, "read_versions", event.clinic_id, event.patient_id)
     return db.scalars(
         select(ArtifactVersion)
@@ -318,7 +326,7 @@ def get_diff(
     db: Session = Depends(get_db),
     ctx: RoleContext = Depends(require_auth),
 ):
-    artifact, event = _artifact_with_event(db, artifact_id)
+    artifact, event = _artifact_with_event(db, ctx, artifact_id)
     authorize(ctx, "read_versions", event.clinic_id, event.patient_id)
 
     since_v = db.scalar(

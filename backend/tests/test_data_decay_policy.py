@@ -134,6 +134,7 @@ def test_only_real_unresolved_task_protects_old_artifact(db_session):
     task.source_artifact_id = fixture.ART_HIST_2025_NOTE
     task.source_span = old_highlight.source_span
     task.status = "open"
+    db_session.flush()
     old_highlight.task_id = task.task_id
     db_session.commit()
 
@@ -150,15 +151,16 @@ def test_old_event_only_resolved_task_highlight_decays_until_real_task_reopens(
 ):
     highlight = db_session.get(Highlight, "hl_headache_once_weekly")
     task = db_session.get(Task, fixture.TASK_SYMPTOM_DIARY)
+    task.event_id = fixture.EVT_HIST_2025
+    task.source_artifact_id = None
+    task.source_span = None
+    task.status = "completed"
+    db_session.flush()
     highlight.artifact_id = None
     highlight.source_artifact_id = None
     highlight.source_span = None
     highlight.task_id = task.task_id
     highlight.feature_flags = {**highlight.feature_flags, "unresolved_task": True}
-    task.event_id = fixture.EVT_HIST_2025
-    task.source_artifact_id = None
-    task.source_span = None
-    task.status = "completed"
     db_session.commit()
 
     _apply(db_session)
@@ -197,7 +199,7 @@ def test_unverified_exact_provenance_fails_closed_to_hot(db_session):
     assert row.decay_adjustment == 0
 
 
-def test_final_score_preserves_e2_adaptive_component(db_session):
+def test_final_score_discards_legacy_adaptive_component_in_base_only_serving(db_session):
     highlight = db_session.get(Highlight, "hl_headache_once_weekly")
     highlight.adaptive_adjustment = 2
     highlight.learning_metadata = {
@@ -209,8 +211,8 @@ def test_final_score_preserves_e2_adaptive_component(db_session):
     _apply(db_session)
     db_session.refresh(highlight)
     assert highlight.decay_adjustment == -2
-    assert highlight.adaptive_adjustment == 2
-    assert highlight.importance_score == highlight.base_importance_score + 2 - 2
+    assert highlight.adaptive_adjustment == 0
+    assert highlight.importance_score == highlight.base_importance_score - 2
 
 
 def test_old_low_value_decay_can_move_it_out_of_glance_top_five(
@@ -220,24 +222,36 @@ def test_old_low_value_decay_can_move_it_out_of_glance_top_five(
         row.highlight_id: row for row in db_session.scalars(select(Highlight)).all()
     }
     for row in highlights.values():
-        row.status = "suggested"
-        row.base_importance_score = -100
+        row.status = "rejected"
+        row.feature_flags = {key: False for key in row.feature_flags}
+        row.base_importance_score = 0
         row.adaptive_adjustment = 0
         row.decay_adjustment = 0
-        row.importance_score = -100
+        row.importance_score = 0
 
     target = highlights["hl_headache_once_weekly"]
-    target.base_importance_score = target.importance_score = 5
+    target.status = "suggested"
+    target.feature_flags = {**target.feature_flags, "recency": True}
     leaders = [
         highlights["hl_headache_worsening"],
         highlights["hl_nausea_persists"],
         highlights["hl_bp_elevated"],
         highlights["hl_blood_test_pending"],
     ]
-    for score, row in zip((10, 9, 8, 7), leaders):
-        row.base_importance_score = row.importance_score = score
+    for row in leaders:
+        row.status = "suggested"
+        row.feature_flags = {
+            **row.feature_flags,
+            "recency": True,
+            "symptom_change": True,
+        }
     control = highlights["hl_followup_scheduled"]
-    control.base_importance_score = control.importance_score = 4
+    control.status = "suggested"
+    control.feature_flags = {**control.feature_flags, "repeated_mentions": True}
+    db_session.commit()
+    from app.glance_projection import rebuild_glance_projections
+
+    rebuild_glance_projections(db_session, fixture.PATIENT_ID)
     db_session.commit()
 
     url = f"/api/patients/{fixture.PATIENT_ID}/glance"

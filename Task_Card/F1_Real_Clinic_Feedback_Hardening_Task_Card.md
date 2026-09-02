@@ -13,6 +13,18 @@ This is one integrated phase. Do not split it into a large set of independent fe
 
 ### A — discuss first, then implement and verify
 
+Canonical A-level task cards, each requiring separate owner approval:
+
+1. `Task_Card/F_A2_Importance_Semantics_Task_Card.md`
+2. `Task_Card/F_A1_Self_Learning_Trust_Task_Card.md`
+3. `Task_Card/F_A3_Clinic_Isolation_Defense_Task_Card.md`
+4. `Task_Card/F_A4_Log_Privacy_Boundary_Task_Card.md`
+5. `Task_Card/F_A5_Provider_Total_Timeout_Task_Card.md`
+
+F_A1 is the highest optimization priority, but F_A2 is the first implementation item because it defines the ranking, role-workflow and evidence contract that F_A1 must learn from. The summaries below do not override the individual task cards.
+
+Current status: F_A2 deterministic scope plus itemized review/action-closure hardening, F_A1 auditable Shadow foundation, F_A3 clinic-isolation defense in depth, and F_A4 log/operational privacy boundary (allowlisted stderr logging, edge access/error-log discard, fixed ASR failure codes) are implemented and verified with stated limits. Formal Glance remains A2 base-only; no model has been trained or authorized for serving. F_A3 is application query isolation plus SQLite/SQLCipher ownership enforcement, not database RLS or production multi-tenant certification. F_A4 classifies crash monitoring and Provider retention as `NOT_ESTABLISHED` and leaves clinical `AuditLog` retention to owner policy. The final reason-code stability matrix remains deliberately deferred until the complete F task set is finished.
+
 1. **Self-Learning trust and blind-spot control (scenario 15; highest optimization focus)**
    - Address the fact that interaction feedback exists only for surfaced candidates.
    - Discuss shadow/unsurfaced-candidate audit, exploration or sampling limits, fatigue/bulk-dismiss safeguards, and rollback/freeze controls.

@@ -1,7 +1,7 @@
 # Nightingale Real-Clinic Readiness Status
 
-> Snapshot date: 2026-08-31
-> Scope: current repository working tree after the allergy-conflict and immutable-provenance repairs.
+> Snapshot date: 2026-09-01
+> Scope: current repository working tree after the F_A2 deterministic Glance and Patient Review implementation.
 > Product boundary: synthetic-data prototype; not a production medical system, clinical-safety certification, compliance assessment, or public-host readiness claim.
 
 ## Purpose
@@ -65,12 +65,25 @@ This verifies the current application logic. It is not a claim of database row-l
 - Self-Learning does not learn from a current source that no longer matches the stored binding.
 - The migration adds and idempotently backfills the new binding fields for eligible existing Highlights.
 
+### Deterministic Glance and Patient Review workflow (F_A2)
+
+- Each submitted Patient Check-in creates one stable, internal Nurse (`staff`) review Task; approved exact-source patient-reported priority signals also create one clinician review Task.
+- AI routing is explicitly unverified and limited to four controlled reason codes. Invalid provenance, invalid output and fallback remain routine Nurse review.
+- Nurse verification and clinician review are separate role-scoped actions. Clinicians record outcome and time-sensitivity labels; the system does not turn these into clinical truth.
+- Production review/escalation defaults to 720 minutes. Tests use an injected five-minute policy and verify `T+4:59`, `T+5:00` and idempotent repeat behavior without sleeping.
+- Role-specific Glance projections are precomputed and PHI-free. Terminal Tasks do not consume the dynamic top five; clinician-confirmed allergy context is returned separately.
+- Candidate-level Nurse decisions are persisted; corrected candidates require a same-Event Staff Note, and incomplete candidate review blocks session closure.
+- A clinician cannot close `action_required` without linking an active downstream Care Task owned by that clinician or the Nurse queue; time-sensitive action requires a due time.
+- Glance exposes the persisted priority band, factor arithmetic and rule versions without running a Provider on read.
+- A normal server-session browser journey passed from synthetic patient submission through Nurse verification and clinician completion. No external notification, real-time clinic alert or clinical-validity claim is made.
+
 ### Current regression evidence
 
-- Backend collection: 538 tests.
-- Result: 536 passed; 2 existing real-local-ASR input-dependent tests skipped.
-- Frontend TypeScript/Vite production build: passed, 60 modules transformed.
+- Backend collection: 601 tests.
+- Result: 599 passed; 2 existing real-local-ASR input-dependent tests skipped.
+- Frontend TypeScript/Vite production build: passed, 62 modules transformed.
 - `git diff --check`: passed.
+- Secret scan: `SECRET_SCAN_PASS`.
 
 The two skips mean the ignored local ASR model/audio inputs were unavailable; they are not reported as passes.
 
@@ -79,19 +92,23 @@ The two skips mean the ignored local ASR model/audio inputs were unavailable; th
 ### Multi-clinic support
 
 - The schema and application authorization support multiple `Clinic` rows and clinic-scoped users, patients, Events, Tasks, feedback, and audit records.
-- The current fixture and tests exercise two clinics.
+- The current fixture exercises two clinics, five patients and eleven users; it is synthetic prototype evidence rather than production-scale coverage.
 - There is no product workflow to create a clinic, bootstrap its first administrator, or import its patients.
-- Direct object access still relies heavily on the central authorization check; there is no database row-level security or equivalent second tenant-policy engine.
+- F_A3 adds one-query scoped resource loaders, uniform-404 fault-injection tests, an AST bypass gate, active SQLite/SQLCipher foreign keys, metadata-only ownership preflight, ownership triggers and validated scope indexes. A no-op `authorize_scope` cannot expose the tested cross-clinic patient-bound resources.
+- This remains application query isolation plus SQLite/SQLCipher ownership enforcement. There is no database Row-Level Security or production multi-tenant certification.
 - AI/Voice settings are device-level rather than clinic-level.
 - Deployment remains a single-machine SQLite/SQLCipher prototype.
 
-### Logging and operational privacy
+### Logging and operational privacy (F_A4 implemented, rev 3, 2026-09-02)
 
-- Application error bodies and application-owned log messages avoid raw clinical content.
-- Production access logging is disabled in the documented secure-demo topology.
-- Audit rows contain metadata rather than note/transcript bodies.
-- No production log-retention/deletion policy, central log scrubber, long-running production log audit, or third-party crash/monitoring evidence exists.
-- Provider-side request retention and regional-processing policy are not implemented as a product control.
+- Application operational logs are allowlisted structured JSON to stderr only, with **per-field value validators** (not just field names): `error_type` must be exception-name shaped, `model` a fixed allowlist, `route_template` is accepted only from the matched Starlette route object, `request_id` a server-generated id, `method`/`error_code` fixed enums, numerics typed/ranged. Invalid values and raw path strings are dropped; a deterministic scrubber (IC/ID, phone, placeholder, long token) is the last layer. `emit_log` never raises.
+- All four existing application log events use the allowlist emitter; exception text and raw paths are never logged.
+- A real-uvicorn process test proves a raw 500 traceback and 422 rejected value never reach stderr: the handler marks the exact exception after emitting the sanitized record, and the uvicorn filter suppresses only the duplicate traceback for that marked exception; unmarked server errors remain visible.
+- ASR `failure_reason` is a frozen fixed-code set enforced at BOTH the `ASRResult` contract and the capture state machine `fail_capture`; Voice audit `details` records `error_code`.
+- The committed Caddyfile has `admin off` and a global error-log `discard`; access logging is NOT ENABLED (no per-site `log` blocks), verified by executable `caddy adapt` assertions over the committed file. Edge error-log suppression costs edge fault diagnosis (502/TLS/cert) — edge observability is PARTIAL.
+- Seed output no longer prints the database URL/path.
+- Failure-first evidence is per-sink/per-field (`PASS`/`PARTIAL`/`NOT_ESTABLISHED`), never an aggregate “log security passed”.
+- Not implemented / not established: clinical `AuditLog` purge (NEEDS_OWNER_POLICY), host-side stderr capture/retention, third-party crash monitoring, and Provider-side retention (external policy; redaction is not a deletion guarantee). Uvicorn access logging is operator-controlled (`--no-access-log`), not code-enforced.
 
 ### Voice and multilingual consultations
 
@@ -106,7 +123,10 @@ The two skips mean the ignored local ASR model/audio inputs were unavailable; th
 - Importance is a transparent retrieval-order heuristic, not a clinical-risk probability.
 - Bounded clinic-scoped feedback from real review actions adjusts future candidates by type.
 - Caps and hard protections limit negative learning.
+- F_A2 now records versioned score factors, role-specific inclusion/exclusion reasons, deterministic priority bands and two-axis clinician review labels.
+- F_A1 now records immutable content-free decisions for surfaced, unsurfaced and excluded candidates. Serving is base-only; Hide/Confirm/Pin do not train. Coverage Review and Admin Shadow controls support explicit role-bounded signals, replay, freeze and rollback without model training or serving promotion.
 - Selection bias remains: only surfaced candidates receive review feedback.
+- No Learning-to-Rank, Bayesian adaptation or Bandit is trained; F_A1 remains blocked on evidence quality, coverage and separate approval.
 - There is no unsurfaced-candidate sampling, shadow-ranking gate, fatigue/bulk-dismiss detection, clinical-outcome calibration, or clinician usability study.
 
 ### Patient-facing publication

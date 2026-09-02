@@ -15,7 +15,7 @@ from threading import Barrier
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.models import Highlight
+from app.models import Artifact, Event, Highlight
 from seed import fixture
 
 # Global conftest autouse fixture re-seeds before every test, so status
@@ -31,6 +31,32 @@ def _insert_highlight(
     score: int = 1,
     review_status: str | None = None,
 ) -> None:
+    if db.get(Event, "evt_tie") is None:
+        db.add(
+            Event(
+                event_id="evt_tie",
+                patient_id=fixture.PATIENT_B_ID,
+                clinic_id=fixture.CLINIC_ID,
+                event_type="clinician_review",
+                started_at=TIE_CREATED_AT,
+                ended_at=None,
+                created_at=TIE_CREATED_AT,
+            )
+        )
+        db.add(
+            Artifact(
+                artifact_id="art_tie",
+                event_id="evt_tie",
+                artifact_type="clinician_note",
+                author_role="clinician",
+                author_id=fixture.USER_CLINICIAN_ID,
+                content={"probe": "tiebreak probe"},
+                created_at=TIE_CREATED_AT,
+                version=1,
+                provenance_pointer=None,
+            )
+        )
+        db.commit()
     db.add(
         Highlight(
             highlight_id=hid,
@@ -54,6 +80,10 @@ def _insert_highlight(
             review_status=review_status,
         )
     )
+    db.commit()
+    from app.glance_projection import rebuild_glance_projections
+
+    rebuild_glance_projections(db, fixture.PATIENT_B_ID)
     db.commit()
 
 

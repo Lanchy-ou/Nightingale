@@ -5,6 +5,15 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from enum import Enum
 
+from .contracts import ASR_FAILURE_CODES
+
+
+# Capture-level failure reasons are fixed codes only. The transcription path
+# reuses the ASR fixed codes; the upload path uses a single bounded code. A
+# free-form string (file/model path, exception text) must never reach the
+# capture record, its API projection, or the AuditLog.
+CAPTURE_FAILURE_CODES = frozenset(ASR_FAILURE_CODES | {"capture_upload_error"})
+
 
 class CaptureStatus(str, Enum):
     CREATED = "created"
@@ -94,9 +103,9 @@ def fail_capture(
     retry_status = _RETRY_FROM_FAILURE.get(state.status)
     if retry_status is None:
         raise InvalidCaptureTransition(f"{state.status.value} -> failed")
-    reason = reason.strip()
-    if not reason:
-        raise ValueError("failure reason must not be empty")
+    reason = (reason or "").strip()
+    if reason not in CAPTURE_FAILURE_CODES:
+        raise ValueError("failure reason must be a fixed capture error code")
     return replace(
         state,
         status=CaptureStatus.FAILED,

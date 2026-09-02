@@ -7,6 +7,7 @@ import type {
   AuditLog,
   Comment,
   CurrentIdentity,
+  CoverageReview,
   DiffResult,
   DoctorConsultResult,
   DoctorTranscriptSegment,
@@ -22,10 +23,15 @@ import type {
   CopilotCategory,
   CopilotResponse,
   PatientTask,
+  PatientReviewCandidate,
+  PatientReviewContext,
   PatientCheckInIntent,
   PatientCheckInList,
   PatientCheckInSession,
   PatientView,
+  LearningEvaluation,
+  LearningSignal,
+  LearningStatus,
   ProvenanceResult,
   RegisterResult,
   Span,
@@ -289,13 +295,65 @@ export const api = {
       expected_status: expectedStatus,
       status,
     }),
+  verifyPatientReport: (
+    taskId: string,
+    expectedStatus: 'open' | 'in_progress',
+    verificationOutcome: 'verified' | 'corrected' | 'unable_to_verify',
+    nextRoute: 'close' | 'clinician_review',
+  ) => post<ClinicalTask>(`/api/tasks/${taskId}/verify-patient-report`, {
+    expected_status: expectedStatus,
+    verification_outcome: verificationOutcome,
+    next_route: nextRoute,
+  }),
+  completeClinicianReview: (
+    taskId: string,
+    expectedStatus: 'open' | 'in_progress',
+    reviewOutcome: 'no_action' | 'monitor_or_record' | 'action_required',
+    timeSensitivity: 'routine' | 'time_sensitive',
+    followUpTaskId: string | null = null,
+  ) => post<ClinicalTask>(`/api/tasks/${taskId}/complete-clinician-review`, {
+    expected_status: expectedStatus,
+    review_outcome: reviewOutcome,
+    time_sensitivity: timeSensitivity,
+    follow_up_task_id: followUpTaskId,
+  }),
+  getPatientReviewContext: (taskId: string) =>
+    get<PatientReviewContext>(`/api/tasks/${taskId}/review-context`),
+  reviewPatientReportItem: (
+    taskId: string,
+    reviewItemId: string,
+    expectedOutcome: PatientReviewCandidate['review_outcome'],
+    outcome: Exclude<PatientReviewCandidate['review_outcome'], 'pending'>,
+    correctionArtifactId: string | null,
+  ) => post<PatientReviewCandidate>(`/api/tasks/${taskId}/review-items/${reviewItemId}`, {
+    expected_outcome: expectedOutcome,
+    outcome,
+    correction_artifact_id: correctionArtifactId,
+  }),
   getTaskProvenance: (taskId: string) => get<TaskProvenance>(`/api/tasks/${taskId}/provenance`),
   getEvents: (id: string, signal?: AbortSignal) => get<Event[]>(`/api/patients/${id}/events`, signal),
   getArtifacts: (eventId: string, signal?: AbortSignal) => get<Artifact[]>(`/api/events/${eventId}/artifacts`, signal),
-  getGlance: (patientId: string, signal?: AbortSignal) => get<{ highlights: Highlight[] }>(`/api/patients/${patientId}/glance`, signal),
+  getGlance: (patientId: string, signal?: AbortSignal) => get<{ safety_context: Highlight[]; highlights: Highlight[] }>(`/api/patients/${patientId}/glance`, signal),
+  getCoverageReview: (patientId: string, viewerRole: 'staff' | 'clinician', signal?: AbortSignal) =>
+    get<CoverageReview>(`/api/patients/${patientId}/coverage-review?viewer_role=${viewerRole}`, signal),
+  submitLearningSignal: (
+    decisionId: string,
+    signalType: 'explicit_demotion' | 'quality_issue',
+    reasonCode: string,
+  ) => post<LearningSignal>(`/api/ranking-decisions/${decisionId}/signals`, {
+    signal_type: signalType,
+    reason_code: reasonCode,
+    confirmed: true,
+  }),
   getProvenance: (highlightId: string) => get<ProvenanceResult>(`/api/highlights/${highlightId}/provenance`),
   setStatus: (highlightId: string, status: string) =>
     post<Highlight>(`/api/highlights/${highlightId}/status`, { status }),
+  getLearningStatus: (signal?: AbortSignal) => get<LearningStatus>('/api/admin/learning/status', signal),
+  replayLearning: (runIds: string[] = []) => post<LearningEvaluation>('/api/admin/learning/replays', { run_ids: runIds }),
+  freezeLearning: (expectedFrozen: boolean, frozen: boolean) =>
+    post<LearningStatus>('/api/admin/learning/freeze', { expected_frozen: expectedFrozen, frozen }),
+  activateLearningPolicy: (version: string) =>
+    post<LearningStatus>(`/api/admin/learning/policies/${version}/activate`, {}),
 
   createNote: (eventId: string, artifactType: string, content: Record<string, any>, confirmationToken?: string) =>
     post<Artifact>(`/api/events/${eventId}/notes`, { artifact_type: artifactType, content, ...(confirmationToken ? { confirmation_token: confirmationToken } : {}) }),

@@ -33,7 +33,8 @@ def test_glance_review_controls_explain_their_effect():
     assert "reviewRole === 'staff' ? 'Acknowledge' : 'Confirm'" in source
     assert "reviewRole === 'staff' ? 'Keep visible' : 'Keep on top'" in source
     assert ">Hide from Glance</button>" in source
-    assert "None of these actions creates or edits a clinical note" in source
+    assert "These controls do not teach future ranking" in source
+    assert "remain Shadow-only" in source
     assert ">Glance</h2>" in source
 
 

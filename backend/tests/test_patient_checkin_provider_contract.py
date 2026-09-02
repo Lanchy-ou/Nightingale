@@ -154,7 +154,7 @@ def test_ai_messages_and_unconfirmed_draft_cannot_be_fact_sources(
         Artifact.event_id == started["event_id"], Artifact.artifact_type == "raw_conversation"
     ))
     for highlight in db_session.scalars(select(Highlight).where(
-        Highlight.event_id == started["event_id"]
+        Highlight.event_id == started["event_id"], Highlight.task_id.is_(None)
     )).all():
         source = next(message for message in raw.content["messages"] if message["id"] == highlight.source_span["index"])
         assert source["speaker"] == "patient"

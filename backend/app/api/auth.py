@@ -39,6 +39,7 @@ from ..auth_security import (
 )
 from ..authz import authorize, require_auth, resource_not_found
 from ..db import get_db
+from ..clinic_scope import load_patient
 from ..ids import new_id
 from ..models import (
     AuthSession,
@@ -120,7 +121,7 @@ def create_invite(
             raise HTTPException(
                 status_code=422, detail="patient invite requires patient_id"
             )
-        patient = db.get(Patient, body.patient_id)
+        patient = load_patient(db, ctx, body.patient_id)
         # A patient outside the inviter's clinic looks exactly like an absent
         # patient: uniform 404, no cross-clinic existence leak.
         if patient is None or patient.clinic_id != ctx.clinic_id:
@@ -316,7 +317,9 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
         disabled_at=None,
     )
     db.add(user)
+    db.flush()
     db.add(credential)
+    db.flush()
     add_audit(
         db,
         actor_id=user_id,

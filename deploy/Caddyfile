@@ -1,8 +1,32 @@
+# Nightingale single-machine synthetic-data demo (D5 + F_A4).
+#
+# Logging/operations privacy (F_A4):
+# - Access logging is NOT ENABLED: no `log` directive appears in any site block,
+#   so Caddy creates no per-site access-logger (adapted config has no
+#   `srv*.logs` entries). This is "off", not "enabled and then discarded".
+# - The global default logger (which carries the edge ERROR log: reverse-proxy
+#   502/503, TLS, certificate and other edge failures) is routed to `discard`
+#   because on an upstream failure that error log would otherwise emit the full
+#   request URI (containing patient/event/task identifiers). Cost (recorded, not
+#   hidden): edge fault diagnosis — 502/TLS/cert/upstream errors — is not
+#   observable from Caddy's own stream; edge observability is PARTIAL. The
+#   loopback FastAPI backend's own allowlisted operational logs remain the
+#   diagnostic surface.
+# - `admin off` disables the localhost admin API. This fixed deployment never
+#   hot-reloads config; the static Caddyfile is the only configuration path. If
+#   a future deployment needs the admin API, keep it loopback-bound and record
+#   the limitation explicitly.
+# - The loopback FastAPI backend is started with `--no-access-log`; see
+#   docs/d5_deployment_security_decisions.md for the full reproduce commands.
 {
 	local_certs
 	skip_install_trust
+	admin off
 	http_port 8080
 	https_port 8443
+	log {
+		output discard
+	}
 }
 
 http://127.0.0.1:8080 {

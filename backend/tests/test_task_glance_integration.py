@@ -430,7 +430,4 @@ def test_terminal_dedicated_highlight_never_claims_to_be_unresolved(
 
     glance = clinician_client.get(f"/api/patients/{fixture.PATIENT_B_ID}/glance")
     assert glance.status_code == 200
-    row = next(item for item in glance.json()["highlights"] if item["task_id"] == task_id)
-    assert row["feature_flags"]["unresolved_task"] is False
-    assert "unresolved" not in row["risk_reason"].lower()
-    assert "cancelled" in row["risk_reason"].lower()
+    assert task_id not in {item["task_id"] for item in glance.json()["highlights"]}

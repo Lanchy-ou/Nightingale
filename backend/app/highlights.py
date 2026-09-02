@@ -25,6 +25,7 @@ WEIGHTS = {
 }
 
 FEATURE_FLAGS = tuple(WEIGHTS.keys())
+SCORE_RULE_VERSION = "importance-v1"
 
 # Default number of highlights surfaced in the Glance View.
 GLANCE_LIMIT = 5
@@ -32,6 +33,26 @@ GLANCE_LIMIT = 5
 
 def compute_score(feature_flags: dict[str, bool]) -> int:
     return sum(WEIGHTS[k] for k in FEATURE_FLAGS if feature_flags.get(k))
+
+
+def score_factor_breakdown(
+    feature_flags: dict[str, bool],
+    *,
+    adaptive_adjustment: int = 0,
+    decay_adjustment: int = 0,
+) -> dict:
+    factors = {
+        key: WEIGHTS[key] if feature_flags.get(key) else 0 for key in FEATURE_FLAGS
+    }
+    base = sum(factors.values())
+    return {
+        "rule_version": SCORE_RULE_VERSION,
+        "base_factors": factors,
+        "base_total": base,
+        "adaptive_adjustment": adaptive_adjustment,
+        "decay_adjustment": decay_adjustment,
+        "final_total": base + adaptive_adjustment + decay_adjustment,
+    }
 
 
 def locate_span(content: dict, quote: str) -> dict | None:

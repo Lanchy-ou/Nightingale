@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from ..authz import PATIENT_VISIBLE_ARTIFACT_TYPES, authorize, require_auth, resource_not_found
 from ..db import get_db
+from ..clinic_scope import load_patient
 from ..models import Artifact, Clinic, Event, Patient, PatientCheckInSession
 from ..role_context import RoleContext
 from ..schemas import EventOut, PatientOut
@@ -44,7 +45,7 @@ def get_patient(
     db: Session = Depends(get_db),
     ctx: RoleContext = Depends(require_auth),
 ):
-    patient = db.get(Patient, patient_id)
+    patient = load_patient(db, ctx, patient_id)
     if patient is None:
         raise resource_not_found()
     authorize(ctx, "read_patient", patient.clinic_id, patient.patient_id)
@@ -63,7 +64,7 @@ def list_events(
     db: Session = Depends(get_db),
     ctx: RoleContext = Depends(require_auth),
 ):
-    patient = db.get(Patient, patient_id)
+    patient = load_patient(db, ctx, patient_id)
     if patient is None:
         raise resource_not_found()
     authorize(ctx, "read_events", patient.clinic_id, patient.patient_id)
@@ -78,7 +79,10 @@ def list_events(
     )
     events = db.scalars(
         select(Event)
-        .where(Event.patient_id == patient_id)
+        .where(
+            Event.patient_id == patient_id,
+            Event.clinic_id == ctx.clinic_id,
+        )
         .order_by(Event.started_at, Event.event_id)
     ).all()
 

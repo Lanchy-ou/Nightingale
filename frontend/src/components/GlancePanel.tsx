@@ -30,6 +30,15 @@ function reviewState(h: Highlight, reviewRole: string): string {
   return 'Suggested for review';
 }
 
+function patientReviewState(h: Highlight): string | null {
+  const context = h.task_context;
+  if (!context || context.attention_class !== 'priority_review') return null;
+  if (context.verification_outcome === 'verified') return 'Patient-reported · Verified by Nurse';
+  if (context.verification_outcome === 'corrected') return 'Patient-reported · Corrected by Nurse';
+  if (context.verification_outcome === 'unable_to_verify') return 'Patient-reported · Nurse unable to verify';
+  return 'Patient-reported · Unverified priority review';
+}
+
 function learnedPriority(h: Highlight) {
   if (h.adaptive_adjustment === 0) return null;
   const sign = h.adaptive_adjustment > 0 ? '+' : '';
@@ -40,6 +49,24 @@ function learnedPriority(h: Highlight) {
       <span>Base {h.base_importance_score} {sign}{h.adaptive_adjustment} = final {h.importance_score}</span>
       <small>Based on {reviews} clinic review{reviews === 1 ? '' : 's'} of similar {h.learning_metadata.feedback_key ?? 'item'} suggestions.</small>
     </div>
+  );
+}
+
+function rankingExplanation(h: Highlight) {
+  const explanation = h.glance_explanation;
+  const score = explanation?.score;
+  if (!explanation || !score) return null;
+  const factors = Object.entries(score.base_factors ?? {}) as [string, number][];
+  return (
+    <details className="glance-ranking-explanation">
+      <summary>Why this is in Glance</summary>
+      <div>
+        <p><strong>Priority band {explanation.priority_band}</strong> · {(explanation.priority_reasons ?? []).join(' · ') || 'deterministic fallback band'}</p>
+        <p>Score: {score.base_total} + {score.adaptive_adjustment} adaptive + {score.decay_adjustment} decay = <strong>{score.final_total}</strong></p>
+        <dl>{factors.map(([name, value]) => <div key={name}><dt>{name.replace(/_/g, ' ')}</dt><dd>{value}</dd></div>)}</dl>
+        <small>Ranking rule {h.ranking_rule_version ?? 'unknown'} · score rule {score.rule_version ?? h.score_rule_version}</small>
+      </div>
+    </details>
   );
 }
 
@@ -55,14 +82,17 @@ export default function GlancePanel({
   reviewRole?: string;
 }) {
   const [highlights, setHighlights] = useState<Highlight[]>([]);
+  const [safetyContext, setSafetyContext] = useState<Highlight[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedHighlightId, setSelectedHighlightId] = useState<string | null>(null);
 
   const refresh = useCallback(async (signal?: AbortSignal) => {
     try {
-      const nextHighlights = (await api.getGlance(patientId, signal)).highlights;
+      const response = await api.getGlance(patientId, signal);
+      const nextHighlights = response.highlights;
       setHighlights(nextHighlights);
+      setSafetyContext(response.safety_context);
       setSelectedHighlightId((current) => (
         current && nextHighlights.some((highlight) => highlight.highlight_id === current)
           ? current
@@ -141,7 +171,8 @@ export default function GlancePanel({
           <span className="record-count">{highlights.length} current items</span>
         </div>
       </div>
-      <details className="glance-review-help"><summary>How review controls work</summary><p>{reviewRole === 'staff' ? <><strong>Acknowledge</strong> records Staff review, <strong>Keep visible</strong> pins the item, and <strong>Hide</strong> removes it from Glance. Staff review never becomes clinician confirmation.</> : <><strong>Confirm</strong> marks a priority as clinician-reviewed, <strong>Keep on top</strong> pins it, and <strong>Hide</strong> removes it from Glance.</>} None of these actions creates or edits a clinical note. Review feedback can change the bounded soft priority of future similar AI suggestions within this clinic; it never changes a clinical fact, Task, or source.</p></details>
+      <details className="glance-review-help"><summary>How review controls work</summary><p>{reviewRole === 'staff' ? <><strong>Acknowledge</strong> records Staff review, <strong>Keep visible</strong> pins the item, and <strong>Hide</strong> removes only this item from Glance. Staff review never becomes clinician confirmation.</> : <><strong>Confirm</strong> marks this priority as clinician-reviewed, <strong>Keep on top</strong> pins it, and <strong>Hide</strong> removes only this item from Glance.</>} These controls do not teach future ranking. Explicit teaching and quality feedback live in Coverage Review and remain Shadow-only.</p></details>
+      {safetyContext.length > 0 && <section className="glance-safety-context" aria-label="Confirmed safety context"><strong>Confirmed allergy context</strong>{safetyContext.map((item) => <span key={item.highlight_id}>{item.text}</span>)}</section>}
       {loading && <div className="loading-card">Loading precomputed priorities…</div>}
       {error && <div className="form-error">{error}</div>}
       {!loading && highlights.length === 0 && <div className="empty-state"><h3>No current highlights</h3><p>Nothing has been prioritized for this patient.</p></div>}
@@ -166,7 +197,7 @@ export default function GlancePanel({
                     >
                       <span className="glance-index-kicker"><b>{prioritySymbol(highlight)} {priorityLabel(highlight)}</b><em>{String(index + 1).padStart(2, '0')}</em></span>
                       <strong>{highlight.text}</strong>
-                      <small>{reviewState(highlight, reviewRole)}</small>
+                      <small>{patientReviewState(highlight) ?? reviewState(highlight, reviewRole)}</small>
                     </button>
                     <div className="glance-index-actions">{sourceAction(highlight)}{reviewMenu(highlight)}</div>
                   </article>
@@ -182,6 +213,7 @@ export default function GlancePanel({
             </header>
             <h3>{selectedHighlight.text}</h3>
             <p className="glance-detail-reason">{selectedHighlight.risk_reason}</p>
+            {selectedHighlight.task_context && <section className="glance-detail-block"><span>Review workflow</span><p>{selectedHighlight.task_context.creation_method === 'system_routed' ? 'Routed from patient Check-in' : 'Human-created task'} · {selectedHighlight.task_context.verification_outcome.replace(/_/g, ' ')}{selectedHighlight.task_context.verification_overdue ? ' · Nurse verification overdue' : ''}</p></section>}
 
             <section className="glance-detail-block">
               <span>Next action</span>
@@ -203,6 +235,7 @@ export default function GlancePanel({
             </section>
 
             {learnedPriority(selectedHighlight)}
+            {rankingExplanation(selectedHighlight)}
             <div className="glance-detail-actions">
               {sourceAction(selectedHighlight)}
               {reviewMenu(selectedHighlight)}

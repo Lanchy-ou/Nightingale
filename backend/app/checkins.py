@@ -319,23 +319,29 @@ def start_or_resume(
         ingestion_key=f"{patient.clinic_id}:{patient.patient_id}:checkin:{requested_session_id}",
         generation_metadata=None,
     )
-    db.add(event)
-    db.add(raw)
-    db.add(session)
-    db.add(initial)
-    add_audit(
-        db,
-        actor_id=user_id,
-        actor_role="patient",
-        action="checkin_start",
-        target_type="event",
-        target_id=event_id,
-        clinic_id=patient.clinic_id,
-        patient_id=patient.patient_id,
-        event_id=event_id,
-        details={"session_id": requested_session_id, "status": "active"},
-    )
     try:
+        db.add(event)
+        # A3 ownership triggers require each ownership parent before its child.
+        # All staged flushes remain inside this one recoverable transaction.
+        db.flush()
+        db.add(raw)
+        db.flush()
+        db.add(session)
+        db.flush()
+        db.add(initial)
+        add_audit(
+            db,
+            actor_id=user_id,
+            actor_role="patient",
+            action="checkin_start",
+            target_type="event",
+            target_id=event_id,
+            clinic_id=patient.clinic_id,
+            patient_id=patient.patient_id,
+            event_id=event_id,
+            details={"session_id": requested_session_id, "status": "active"},
+        )
+        db.flush()
         db.commit()
     except IntegrityError:
         db.rollback()
@@ -1015,6 +1021,7 @@ def _summary_output(
                 score=compute_score(flags),
                 review_status=review_status,
                 conflict_with_artifact_id=conflict_with,
+                priority_review_reason_codes=list(candidate.priority_review_reason_codes),
             )
         )
         source_facts.append(
@@ -1022,6 +1029,7 @@ def _summary_output(
                 "patient_message_id": candidate.patient_message_id,
                 "quote": candidate.quote,
                 "text": candidate.text,
+                "priority_review_reason_codes": list(candidate.priority_review_reason_codes),
             }
         )
         recompute.extend(item.highlight_id for item in existing)
@@ -1064,6 +1072,10 @@ def submit_checkin(
     }:
         if db.get(Artifact, _summary_id(session.raw_artifact_id)) is None:
             raise HTTPException(status_code=409, detail="Submitted Check-in summary is unavailable")
+        from .patient_review import reconcile_patient_review_workflow
+
+        reconcile_patient_review_workflow(db, session)
+        db.commit()
         return session_out(db, session, resumed=True)
     if expected_status != "awaiting_confirmation" or session.status != expected_status:
         raise HTTPException(status_code=409, detail="Check-in is not ready for confirmation")
@@ -1104,6 +1116,7 @@ def submit_checkin(
     if changed != 1:
         db.rollback()
         raise HTTPException(status_code=409, detail="Check-in state changed; refresh and retry")
+    db.expire_all()
     session = db.get(PatientCheckInSession, session.session_id)
     event = db.get(Event, session.event_id)
     event.ended_at = now
@@ -1121,5 +1134,8 @@ def submit_checkin(
         event_id=session.event_id,
         details={"from_status": "awaiting_confirmation", "to_status": "submitted"},
     )
+    from .patient_review import reconcile_patient_review_workflow
+
+    reconcile_patient_review_workflow(db, session, as_of=now)
     db.commit()
     return session_out(db, db.get(PatientCheckInSession, session.session_id))

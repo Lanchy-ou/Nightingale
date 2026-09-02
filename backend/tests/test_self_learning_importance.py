@@ -142,19 +142,19 @@ def test_clinician_pin_changes_current_order_and_future_similar_score_independen
         db_session, suffix="pin_control", entity_type="medication"
     )
     assert future.base_importance_score == 0
-    assert future.adaptive_adjustment == 2
-    assert future.importance_score == 2
-    assert future.learning_metadata["review_count"] == 1
+    assert future.adaptive_adjustment == 0
+    assert future.importance_score == 0
+    assert future.learning_metadata["serving_mode"] == "base_only"
     assert future.status == "suggested"
     assert control.base_importance_score == 0
     assert control.adaptive_adjustment == 0
     future_order = clinician_client.get(
         f"/api/patients/{fixture.PATIENT_B_ID}/glance"
     ).json()["highlights"]
-    assert [row["highlight_id"] for row in future_order[:2]] == [
+    assert {row["highlight_id"] for row in future_order[:2]} == {
         future.highlight_id,
         control.highlight_id,
-    ]
+    }
 
 
 def test_reject_decreases_future_similar_but_same_base_control_is_unchanged(
@@ -169,17 +169,17 @@ def test_reject_decreases_future_similar_but_same_base_control_is_unchanged(
         db_session, suffix="reject_medication", entity_type="medication"
     )
     assert symptom.base_importance_score == control.base_importance_score == 0
-    assert symptom.adaptive_adjustment == -1
-    assert symptom.importance_score == -1
+    assert symptom.adaptive_adjustment == 0
+    assert symptom.importance_score == 0
     assert control.adaptive_adjustment == 0
     assert control.importance_score == 0
     future_order = clinician_client.get(
         f"/api/patients/{fixture.PATIENT_B_ID}/glance"
     ).json()["highlights"]
-    assert [row["highlight_id"] for row in future_order[:2]] == [
+    assert {row["highlight_id"] for row in future_order[:2]} == {
         control.highlight_id,
         symptom.highlight_id,
-    ]
+    }
 
 
 def test_learning_is_clinic_scoped(clinician_client, db_session):
@@ -199,7 +199,7 @@ def test_learning_is_clinic_scoped(clinician_client, db_session):
         patient_id="pat_e2_other_clinic",
         actor_id=fixture.USER_CLINICIAN_B_ID,
     )
-    assert clinic_a.adaptive_adjustment == 2
+    assert clinic_a.adaptive_adjustment == 0
     assert clinic_b.adaptive_adjustment == 0
     assert clinic_b.learning_metadata["review_count"] == 0
 
@@ -212,7 +212,7 @@ def test_staff_signal_works_without_clinician_confirmation(staff_client, db_sess
     assert response.json()["feature_flags"]["clinician_confirmed"] is False
 
     future = _persist_future_candidate(db_session, suffix="staff_future")
-    assert future.adaptive_adjustment == 1
+    assert future.adaptive_adjustment == 0
     assert future.feature_flags["clinician_confirmed"] is False
 
 
@@ -282,12 +282,7 @@ def test_latest_feedback_per_actor_highlight_prevents_toggle_inflation(
         "/api/highlights/hl_headache_worsening/status", json={"status": "pinned"}
     ).status_code == 200
 
-    rows = _feedback_rows(db_session)
-    assert [row.signal_value for row in rows] == [1, 2]
-    adaptive, metadata = adjustment(db_session, fixture.CLINIC_ID, "symptom")
-    assert adaptive == 2
-    assert metadata["review_count"] == 1
-    assert metadata["raw_adjustment"] == 2
+    assert _feedback_rows(db_session) == []
 
 
 def test_noop_and_losing_cas_produce_no_feedback(clinician_client, db_session):
@@ -297,7 +292,7 @@ def test_noop_and_losing_cas_produce_no_feedback(clinician_client, db_session):
     assert clinician_client.post(
         "/api/highlights/hl_headache_worsening/status", json={"status": "accepted"}
     ).status_code == 200
-    assert len(_feedback_rows(db_session)) == 1
+    assert _feedback_rows(db_session) == []
 
     # Deterministic stale-writer probe mirroring the endpoint's conditional
     # UPDATE: only the winning rowcount may call record_feedback.
@@ -335,7 +330,7 @@ def test_noop_and_losing_cas_produce_no_feedback(clinician_client, db_session):
         loser.rollback()
 
     db_session.expire_all()
-    assert len(_feedback_rows(db_session)) == 2
+    assert len(_feedback_rows(db_session)) == 1
 
 
 def test_adjustment_caps_and_other_key_fail_safe(db_session):
@@ -425,7 +420,20 @@ def test_feedback_and_audit_are_metadata_only(clinician_client, db_session):
     assert clinician_client.post(
         "/api/highlights/hl_headache_worsening/status", json={"status": "accepted"}
     ).status_code == 200
-    row = _feedback_rows(db_session)[0]
+    from app.importance_learning import record_feedback
+
+    highlight = db_session.get(Highlight, "hl_headache_worsening")
+    event = db_session.get(Event, highlight.event_id)
+    row = record_feedback(
+        db_session,
+        highlight=highlight,
+        event=event,
+        actor_id=fixture.USER_CLINICIAN_ID,
+        actor_role="clinician",
+        status="accepted",
+    )
+    db_session.commit()
+    assert row is not None
     assert set(row.__table__.columns.keys()) == {
         "feedback_id",
         "highlight_id",
@@ -461,7 +469,7 @@ def test_future_learned_highlight_keeps_exact_provenance(clinician_client, db_se
         "/api/highlights/hl_headache_worsening/status", json={"status": "accepted"}
     ).status_code == 200
     future = _persist_future_candidate(db_session, suffix="provenance")
-    assert future.adaptive_adjustment == 1
+    assert future.adaptive_adjustment == 0
 
     response = clinician_client.get(f"/api/highlights/{future.highlight_id}/provenance")
     assert response.status_code == 200
@@ -516,7 +524,7 @@ def test_future_final_tiebreak_remains_stable(clinician_client, db_session):
     assert ids == sorted(ids)
 
 
-def test_glance_ui_explains_future_soft_learning_without_actor_details():
+def test_glance_ui_explains_base_only_feedback_semantics_without_actor_details():
     component = (BACKEND.parent / "frontend/src/components/GlancePanel.tsx").read_text(
         encoding="utf-8"
     )
@@ -524,7 +532,8 @@ def test_glance_ui_explains_future_soft_learning_without_actor_details():
     assert "Learned priority" in component
     assert "Base {h.base_importance_score}" in component
     assert "final {h.importance_score}" in component
-    assert "future similar AI suggestions within this clinic" in component
+    assert "These controls do not teach future ranking" in component
+    assert "remain Shadow-only" in component
     assert "actor_id" not in component
     for field in (
         "base_importance_score",

@@ -35,6 +35,8 @@ def test_phase_e_migration_upgrades_legacy_columns_and_tables_idempotently(tmp_p
         "task_id",
         "source_artifact_version",
         "source_quote_sha256",
+        "score_rule_version",
+        "score_factors",
     }.issubset({column["name"] for column in schema.get_columns("highlights")})
     assert {
         "tasks",
@@ -44,9 +46,24 @@ def test_phase_e_migration_upgrades_legacy_columns_and_tables_idempotently(tmp_p
         "patient_checkin_sessions",
         "patient_checkin_messages",
         "system_settings",
+        "glance_projections",
     }.issubset(
         set(schema.get_table_names())
     )
+    assert {
+        "task_kind",
+        "workflow_id",
+        "attention_class",
+        "creation_method",
+        "verification_outcome",
+        "escalate_at",
+        "escalated_at",
+        "review_outcome",
+        "time_sensitivity",
+        "routing_metadata",
+        "source_artifact_version",
+        "source_quote_sha256",
+    }.issubset({column["name"] for column in schema.get_columns("tasks")})
 
     with target.begin() as connection:
         connection.execute(

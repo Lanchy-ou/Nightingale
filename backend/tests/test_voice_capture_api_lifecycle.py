@@ -172,6 +172,45 @@ def test_asr_failure_is_explicit_and_creates_no_event_or_summary(
     assert db_session.get(Event, f"evt_voice_{capture_id}") is None
 
 
+def test_asr_failure_audit_and_db_use_fixed_error_code(
+    clinician_client, monkeypatch, db_session
+):
+    from app.models import AuditLog
+    from app.voice.asr import DeterministicMockASRClient
+    from app.voice.contracts import ASR_FAILURE_CODES
+
+    audio = synthetic_wav()
+    monkeypatch.setattr(
+        voice_api,
+        "build_asr_client",
+        lambda _provider: DeterministicMockASRClient({}),
+    )
+    capture_id = clinician_client.post("/api/voice/captures", json=create_payload()).json()["capture_id"]
+    assert upload(clinician_client, capture_id, audio).status_code == 200
+
+    response = clinician_client.post(
+        f"/api/voice/captures/{capture_id}/transcribe",
+        json={"expected_revision": 2, "idempotency_key": "transcribe-fail-audit"},
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "failed"
+    assert response.json()["failure_reason"] == "mock_fixture_not_found"
+
+    capture = db_session.get(VoiceCaptureRecord, capture_id)
+    assert capture.failure_reason in ASR_FAILURE_CODES
+
+    audits = db_session.scalars(
+        select(AuditLog).where(
+            AuditLog.target_id == capture_id, AuditLog.action == "voice_failed"
+        )
+    ).all()
+    assert len(audits) == 1
+    details = audits[0].details
+    assert details["error_code"] == "mock_fixture_not_found"
+    assert details["error_code"] in ASR_FAILURE_CODES
+    assert "reason" not in details
+
+
 def test_raw_audio_download_is_creator_only_and_never_in_json(
     clinician_client, client, db_session
 ):

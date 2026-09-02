@@ -6,8 +6,8 @@ tests can assert header parsing.
 """
 from __future__ import annotations
 
-import logging
 import os
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, Request
@@ -23,6 +23,7 @@ from .api import (
     copilot,
     events,
     highlights,
+    learning,
     notes,
     patient_view,
     patients,
@@ -35,15 +36,24 @@ from .api import (
 from .db import get_db
 from .errors import error_response
 from .models import Clinic, User
+from .operational_logging import (
+    emit_log,
+    mark_exception_sanitized,
+    suppress_server_duplicate_tracebacks,
+)
 from .role_context import RoleContext, get_role_context
 from .schemas import CurrentIdentityOut
 from .security import (
+    RequestIdMiddleware,
     SecurityMiddleware,
     validate_production_settings,
 )
 from .db import DATABASE_MODE, DATABASE_KEY, engine
 
-logger = logging.getLogger("nantingale.security")
+# Starlette re-raises handled exceptions so the server logs a raw traceback;
+# our sanitized `unhandled_error` record already covers it, so drop the server's
+# duplicate (which would otherwise leak exception text to stderr).
+suppress_server_duplicate_tracebacks()
 
 
 @asynccontextmanager
@@ -62,7 +72,33 @@ async def lifespan(_: FastAPI):
             raise RuntimeError(
                 "D5 production configuration rejected: " + "; ".join(errors)
             )
-    yield
+    stop = asyncio.Event()
+
+    async def patient_review_sweep():
+        from .db import SessionLocal
+        from .patient_review import materialize_due_escalations
+
+        interval = max(
+            1, int(os.environ.get("NANTINGALE_PATIENT_REVIEW_SWEEP_SECONDS", "60"))
+        )
+        while not stop.is_set():
+            try:
+                with SessionLocal() as db:
+                    if materialize_due_escalations(db):
+                        db.commit()
+            except Exception as exc:
+                emit_log("sweep_error", error_type=type(exc).__name__, level="error")
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=interval)
+            except TimeoutError:
+                pass
+
+    worker = asyncio.create_task(patient_review_sweep())
+    try:
+        yield
+    finally:
+        stop.set()
+        await worker
 
 app = FastAPI(
     title="Nightingale API",
@@ -72,6 +108,7 @@ app = FastAPI(
     dependencies=[Depends(get_role_context)],
 )
 app.add_middleware(SecurityMiddleware)
+app.add_middleware(RequestIdMiddleware)
 
 app.include_router(auth.router)
 app.include_router(admin.router)
@@ -79,6 +116,7 @@ app.include_router(patients.router)
 app.include_router(patient_view.router)
 app.include_router(events.router)
 app.include_router(highlights.router)
+app.include_router(learning.router)
 app.include_router(notes.router)
 app.include_router(comments.router)
 app.include_router(checkins.router)
@@ -113,12 +151,20 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
     # Never serialize/log exception text: provider payloads, SQL fragments or
-    # secrets may be embedded in third-party exception messages.
-    logger.error(
-        "Unhandled application error path=%s type=%s",
-        request.url.path,
-        type(exc).__name__,
+    # secrets may be embedded in third-party exception messages. Log only the
+    # matched route template (never the raw path with patient/event ids).
+    route = request.scope.get("route")
+    emit_log(
+        "unhandled_error",
+        method=request.method,
+        route_template=route,
+        status_code=500,
+        error_code="internal_error",
+        error_type=type(exc).__name__,
+        request_id=getattr(request.state, "request_id", None),
+        level="error",
     )
+    mark_exception_sanitized(exc)
     return error_response(500, "internal_error", "Internal server error")
 
 

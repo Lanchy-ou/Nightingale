@@ -7,8 +7,7 @@ No HTTP and no RBAC live here; the caller owns transactions and authorization.
 """
 from __future__ import annotations
 
-import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -29,10 +28,9 @@ from .llm_client import (
     ProviderUnavailableError,
 )
 from .models import Artifact, Event, Highlight, Patient, User
+from .operational_logging import emit_log
 from .provenance_binding import create_source_binding
 from .redaction import redact_content, restore_placeholders, unresolved_placeholders
-
-logger = logging.getLogger("nantingale.ai_pipeline")
 
 
 @dataclass
@@ -47,6 +45,7 @@ class AnchoredCandidate:
     score: int
     review_status: str | None
     conflict_with_artifact_id: str | None
+    priority_review_reason_codes: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -145,7 +144,7 @@ def run_pipeline(
     except InvalidOutputError:
         fallback_reason = "invalid_output"
     except Exception as e:  # timeout / network / any unexpected provider error
-        logger.warning("provider error: %s", type(e).__name__)
+        emit_log("provider_error", error_type=type(e).__name__, level="warning")
         fallback_reason = "provider_error"
 
     anchored: list = []
@@ -290,6 +289,9 @@ def persist_derived(
             },
         )
     )
+    # A3 ownership triggers validate Highlight -> derived Artifact. Stage the
+    # summary first, but keep summary/highlights/audit in one transaction.
+    db.flush()
 
     highlight_ids: list[str] = []
     for ac in output.candidates:
@@ -370,6 +372,10 @@ def persist_derived(
         event_id=event.event_id,
     )
     try:
+        db.flush()
+        from .glance_projection import rebuild_glance_projections
+
+        rebuild_glance_projections(db, event.patient_id, as_of=now)
         db.commit()
     except Exception:
         # Raw ingestion was committed by the caller before this derived

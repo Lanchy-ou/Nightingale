@@ -3,6 +3,9 @@ from __future__ import annotations
 
 from datetime import datetime
 
+import pytest
+from sqlalchemy.exc import IntegrityError
+
 from app.copilot_models import CopilotProviderClaim, CopilotProviderResult
 from app.highlights import extract_text
 from app.models import Artifact, Event, Highlight
@@ -75,7 +78,7 @@ def test_fabricated_evidence_becomes_unknown_not_supported(clinician_client, mon
     }]
 
 
-def test_cross_patient_artifact_pointer_is_rejected_by_server_resolver(clinician_client, db_session, monkeypatch):
+def test_cross_patient_artifact_pointer_is_rejected_by_ownership_boundary(db_session):
     other_event = Event(
         event_id="evt_copilot_other", patient_id=fixture.PATIENT_B_ID, clinic_id=fixture.CLINIC_ID,
         event_type="doctor_consult", started_at=datetime(2026, 8, 27, 8, 0), ended_at=None,
@@ -97,11 +100,8 @@ def test_cross_patient_artifact_pointer_is_rejected_by_server_resolver(clinician
         status="pinned", status_history=[], created_at=datetime(2026, 8, 27, 8, 3),
         updated_at=datetime(2026, 8, 27, 8, 3),
     ))
-    db_session.commit()
-    monkeypatch.setenv("NANTINGALE_LLM_PROVIDER", "mock")
-    response = clinician_client.post(URL, json={"category": "what_matters_now"})
-    assert response.status_code == 200
-    assert "OTHER_PATIENT_SENTINEL" not in str(response.json())
+    with pytest.raises(IntegrityError):
+        db_session.commit()
 
 
 def test_prompt_injection_cannot_choose_draft_type_or_action(clinician_client, db_session, monkeypatch):

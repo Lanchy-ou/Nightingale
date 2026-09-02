@@ -16,6 +16,11 @@ from ..audit import add_audit
 from ..authz import authorize, require_auth, resource_not_found
 from ..checkin_visibility import require_checkin_event_visible
 from ..db import get_db
+from ..clinic_scope import (
+    load_artifact_with_event,
+    load_comment_with_event,
+    load_event,
+)
 from ..ids import new_id
 from ..models import Artifact, Comment, Event, User
 from ..role_context import RoleContext
@@ -24,20 +29,19 @@ from ..schemas import CommentCreate, CommentOut
 router = APIRouter(prefix="/api", tags=["comments"])
 
 
-def _resolve_anchor(db: Session, anchor_type: str, anchor_id: str) -> Event:
+def _resolve_anchor(
+    db: Session, ctx: RoleContext, anchor_type: str, anchor_id: str
+) -> Event:
     if anchor_type == "event":
-        event = db.get(Event, anchor_id)
+        event = load_event(db, ctx, anchor_id)
         if event is None:
             raise resource_not_found()
         return event
     if anchor_type == "artifact":
-        artifact = db.get(Artifact, anchor_id)
-        if artifact is None:
+        scoped = load_artifact_with_event(db, ctx, anchor_id)
+        if scoped is None:
             raise resource_not_found()
-        event = db.get(Event, artifact.event_id)
-        if event is None:
-            raise resource_not_found()
-        return event
+        return scoped[1]
     raise HTTPException(status_code=422, detail="Invalid anchor_type")
 
 
@@ -47,15 +51,15 @@ def create_comment(
     db: Session = Depends(get_db),
     ctx: RoleContext = Depends(require_auth),
 ):
-    event = _resolve_anchor(db, body.anchor_type, body.anchor_id)
+    event = _resolve_anchor(db, ctx, body.anchor_type, body.anchor_id)
     authorize(ctx, "comment", event.clinic_id, event.patient_id)
     require_checkin_event_visible(db, event.event_id)
 
     if body.parent_comment_id:
-        parent = db.get(Comment, body.parent_comment_id)
-        if parent is None:
+        scoped_parent = load_comment_with_event(db, ctx, body.parent_comment_id)
+        if scoped_parent is None:
             raise resource_not_found()
-        parent_event = _resolve_anchor(db, parent.anchor_type, parent.anchor_id)
+        parent, parent_event = scoped_parent
         authorize(ctx, "read_comments", parent_event.clinic_id, parent_event.patient_id)
         if parent.anchor_type != body.anchor_type or parent.anchor_id != body.anchor_id:
             raise HTTPException(status_code=422, detail="Parent comment must share the same anchor")
@@ -103,10 +107,10 @@ def resolve_comment(
     db: Session = Depends(get_db),
     ctx: RoleContext = Depends(require_auth),
 ):
-    comment = db.get(Comment, comment_id)
-    if comment is None:
+    scoped = load_comment_with_event(db, ctx, comment_id)
+    if scoped is None:
         raise resource_not_found()
-    event = _resolve_anchor(db, comment.anchor_type, comment.anchor_id)
+    comment, event = scoped
     authorize(ctx, "comment", event.clinic_id, event.patient_id)
     require_checkin_event_visible(db, event.event_id)
 
@@ -136,10 +140,10 @@ def unresolve_comment(
     db: Session = Depends(get_db),
     ctx: RoleContext = Depends(require_auth),
 ):
-    comment = db.get(Comment, comment_id)
-    if comment is None:
+    scoped = load_comment_with_event(db, ctx, comment_id)
+    if scoped is None:
         raise resource_not_found()
-    event = _resolve_anchor(db, comment.anchor_type, comment.anchor_id)
+    comment, event = scoped
     authorize(ctx, "comment", event.clinic_id, event.patient_id)
     require_checkin_event_visible(db, event.event_id)
 
@@ -169,7 +173,7 @@ def list_comments(
     db: Session = Depends(get_db),
     ctx: RoleContext = Depends(require_auth),
 ):
-    event = db.get(Event, event_id)
+    event = load_event(db, ctx, event_id)
     if event is None:
         raise resource_not_found()
     authorize(ctx, "read_comments", event.clinic_id, event.patient_id)

@@ -70,6 +70,8 @@ class HighlightOut(BaseModel):
     decay_adjustment: int
     importance_score: int
     learning_metadata: dict
+    score_rule_version: str = "importance-v1"
+    score_factors: dict = {}
     status: str
     status_history: list = []
     created_at: datetime
@@ -79,9 +81,13 @@ class HighlightOut(BaseModel):
     assertion_value: str | None = None
     conflict_with_artifact_id: str | None = None
     review_status: str | None = None
+    task_context: dict | None = None
+    glance_explanation: dict | None = None
+    ranking_rule_version: str | None = None
 
 
 class GlanceOut(BaseModel):
+    safety_context: list[HighlightOut] = []
     highlights: list[HighlightOut]
 
 
@@ -282,6 +288,25 @@ class CheckInSummaryCandidate(BaseModel):
     entity_type: Literal["symptom", "medication", "allergy", "chief_complaint", "task", "risk"]
     assertion_value: str | None = Field(default=None, max_length=255)
     symptom_change: bool = False
+    priority_review_reason_codes: list[
+        Literal[
+            "patient_explicit_worsening",
+            "patient_explicit_severe_intensity",
+            "patient_requests_urgent_contact",
+            "patient_reports_medication_or_allergy_concern",
+        ]
+    ] = Field(default_factory=list, max_length=4)
+    suggested_route: Literal["routine", "priority_review"] = "routine"
+
+    @model_validator(mode="after")
+    def priority_route_requires_reason(self):
+        if self.suggested_route == "priority_review" and not self.priority_review_reason_codes:
+            raise ValueError("priority review requires an approved reason code")
+        if self.suggested_route == "routine" and self.priority_review_reason_codes:
+            raise ValueError("routine route cannot carry priority reason codes")
+        if len(set(self.priority_review_reason_codes)) != len(self.priority_review_reason_codes):
+            raise ValueError("priority reason codes must be unique")
+        return self
 
 
 class CheckInSummaryResult(BaseModel):
@@ -756,6 +781,130 @@ class TaskTransition(BaseModel):
     status: Literal["open", "in_progress", "reported_done", "completed", "cancelled"]
 
 
+class PatientReportVerification(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_status: Literal["open", "in_progress"]
+    verification_outcome: Literal["verified", "corrected", "unable_to_verify"]
+    next_route: Literal["close", "clinician_review"]
+
+
+class ClinicianReviewCompletion(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_status: Literal["open", "in_progress"]
+    review_outcome: Literal["no_action", "monitor_or_record", "action_required"]
+    time_sensitivity: Literal["routine", "time_sensitive"]
+    follow_up_task_id: str | None = None
+
+    @model_validator(mode="after")
+    def no_action_cannot_be_time_sensitive(self):
+        if self.review_outcome == "no_action" and self.time_sensitivity == "time_sensitive":
+            raise ValueError("no_action cannot be time_sensitive")
+        return self
+
+
+class PatientReviewItemUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_outcome: Literal["pending", "verified", "corrected", "unable_to_verify"]
+    outcome: Literal["verified", "corrected", "unable_to_verify"]
+    correction_artifact_id: str | None = None
+
+    @model_validator(mode="after")
+    def correction_requires_artifact(self):
+        if (self.outcome == "corrected") != (self.correction_artifact_id is not None):
+            raise ValueError("corrected requires exactly one correction artifact")
+        return self
+
+
+class PatientReviewItemOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
+
+    review_item_id: str
+    workflow_id: str
+    staff_task_id: str
+    highlight_id: str
+    outcome: str
+    correction_artifact_id: str | None
+    reviewed_by: str | None
+    reviewed_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class LearningSignalCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    signal_type: Literal["explicit_demotion", "quality_issue"]
+    reason_code: Literal[
+        "duplicate_or_redundant",
+        "already_resolved_or_stale",
+        "not_actionable_for_viewer_role",
+        "lower_than_other_active_work",
+        "extraction_incorrect",
+        "source_mismatch",
+        "wrong_role_route",
+    ]
+    confirmed: bool
+
+    @model_validator(mode="after")
+    def match_signal_reason(self):
+        demotion = {
+            "duplicate_or_redundant",
+            "already_resolved_or_stale",
+            "not_actionable_for_viewer_role",
+            "lower_than_other_active_work",
+        }
+        if not self.confirmed:
+            raise ValueError("explicit confirmation is required")
+        if (self.signal_type == "explicit_demotion") != (self.reason_code in demotion):
+            raise ValueError("reason code does not match signal type")
+        return self
+
+
+class LearningSignalOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
+
+    signal_id: str
+    decision_id: str
+    clinic_id: str
+    actor_id: str
+    actor_role: str
+    signal_type: str
+    reason_code: str
+    feedback_key: str
+    signal_value: int
+    eligible_for_shadow: bool
+    ineligibility_reason: str | None
+    independence_key: str
+    policy_version: str
+    supersedes_signal_id: str | None
+    created_at: datetime
+
+
+class LearningReplayRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    run_ids: list[str] = []
+
+
+class LearningFreezeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_frozen: bool
+    frozen: bool
+
+
+class LearningEvaluationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
+    evaluation_id: str
+    clinic_id: str
+    policy_version: str
+    run_ids: list[str]
+    metrics: dict
+    created_by: str
+    created_at: datetime
+
+
 class ClinicalTaskOut(BaseModel):
     model_config = ConfigDict(from_attributes=True, extra="forbid")
 
@@ -767,6 +916,19 @@ class ClinicalTaskOut(BaseModel):
     source_span: dict | None
     title: str
     description: str
+    task_kind: str
+    workflow_id: str | None
+    attention_class: str
+    creation_method: str
+    verification_outcome: str
+    escalate_at: datetime | None
+    escalated_at: datetime | None
+    review_outcome: str | None
+    time_sensitivity: str | None
+    follow_up_task_id: str | None
+    routing_metadata: dict
+    source_artifact_version: int | None
+    source_quote_sha256: str | None
     assigned_role: str
     assigned_user_id: str | None
     patient_visible: bool

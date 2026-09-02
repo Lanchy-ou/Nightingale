@@ -195,6 +195,7 @@ python -m venv .venv
 
 $env:NANTINGALE_DEMO_AUTH='true'
 $env:NANTINGALE_LLM_PROVIDER='mock'
+$env:NANTINGALE_PATIENT_REVIEW_WINDOW_MINUTES='5' # local demo/test; production default is 720
 .venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
@@ -338,7 +339,7 @@ journeys. This is synthetic UI/authorization coverage, not clinical validation.
 - Attribution: `ATTRIBUTION.txt`
 - Final evidence: `docs/final_submission_evidence_2026-08-28.md`
 - Current real-clinic readiness ledger: `docs/real_clinic_readiness_status_2026-08-31.md`
-- Active real-clinic hardening phase: `Task_Card/F1_Real_Clinic_Feedback_Hardening_Task_Card.md`
+- Active real-clinic hardening phase: `Task_Card/F1_Real_Clinic_Feedback_Hardening_Task_Card.md`. F_A2 deterministic Glance/Patient Review, F_A1 auditable Shadow/Coverage controls, and F_A3 scoped query plus SQLite/SQLCipher ownership enforcement are implemented with documented limits. Formal Glance remains base-only; model training and learning-enabled serving remain blocked. A3 is not PostgreSQL RLS or production multi-tenant certification.
 - Frontend pre-visual repair evidence: `docs/frontend_previsual_repair_evidence_2026-08-28.md`
 - Demo runbook: `docs/demo_video_runbook_2026-08-28.md`
 - Submission email draft: `docs/submission_email_draft_2026-08-28.md`

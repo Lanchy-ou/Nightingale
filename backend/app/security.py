@@ -8,12 +8,14 @@ from __future__ import annotations
 
 import math
 import os
+import secrets
 import threading
 import time
 from collections import defaultdict, deque
 from urllib.parse import urlparse
 
 from fastapi import Request
+from starlette.datastructures import State
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import Response
 
@@ -109,6 +111,32 @@ def _client_ip(request: Request) -> str:
         if forwarded:
             return forwarded.split(",", 1)[0].strip()
     return request.client.host if request.client else "unknown"
+
+
+def generate_request_id() -> str:
+    """Server-generated correlation id. A client header is never trusted."""
+    return "req_" + secrets.token_hex(8)
+
+
+class RequestIdMiddleware:
+    """Assign a server-generated ``request.state.request_id`` per HTTP request.
+
+    Pure ASGI middleware so the id is available even inside exception handlers
+    (the Starlette ``ExceptionMiddleware`` runs inside user middleware). It never
+    reads or trusts a client-supplied ``X-Request-ID`` value.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http":
+            state = scope.get("state")
+            if not isinstance(state, State):
+                state = State(state if isinstance(state, dict) else None)
+                scope["state"] = state
+            state["request_id"] = generate_request_id()
+        await self.app(scope, receive, send)
 
 
 def _apply_response_headers(response: Response, request: Request, *, strict: bool) -> None:

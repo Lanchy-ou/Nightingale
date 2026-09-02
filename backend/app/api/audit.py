@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from ..authz import authorize, require_auth, resource_not_found
 from ..checkin_visibility import require_checkin_event_visible
 from ..db import get_db
+from ..clinic_scope import load_event
 from ..models import AuditLog, Event
 from ..role_context import RoleContext
 from ..schemas import AuditLogOut
@@ -21,7 +22,7 @@ def list_audit(
     db: Session = Depends(get_db),
     ctx: RoleContext = Depends(require_auth),
 ):
-    event = db.get(Event, event_id)
+    event = load_event(db, ctx, event_id)
     if event is None:
         raise resource_not_found()
     authorize(ctx, "read_audit", event.clinic_id, event.patient_id)

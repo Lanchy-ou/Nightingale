@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, aliased
 from ..audit import add_audit
 from ..authz import authorize, require_auth, resource_not_found
 from ..db import get_db
+from ..clinic_scope import load_clinic_user
 from ..models import AuditLog, AuthSession, User, UserCredential
 from ..role_context import RoleContext
 from ..schemas import (
@@ -43,7 +44,7 @@ ACCESS_AUDIT_ACTIONS = {
 
 
 def _target_user(db: Session, ctx: RoleContext, user_id: str, action: str) -> User:
-    user = db.get(User, user_id)
+    user = load_clinic_user(db, ctx, user_id)
     if user is None:
         raise resource_not_found()
     authorize(ctx, action, user.clinic_id, user.patient_id)

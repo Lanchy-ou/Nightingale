@@ -111,8 +111,8 @@ def test_glance_prioritizes_current_episode(clinician_client):
     assert r.status_code == 200
     hs = r.json()["highlights"]
     assert len(hs) == 5
-    scores = [h["importance_score"] for h in hs]
-    assert scores == sorted(scores, reverse=True)
+    bands = [h["glance_explanation"]["priority_band"] for h in hs]
+    assert bands == sorted(bands)
     # current-episode high-value items occupy the top; historical low-value items truncated
     top_ids = {h["highlight_id"] for h in hs}
     assert "hl_headache_worsening" in top_ids

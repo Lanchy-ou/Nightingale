@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 
 from ..authz import authorize, require_auth, resource_not_found
 from ..db import get_db
+from ..clinic_scope import load_patient
 from ..models import Artifact, Event, Patient, Task, User
 from ..role_context import RoleContext
 from ..schemas import (
@@ -67,7 +68,7 @@ def get_patient_view(
     db: Session = Depends(get_db),
     ctx: RoleContext = Depends(require_auth),
 ):
-    patient = db.get(Patient, patient_id)
+    patient = load_patient(db, ctx, patient_id)
     if patient is None:
         raise resource_not_found()
     # Scope check first, then permission: cross-clinic / not-own-patient => 404;

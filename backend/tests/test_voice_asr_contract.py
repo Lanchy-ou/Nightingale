@@ -7,6 +7,7 @@ from pydantic import ValidationError
 
 from app.voice.asr import DeterministicMockASRClient, FasterWhisperASRClient
 from app.voice.contracts import (
+    ASR_FAILURE_CODES,
     ASRResult,
     ASRSegment,
     AudioMetadata,
@@ -68,6 +69,24 @@ def test_unknown_fixture_returns_explicit_failure_not_empty_success():
     assert result.segments == []
     assert result.degraded is True
     assert result.failure_reason == "mock_fixture_not_found"
+
+
+def test_failure_reason_must_be_a_fixed_code():
+    base = dict(
+        provider="deterministic_mock",
+        method="fixture_lookup",
+        model=None,
+        version="1",
+        language=None,
+        segments=[],
+        degraded=True,
+    )
+    for code in ASR_FAILURE_CODES:
+        assert ASRResult(**base, failure_reason=code).failure_reason == code
+    with pytest.raises(ValidationError):
+        ASRResult(**base, failure_reason="C:/private/models/faster-whisper-base")
+    with pytest.raises(ValidationError):
+        ASRResult(**base, failure_reason="raw exception text from the ASR library")
 
 
 def test_recording_digest_mismatch_fails_before_adapter_result_lookup():

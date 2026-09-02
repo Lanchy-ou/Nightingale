@@ -304,7 +304,7 @@ def test_confirm_creates_summary_highlights_and_exact_patient_message_spans(
 
     highlights = db_session.scalars(select(Highlight).where(Highlight.event_id == event.event_id)).all()
     assert highlights
-    for highlight in highlights:
+    for highlight in (item for item in highlights if item.task_id is None):
         assert isinstance(highlight.source_span["index"], str)
         source_message = next(
             message for message in raw.content["messages"]
@@ -358,7 +358,16 @@ def test_checkin_never_changes_task_or_clinical_artifacts(patient_client, db_ses
         json={"expected_status": "awaiting_confirmation"},
     )
     db_session.expire_all()
-    assert {task.task_id: task.status for task in db_session.scalars(select(Task)).all()} == task_statuses
+    current_tasks = db_session.scalars(select(Task)).all()
+    assert {
+        task.task_id: task.status for task in current_tasks if task.task_id in task_statuses
+    } == task_statuses
+    review_tasks = [task for task in current_tasks if task.task_id not in task_statuses]
+    assert {task.task_kind for task in review_tasks} == {
+        "patient_report_review",
+        "clinician_priority_review",
+    }
+    assert all(task.creation_method == "system_routed" for task in review_tasks)
     for artifact_id, content in protected.items():
         assert db_session.get(Artifact, artifact_id).content == content
 

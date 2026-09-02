@@ -9,10 +9,11 @@ import RegisterPage from './pages/RegisterPage';
 
 const PATIENT_ID = 'pat_001'; // staff/admin pre-C2 minimal demo path
 
-function adminTabFromPath(path: string): 'overview' | 'invites' | 'audit' | 'settings' {
+function adminTabFromPath(path: string): 'overview' | 'invites' | 'audit' | 'settings' | 'learning' {
   if (path.startsWith('/admin/invites')) return 'invites';
   if (path.startsWith('/admin/audit')) return 'audit';
   if (path.startsWith('/admin/settings')) return 'settings';
+  if (path.startsWith('/admin/learning')) return 'learning';
   return 'overview';
 }
 

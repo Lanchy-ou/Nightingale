@@ -64,16 +64,31 @@ def test_failure_retry_returns_only_to_the_recorded_safe_stage():
         CaptureStatus.UPLOADING,
         expected_revision=0,
     )
-    failed = fail_capture(state, "network interrupted", expected_revision=1)
+    failed = fail_capture(state, "capture_upload_error", expected_revision=1)
 
     assert failed.status is CaptureStatus.FAILED
     assert failed.retry_status is CaptureStatus.UPLOADING
-    assert failed.failure_reason == "network interrupted"
+    assert failed.failure_reason == "capture_upload_error"
 
     retried = retry_capture(failed, expected_revision=2)
     assert retried.status is CaptureStatus.UPLOADING
     assert retried.failure_reason is None
     assert retried.retry_status is None
+
+
+def test_fail_capture_rejects_free_text_reason():
+    state = transition_capture(
+        CaptureState.created("cap_demo"),
+        CaptureStatus.UPLOADING,
+        expected_revision=0,
+    )
+
+    with pytest.raises(ValueError):
+        fail_capture(state, "network interrupted", expected_revision=1)
+    with pytest.raises(ValueError):
+        fail_capture(state, "C:/private/model/path raw exception", expected_revision=1)
+    with pytest.raises(ValueError):
+        fail_capture(state, "", expected_revision=1)
 
 
 def test_processed_capture_is_terminal():

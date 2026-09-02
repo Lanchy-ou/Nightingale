@@ -573,6 +573,11 @@ def run_storage_policy(
                     highlight.updated_at = evaluated_at
                     db.add(highlight)
                     highlight_updated_count += 1
+            if highlight_updated_count:
+                from .glance_projection import rebuild_glance_projections
+
+                for patient_id in sorted({row.patient_id for row in highlights}):
+                    rebuild_glance_projections(db, patient_id, as_of=evaluated_at)
             db.commit()
         except Exception:
             db.rollback()

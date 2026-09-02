@@ -167,11 +167,8 @@ def is_protected(
 def requested_adaptive_adjustment(
     adaptive_adjustment: int, learning_metadata: dict | None
 ) -> int:
-    """Recover the bounded learned value before any per-row protection floor."""
-    raw = (learning_metadata or {}).get("raw_adjustment")
-    if isinstance(raw, int) and not isinstance(raw, bool):
-        return max(MIN_ADJUSTMENT, min(MAX_ADJUSTMENT, raw))
-    return max(MIN_ADJUSTMENT, min(MAX_ADJUSTMENT, adaptive_adjustment))
+    """F_A1 serving is base-only; legacy values are Shadow evidence only."""
+    return 0
 
 
 def compose_score(
@@ -223,10 +220,16 @@ def score_new_candidate(
     status: str = "suggested",
     review_status: str | None = None,
 ) -> LearningResult:
-    adaptive, metadata = adjustment(db, clinic_id, entity_type)
+    _, legacy_metadata = adjustment(db, clinic_id, entity_type)
+    metadata = {
+        **legacy_metadata,
+        "reason": "serving_base_only_shadow_available",
+        "serving_mode": "base_only",
+        "shadow_only": True,
+    }
     return compose_score(
         base_importance_score=base_importance_score,
-        adaptive_adjustment=adaptive,
+        adaptive_adjustment=0,
         decay_adjustment=0,
         feature_flags=feature_flags,
         status=status,

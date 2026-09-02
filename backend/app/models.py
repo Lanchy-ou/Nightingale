@@ -12,6 +12,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import (
+    Boolean,
     JSON,
     DateTime,
     ForeignKey,
@@ -76,6 +77,9 @@ AUDIT_ACTIONS = (
     # D2 care-task lifecycle (metadata-only status history).
     "task_create",
     "task_transition",
+    "patient_review_verify",
+    "patient_review_escalate",
+    "clinician_review_complete",
     # Patient Check-in lifecycle (metadata-only; message text is never audited).
     "checkin_start",
     "checkin_message",
@@ -92,6 +96,7 @@ AUDIT_ACTIONS = (
 
 TASK_STATUSES = ("open", "in_progress", "reported_done", "completed", "cancelled")
 TASK_ASSIGNED_ROLES = ("patient", "staff", "clinician")
+TASK_KINDS = ("care_action", "patient_report_review", "clinician_priority_review")
 
 
 class Clinic(Base):
@@ -174,13 +179,18 @@ class Artifact(Base):
 
     artifact_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     event_id: Mapped[str] = mapped_column(
-        String(64), ForeignKey("events.event_id"), nullable=False, index=True
+        String(64),
+        ForeignKey("events.event_id", deferrable=True, initially="DEFERRED"),
+        nullable=False,
+        index=True,
     )
     artifact_type: Mapped[str] = mapped_column(String(64), nullable=False)
     # AI-scribed artifacts are always "system"; human notes use their role.
     author_role: Mapped[str] = mapped_column(String(32), nullable=False)
     author_id: Mapped[str | None] = mapped_column(
-        String(64), ForeignKey("users.user_id"), nullable=True
+        String(64),
+        ForeignKey("users.user_id", deferrable=True, initially="DEFERRED"),
+        nullable=True,
     )
     content: Mapped[dict] = mapped_column(JSON, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
@@ -262,6 +272,10 @@ class Highlight(Base):
     importance_score: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     # Counts/reason only. Never stores Highlight/source/comment/note text.
     learning_metadata: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    score_rule_version: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="importance-v1"
+    )
+    score_factors: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="suggested")
     # Temporary audit field; folds into AuditLog in Phase 3.
     status_history: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
@@ -339,7 +353,9 @@ class AuditLog(Base):
     # may have no resolved actor, role, clinic or patient context. Clinical
     # events always populate these fields. No secrets are ever stored.
     actor_id: Mapped[str | None] = mapped_column(
-        String(64), ForeignKey("users.user_id"), nullable=True
+        String(64),
+        ForeignKey("users.user_id", deferrable=True, initially="DEFERRED"),
+        nullable=True,
     )
     actor_role: Mapped[str | None] = mapped_column(String(32), nullable=True)
     action: Mapped[str] = mapped_column(String(32), nullable=False)
@@ -377,6 +393,29 @@ class Task(Base):
     source_span: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str] = mapped_column(String(4000), nullable=False)
+    task_kind: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="care_action", index=True
+    )
+    workflow_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    attention_class: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="routine"
+    )
+    creation_method: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="human"
+    )
+    verification_outcome: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="not_required"
+    )
+    escalate_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    escalated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    review_outcome: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    time_sensitivity: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    follow_up_task_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("tasks.task_id"), nullable=True
+    )
+    routing_metadata: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    source_artifact_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source_quote_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     assigned_role: Mapped[str] = mapped_column(String(32), nullable=False)
     assigned_user_id: Mapped[str | None] = mapped_column(
         String(64), ForeignKey("users.user_id"), nullable=True
@@ -398,6 +437,171 @@ class Task(Base):
         String(64), ForeignKey("users.user_id"), nullable=True
     )
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "workflow_id", "task_kind", "assigned_role", name="uq_task_workflow_role"
+        ),
+    )
+
+
+class PatientReviewItem(Base):
+    """One Nurse decision for one exact-source patient-report candidate."""
+
+    __tablename__ = "patient_review_items"
+    __table_args__ = (
+        UniqueConstraint("workflow_id", "highlight_id", name="uq_patient_review_item"),
+    )
+
+    review_item_id: Mapped[str] = mapped_column(String(96), primary_key=True)
+    workflow_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    staff_task_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("tasks.task_id"), nullable=False, index=True
+    )
+    highlight_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("highlights.highlight_id"), nullable=False, index=True
+    )
+    outcome: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
+    correction_artifact_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("artifacts.artifact_id"), nullable=True
+    )
+    reviewed_by: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("users.user_id"), nullable=True
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class GlanceProjection(Base):
+    """PHI-free, precomputed role-specific Glance eligibility and ordering."""
+
+    __tablename__ = "glance_projections"
+    __table_args__ = (
+        UniqueConstraint("highlight_id", "viewer_role", name="uq_glance_projection_role"),
+    )
+
+    projection_id: Mapped[str] = mapped_column(String(96), primary_key=True)
+    highlight_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("highlights.highlight_id"), nullable=False, index=True
+    )
+    patient_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("patients.patient_id"), nullable=False, index=True
+    )
+    clinic_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("clinics.clinic_id"), nullable=False, index=True
+    )
+    viewer_role: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    eligible: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    exclusion_reason: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    priority_band: Mapped[int] = mapped_column(Integer, nullable=False)
+    final_score: Mapped[int] = mapped_column(Integer, nullable=False)
+    due_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    factor_explanation: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    rule_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class RankingRun(Base):
+    """Immutable, content-free snapshot of one role-specific ranking decision."""
+
+    __tablename__ = "ranking_runs"
+    __table_args__ = (
+        UniqueConstraint(
+            "clinic_id",
+            "patient_id",
+            "viewer_role",
+            "state_fingerprint",
+            "policy_version",
+            name="uq_ranking_run_state",
+        ),
+    )
+
+    run_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    clinic_id: Mapped[str] = mapped_column(String(64), ForeignKey("clinics.clinic_id"), nullable=False, index=True)
+    patient_id: Mapped[str] = mapped_column(String(64), ForeignKey("patients.patient_id"), nullable=False, index=True)
+    viewer_role: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    rule_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    policy_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    top_k: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
+    state_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    evaluated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+
+
+class RankingDecision(Base):
+    __tablename__ = "ranking_decisions"
+    __table_args__ = (
+        UniqueConstraint("run_id", "highlight_id", name="uq_ranking_decision_candidate"),
+    )
+
+    decision_id: Mapped[str] = mapped_column(String(96), primary_key=True)
+    run_id: Mapped[str] = mapped_column(String(64), ForeignKey("ranking_runs.run_id"), nullable=False, index=True)
+    highlight_id: Mapped[str] = mapped_column(String(64), ForeignKey("highlights.highlight_id"), nullable=False, index=True)
+    workflow_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    feedback_key: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    eligible: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    exclusion_reason: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    priority_band: Mapped[int] = mapped_column(Integer, nullable=False)
+    factor_snapshot: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    base_score: Mapped[int] = mapped_column(Integer, nullable=False)
+    shadow_adjustment: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    shadow_score: Mapped[int] = mapped_column(Integer, nullable=False)
+    base_rank: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    shadow_rank: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    surfaced_base: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    surfaced_shadow: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    source_binding_status: Mapped[str] = mapped_column(String(32), nullable=False)
+
+
+class LearningSignal(Base):
+    __tablename__ = "learning_signals"
+
+    signal_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    decision_id: Mapped[str] = mapped_column(String(96), ForeignKey("ranking_decisions.decision_id"), nullable=False, index=True)
+    clinic_id: Mapped[str] = mapped_column(String(64), ForeignKey("clinics.clinic_id"), nullable=False, index=True)
+    actor_id: Mapped[str] = mapped_column(String(64), ForeignKey("users.user_id"), nullable=False, index=True)
+    actor_role: Mapped[str] = mapped_column(String(32), nullable=False)
+    signal_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    reason_code: Mapped[str] = mapped_column(String(64), nullable=False)
+    feedback_key: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    signal_value: Mapped[int] = mapped_column(Integer, nullable=False)
+    eligible_for_shadow: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    ineligibility_reason: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    independence_key: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    policy_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    supersedes_signal_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+
+
+class LearningPolicyVersion(Base):
+    __tablename__ = "learning_policy_versions"
+    __table_args__ = (
+        UniqueConstraint("clinic_id", "version_name", name="uq_learning_policy_clinic_version"),
+    )
+
+    policy_id: Mapped[str] = mapped_column(String(96), primary_key=True)
+    clinic_id: Mapped[str] = mapped_column(String(64), ForeignKey("clinics.clinic_id"), nullable=False, index=True)
+    version_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    serving_mode: Mapped[str] = mapped_column(String(32), nullable=False, default="base_only")
+    shadow_policy: Mapped[str] = mapped_column(String(64), nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    frozen_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    signal_cutoff_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    config: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    created_by: Mapped[str | None] = mapped_column(String(64), ForeignKey("users.user_id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class LearningEvaluation(Base):
+    __tablename__ = "learning_evaluations"
+
+    evaluation_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    clinic_id: Mapped[str] = mapped_column(String(64), ForeignKey("clinics.clinic_id"), nullable=False, index=True)
+    policy_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    run_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    metrics: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    created_by: Mapped[str] = mapped_column(String(64), ForeignKey("users.user_id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
 
 
 class Invite(Base):
@@ -435,7 +639,9 @@ class UserCredential(Base):
     __tablename__ = "user_credentials"
 
     user_id: Mapped[str] = mapped_column(
-        String(64), ForeignKey("users.user_id"), primary_key=True
+        String(64),
+        ForeignKey("users.user_id", deferrable=True, initially="DEFERRED"),
+        primary_key=True,
     )
     email_normalized: Mapped[str] = mapped_column(
         String(255), nullable=False, unique=True

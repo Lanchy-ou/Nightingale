@@ -8,6 +8,7 @@ from ..authz import authorize, require_auth, resource_not_found
 from ..copilot import answer_query
 from ..copilot_models import CopilotQuery, CopilotResponse
 from ..db import get_db
+from ..clinic_scope import load_patient
 from ..llm_client import build_client
 from ..models import Patient
 from ..role_context import RoleContext
@@ -23,7 +24,7 @@ def query_copilot(
     db: Session = Depends(get_db),
     ctx: RoleContext = Depends(require_auth),
 ):
-    patient = db.get(Patient, patient_id)
+    patient = load_patient(db, ctx, patient_id)
     if patient is None:
         raise resource_not_found()
     # Scope precedes the clinician-only permission, preserving uniform 404 for

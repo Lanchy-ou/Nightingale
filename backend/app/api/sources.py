@@ -21,6 +21,7 @@ from ..audit import add_audit
 from ..authz import authorize, authorize_scope, require_auth, resource_not_found
 from ..checkin_visibility import require_checkin_event_visible
 from ..db import get_db
+from ..clinic_scope import load_event, load_patient
 from ..ids import new_id, stable_id
 from ..llm_client import build_client
 from ..models import Artifact, Event, Highlight, Patient
@@ -167,7 +168,7 @@ def ingest_confirmed_voice_transcript(
     This is the only Voice -> existing ingestion seam. Recording bytes and the
     machine transcript never enter the Summary LLM.
     """
-    patient = db.get(Patient, patient_id)
+    patient = load_patient(db, ctx, patient_id)
     if patient is None:
         raise resource_not_found()
 
@@ -242,7 +243,9 @@ def ingest_confirmed_voice_transcript(
             ingestion_key=key,
         )
         db.add(event)
+        db.flush()
         db.add(raw)
+        db.flush()
         add_audit(
             db,
             actor_id=ctx.user_id,
@@ -340,7 +343,9 @@ def _create_consult(
             ingestion_key=key,
         )
         db.add(event)
+        db.flush()
         db.add(raw)
+        db.flush()
         add_audit(
             db,
             actor_id=ctx.user_id,
@@ -395,7 +400,7 @@ def create_doctor_consult(
     Event + raw Transcript are committed before the existing AI pipeline runs.
     A retry with the same consult/ingestion identity reuses every stable row.
     """
-    patient = db.get(Patient, patient_id)
+    patient = load_patient(db, ctx, patient_id)
     if patient is None:
         raise resource_not_found()
     result = _create_consult(
@@ -433,7 +438,7 @@ def create_nurse_consult(
     ctx: RoleContext = Depends(require_auth),
 ):
     """Create a separate Nurse Consult Event under staff authority."""
-    patient = db.get(Patient, patient_id)
+    patient = load_patient(db, ctx, patient_id)
     if patient is None:
         raise resource_not_found()
     result = _create_consult(
@@ -468,7 +473,7 @@ def ingest_source(
     db: Session = Depends(get_db),
     ctx: RoleContext = Depends(require_auth),
 ):
-    event = db.get(Event, event_id)
+    event = load_event(db, ctx, event_id)
     if event is None:
         raise resource_not_found()
 
@@ -532,7 +537,7 @@ def ingest_session(
     db: Session = Depends(get_db),
     ctx: RoleContext = Depends(require_auth),
 ):
-    patient = db.get(Patient, patient_id)
+    patient = load_patient(db, ctx, patient_id)
     if patient is None:
         raise resource_not_found()
     authorize(ctx, "create_patient_session", patient.clinic_id, patient.patient_id)
@@ -557,6 +562,7 @@ def ingest_session(
                 created_at=datetime.now(),
             )
             db.add(event)
+            db.flush()
         raw = Artifact(
             artifact_id=new_id("art"),
             event_id=event_id,
@@ -570,6 +576,7 @@ def ingest_session(
             ingestion_key=key,
         )
         db.add(raw)
+        db.flush()
         add_audit(
             db,
             actor_id=ctx.user_id,

@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from ..audit import add_audit
 from ..authz import authorize, authorize_scope, require_auth, resource_not_found
 from ..db import get_db
+from ..clinic_scope import load_patient, load_voice_capture
 from ..ids import stable_id
 from ..models import Patient
 from ..role_context import RoleContext
@@ -167,8 +168,10 @@ def _transition_error(exc: Exception) -> HTTPException:
     return HTTPException(status_code=409, detail="Capture conflict")
 
 
-def _get_capture(db: Session, capture_id: str) -> VoiceCaptureRecord:
-    capture = db.get(VoiceCaptureRecord, capture_id)
+def _get_capture(
+    db: Session, ctx: RoleContext, capture_id: str
+) -> VoiceCaptureRecord:
+    capture = load_voice_capture(db, ctx, capture_id)
     if capture is None:
         raise resource_not_found()
     return capture
@@ -250,7 +253,7 @@ def create_capture(
     ctx: RoleContext = Depends(require_auth),
 ):
     _require_voice_enabled(db)
-    patient = db.get(Patient, body.patient_id)
+    patient = load_patient(db, ctx, body.patient_id)
     if patient is None:
         raise resource_not_found()
     authorize(ctx, "create_voice_capture", patient.clinic_id, patient.patient_id)
@@ -330,7 +333,7 @@ def get_capture(
     db: Session = Depends(get_db),
     ctx: RoleContext = Depends(require_auth),
 ):
-    capture = _get_capture(db, capture_id)
+    capture = _get_capture(db, ctx, capture_id)
     _authorize_capture(capture, ctx, "read_voice_capture")
     return _capture_out(capture)
 
@@ -341,7 +344,7 @@ def get_capture_audio(
     db: Session = Depends(get_db),
     ctx: RoleContext = Depends(require_auth),
 ):
-    capture = _get_capture(db, capture_id)
+    capture = _get_capture(db, ctx, capture_id)
     _authorize_capture(capture, ctx, "read_voice_audio")
     if capture.audio_bytes is None:
         raise resource_not_found()
@@ -362,7 +365,7 @@ async def upload_capture_audio(
     ctx: RoleContext = Depends(require_auth),
 ):
     _require_voice_enabled(db)
-    capture = _get_capture(db, capture_id)
+    capture = _get_capture(db, ctx, capture_id)
     _authorize_capture(capture, ctx, "upload_voice_audio")
     upload_key = _operation_key(idempotency_key, "upload")
     declared_mime = request.headers.get("content-type", "").split(";", 1)[0].lower()
@@ -438,7 +441,7 @@ async def upload_capture_audio(
     )
     db.commit()
     db.expire_all()
-    capture = _get_capture(db, capture_id)
+    capture = _get_capture(db, ctx, capture_id)
     return _capture_out(capture)
 
 
@@ -478,7 +481,7 @@ def transcribe_capture(
     ctx: RoleContext = Depends(require_auth),
 ):
     _require_voice_enabled(db)
-    capture = _get_capture(db, capture_id)
+    capture = _get_capture(db, ctx, capture_id)
     _authorize_capture(capture, ctx, "transcribe_voice_capture")
     if capture.transcribe_key == body.idempotency_key:
         return _capture_out(capture)
@@ -507,7 +510,7 @@ def transcribe_capture(
     )
     db.commit()
     db.expire_all()
-    capture = _get_capture(db, capture_id)
+    capture = _get_capture(db, ctx, capture_id)
 
     metadata = AudioMetadata(
         mime_type=capture.mime_type,
@@ -561,11 +564,11 @@ def transcribe_capture(
             target_id=capture.capture_id,
             clinic_id=capture.clinic_id,
             patient_id=capture.patient_id,
-            details={"stage": "transcribing", "reason": result.failure_reason},
+            details={"stage": "transcribing", "error_code": result.failure_reason},
         )
         db.commit()
         db.expire_all()
-        capture = _get_capture(db, capture_id)
+        capture = _get_capture(db, ctx, capture_id)
         return _capture_out(capture)
 
     reviewed = _initial_review(capture, result)
@@ -603,7 +606,7 @@ def transcribe_capture(
     )
     db.commit()
     db.expire_all()
-    capture = _get_capture(db, capture_id)
+    capture = _get_capture(db, ctx, capture_id)
     return _capture_out(capture)
 
 
@@ -679,7 +682,7 @@ def review_capture_segments(
     ctx: RoleContext = Depends(require_auth),
 ):
     _require_voice_enabled(db)
-    capture = _get_capture(db, capture_id)
+    capture = _get_capture(db, ctx, capture_id)
     _authorize_capture(capture, ctx, "review_voice_transcript")
     if capture.revision != body.expected_revision:
         raise HTTPException(status_code=409, detail="Stale capture revision")
@@ -711,7 +714,7 @@ def review_capture_segments(
     )
     db.commit()
     db.expire_all()
-    capture = _get_capture(db, capture_id)
+    capture = _get_capture(db, ctx, capture_id)
     return _capture_out(capture)
 
 
@@ -723,7 +726,7 @@ def confirm_capture(
     ctx: RoleContext = Depends(require_auth),
 ):
     _require_voice_enabled(db)
-    capture = _get_capture(db, capture_id)
+    capture = _get_capture(db, ctx, capture_id)
     _authorize_capture(capture, ctx, "confirm_voice_transcript")
     if capture.confirm_key == body.idempotency_key and capture.status == CaptureStatus.PROCESSED.value:
         return _capture_out(capture)
@@ -780,7 +783,7 @@ def confirm_capture(
         )
         db.commit()
         db.expire_all()
-        capture = _get_capture(db, capture_id)
+        capture = _get_capture(db, ctx, capture_id)
 
     result = ingest_confirmed_voice_transcript(
         db=db,
@@ -835,5 +838,5 @@ def confirm_capture(
     )
     db.commit()
     db.expire_all()
-    capture = _get_capture(db, capture_id)
+    capture = _get_capture(db, ctx, capture_id)
     return _capture_out(capture)

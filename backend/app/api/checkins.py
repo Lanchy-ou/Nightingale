@@ -17,6 +17,7 @@ from ..checkins import (
 )
 from ..checkin_visibility import CLINICALLY_VISIBLE_CHECKIN_STATUSES
 from ..db import get_db
+from ..clinic_scope import load_checkin, load_patient
 from ..models import Patient, PatientCheckInSession
 from ..role_context import RoleContext
 from ..schemas import (
@@ -30,15 +31,15 @@ from ..schemas import (
 router = APIRouter(prefix="/api", tags=["patient-checkins"])
 
 
-def _patient(db: Session, patient_id: str) -> Patient:
-    patient = db.get(Patient, patient_id)
+def _patient(db: Session, ctx: RoleContext, patient_id: str) -> Patient:
+    patient = load_patient(db, ctx, patient_id)
     if patient is None:
         raise resource_not_found()
     return patient
 
 
 def _session(db: Session, session_id: str, ctx: RoleContext, action: str) -> PatientCheckInSession:
-    session = db.get(PatientCheckInSession, session_id)
+    session = load_checkin(db, ctx, session_id)
     if session is None:
         raise resource_not_found()
     authorize_scope(ctx, session.clinic_id, session.patient_id)
@@ -58,7 +59,7 @@ def start_patient_checkin(
     db: Session = Depends(get_db),
     ctx: RoleContext = Depends(require_auth),
 ):
-    patient = _patient(db, patient_id)
+    patient = _patient(db, ctx, patient_id)
     authorize(ctx, "manage_patient_checkin", patient.clinic_id, patient.patient_id)
     return start_or_resume(db, patient, ctx.user_id, body.session_id)
 
@@ -72,12 +73,13 @@ def list_patient_checkins(
     db: Session = Depends(get_db),
     ctx: RoleContext = Depends(require_auth),
 ):
-    patient = _patient(db, patient_id)
+    patient = _patient(db, ctx, patient_id)
     authorize(ctx, "manage_patient_checkin", patient.clinic_id, patient.patient_id)
     sessions = db.scalars(
         select(PatientCheckInSession)
         .where(
             PatientCheckInSession.patient_id == patient.patient_id,
+            PatientCheckInSession.clinic_id == ctx.clinic_id,
             PatientCheckInSession.patient_user_id == ctx.user_id,
             PatientCheckInSession.status != "abandoned",
         )
@@ -113,7 +115,7 @@ def post_patient_checkin_message(
     ctx: RoleContext = Depends(require_auth),
 ):
     session = _session(db, session_id, ctx, "manage_patient_checkin")
-    patient = _patient(db, session.patient_id)
+    patient = _patient(db, ctx, session.patient_id)
     return add_patient_message(db, patient, session, body)
 
 
@@ -139,7 +141,7 @@ def process_patient_checkin_message(
     ctx: RoleContext = Depends(require_auth),
 ):
     session = _session(db, session_id, ctx, "manage_patient_checkin")
-    patient = _patient(db, session.patient_id)
+    patient = _patient(db, ctx, session.patient_id)
     return process_patient_message(db, patient, session, message_id)
 
 
@@ -184,5 +186,5 @@ def confirm_patient_checkin(
     ctx: RoleContext = Depends(require_auth),
 ):
     session = _session(db, session_id, ctx, "manage_patient_checkin")
-    patient = _patient(db, session.patient_id)
+    patient = _patient(db, ctx, session.patient_id)
     return submit_checkin(db, patient, session, body.expected_status)

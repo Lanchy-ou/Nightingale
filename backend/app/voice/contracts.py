@@ -14,6 +14,20 @@ class CaptureMode(str, Enum):
     PATIENT_SESSION = "patient_session"
 
 
+# Frozen ASR failure codes (F_A4). ``failure_reason`` must be one of these fixed
+# codes, never a free-form reason, file path or exception text.
+ASR_FAILURE_CODES = frozenset(
+    {
+        "recording_digest_mismatch",
+        "mock_fixture_not_found",
+        "asr_output_limit",
+        "local_asr_error",
+        "no_speech_detected",
+        "asr_provider_error",
+    }
+)
+
+
 class AudioMetadata(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
@@ -83,6 +97,15 @@ class ASRResult(BaseModel):
     segments: list[ASRSegment] = Field(default_factory=list, max_length=500)
     degraded: bool
     failure_reason: str | None = Field(default=None, max_length=256)
+
+    @field_validator("failure_reason")
+    @classmethod
+    def failure_reason_is_fixed_code(cls, value):
+        # Fixed codes only: a free-form string (file/model path, exception text)
+        # must never reach the AuditLog or operational surfaces.
+        if value is not None and value not in ASR_FAILURE_CODES:
+            raise ValueError("failure_reason must be a fixed ASR error code")
+        return value
 
     @model_validator(mode="after")
     def failure_is_not_an_empty_success(self):

@@ -11,8 +11,11 @@ from sqlalchemy.orm import Session
 from ..audit import add_audit
 from ..authz import authorize, require_auth, resource_not_found
 from ..db import get_db
+from ..clinic_scope import load_highlight_with_event, load_patient
 from ..highlights import GLANCE_LIMIT, compute_score, status_transitions
-from ..models import Artifact, Event, Highlight, Patient
+from ..models import Artifact, Event, GlanceProjection, Highlight, Patient, Task
+from ..glance_projection import rebuild_glance_projections
+from ..patient_review import materialize_due_escalations
 from ..provenance_binding import resolve_highlight_source
 from ..role_context import RoleContext
 from ..schemas import (
@@ -33,31 +36,81 @@ def get_glance(
     db: Session = Depends(get_db),
     ctx: RoleContext = Depends(require_auth),
 ):
-    patient = db.get(Patient, patient_id)
+    patient = load_patient(db, ctx, patient_id)
     if patient is None:
         raise resource_not_found()
     authorize(ctx, "read_glance", patient.clinic_id, patient.patient_id)
 
-    highlights = db.scalars(
+    if materialize_due_escalations(db):
+        db.commit()
+    rows = db.execute(
+        select(GlanceProjection, Highlight)
+        .join(Highlight, Highlight.highlight_id == GlanceProjection.highlight_id)
+        .where(
+            GlanceProjection.patient_id == patient_id,
+            GlanceProjection.clinic_id == ctx.clinic_id,
+            GlanceProjection.viewer_role == ctx.role,
+            GlanceProjection.eligible.is_(True),
+        )
+        .order_by(
+            GlanceProjection.priority_band,
+            Highlight.status != "pinned",
+            Highlight.review_status != "needs_review",
+            GlanceProjection.final_score.desc(),
+            GlanceProjection.due_at.is_(None),
+            GlanceProjection.due_at,
+            Highlight.created_at,
+            Highlight.highlight_id,
+        )
+        .limit(GLANCE_LIMIT)
+    ).all()
+    dynamic: list[HighlightOut] = []
+    for projection, highlight in rows:
+        task = db.get(Task, highlight.task_id) if highlight.task_id else None
+        task_context = None
+        if task is not None:
+            task_context = {
+                "task_kind": task.task_kind,
+                "workflow_id": task.workflow_id,
+                "assigned_role": task.assigned_role,
+                "status": task.status,
+                "attention_class": task.attention_class,
+                "verification_outcome": task.verification_outcome,
+                "due_at": task.due_at,
+                "escalate_at": task.escalate_at,
+                "escalated_at": task.escalated_at,
+                "creation_method": task.creation_method,
+            }
+            if task.workflow_id:
+                staff_task = db.scalar(
+                    select(Task).where(
+                        Task.workflow_id == task.workflow_id,
+                        Task.task_kind == "patient_report_review",
+                    )
+                )
+                if staff_task is not None:
+                    task_context["verification_outcome"] = staff_task.verification_outcome
+                    task_context["verification_overdue"] = staff_task.escalated_at is not None
+        dynamic.append(
+            HighlightOut.model_validate(highlight).model_copy(
+                update={
+                    "task_context": task_context,
+                    "glance_explanation": projection.factor_explanation,
+                    "ranking_rule_version": projection.rule_version,
+                }
+            )
+        )
+    safety = db.scalars(
         select(Highlight).where(
             Highlight.patient_id == patient_id,
+            Highlight.entity_type == "allergy",
             Highlight.status != "rejected",
         )
     ).all()
-    # Deterministic safety ordering (H1): pinned first, then unresolved clinical
-    # conflicts, score desc, record time, and a stable final tiebreak.
-    highlights = sorted(
-        highlights,
-        key=lambda h: (
-            h.status != "pinned",
-            h.review_status != "needs_review",
-            -h.importance_score,
-            h.created_at,
-            h.highlight_id,
-        ),
-    )
+    safety = [item for item in safety if item.feature_flags.get("clinician_confirmed")]
     return GlanceOut(
-        highlights=[HighlightOut.model_validate(h) for h in highlights[:GLANCE_LIMIT]]
+        safety_context=[HighlightOut.model_validate(item) for item in safety],
+        highlights=dynamic,
     )
 
 
@@ -67,13 +120,10 @@ def get_provenance(
     db: Session = Depends(get_db),
     ctx: RoleContext = Depends(require_auth),
 ):
-    hl = db.get(Highlight, highlight_id)
-    if hl is None:
+    scoped = load_highlight_with_event(db, ctx, highlight_id)
+    if scoped is None:
         raise resource_not_found()
-
-    event = db.get(Event, hl.event_id)
-    if event is None:
-        raise resource_not_found()
+    hl, event = scoped
     authorize(ctx, "read_provenance", event.clinic_id, event.patient_id)
 
     source = db.get(Artifact, hl.source_artifact_id)
@@ -122,13 +172,10 @@ def update_status(
     db: Session = Depends(get_db),
     ctx: RoleContext = Depends(require_auth),
 ):
-    hl = db.get(Highlight, highlight_id)
-    if hl is None:
+    scoped = load_highlight_with_event(db, ctx, highlight_id)
+    if scoped is None:
         raise resource_not_found()
-
-    event = db.get(Event, hl.event_id)
-    if event is None:
-        raise resource_not_found()
+    hl, event = scoped
     authorize(ctx, "highlight_status", event.clinic_id, event.patient_id)
 
     new_status = body.status
@@ -198,7 +245,8 @@ def update_status(
         patient_id = event.patient_id
         event_id = event.event_id
         db.rollback()
-        current = db.get(Highlight, highlight_id)
+        current_scoped = load_highlight_with_event(db, ctx, highlight_id)
+        current = current_scoped[0] if current_scoped is not None else None
         add_audit(
             db,
             actor_id=ctx.user_id,
@@ -222,19 +270,8 @@ def update_status(
             },
         )
 
-    # Only the winning CAS reaches this point. No-op and conflict paths return
-    # earlier and therefore cannot append learning feedback.
-    from ..importance_learning import record_feedback
-
-    record_feedback(
-        db,
-        highlight=hl,
-        event=event,
-        actor_id=ctx.user_id,
-        actor_role=ctx.role,
-        status=new_status,
-        created_at=now,
-    )
+    # F_A1 semantics: status controls affect only this Highlight. They no
+    # longer append positive/negative generalization feedback.
     add_audit(
         db,
         actor_id=ctx.user_id,
@@ -246,6 +283,9 @@ def update_status(
         patient_id=event.patient_id,
         event_id=event.event_id,
     )
+    db.commit()
+    db.refresh(hl)
+    rebuild_glance_projections(db, hl.patient_id)
     db.commit()
     db.refresh(hl)
     return hl
