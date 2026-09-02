@@ -337,6 +337,7 @@ def migrate_phase_e_schema(target_engine: Engine = engine) -> None:
     migrate_patient_checkin_schema(target_engine)
     migrate_system_settings_schema(target_engine)
     migrate_fa2_schema(target_engine)
+    migrate_sl1_schema(target_engine)
     migrate_fa1_schema(target_engine)
     install_clinic_isolation_schema(target_engine)
 
@@ -450,6 +451,39 @@ def migrate_fa1_schema(target_engine: Engine = engine) -> None:
             db.commit()
 
 
+def migrate_sl1_schema(target_engine: Engine = engine) -> None:
+    """Add explicit SL1 workflows/links and deterministically backfill Tasks."""
+    from . import models as _core_models  # noqa: F401
+    from .models import CareWorkflow, WorkflowLink
+
+    CareWorkflow.__table__.create(bind=target_engine, checkfirst=True)
+    WorkflowLink.__table__.create(bind=target_engine, checkfirst=True)
+    tables = set(inspect(target_engine).get_table_names())
+    required = {"clinics", "users", "patients", "events", "tasks"}
+    if not required <= tables:
+        return
+    from .workflow_state import backfill_workflows
+
+    migration_session = sessionmaker(
+        bind=target_engine, autoflush=False, autocommit=False, future=True
+    )
+    with migration_session() as db:
+        try:
+            backfill_workflows(db)
+            from .models import Highlight, Task
+            from .tasks import link_task_highlight
+
+            for task in db.scalars(select(Task).order_by(Task.task_id)).all():
+                if db.scalar(
+                    select(Highlight.highlight_id).where(Highlight.task_id == task.task_id)
+                ) is None:
+                    link_task_highlight(db, task)
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+
+
 def migrate_patient_checkin_schema(target_engine: Engine = engine) -> None:
     """Create the bounded Patient Check-in lifecycle tables idempotently."""
     from . import models as _core_models  # noqa: F401
@@ -476,10 +510,90 @@ _A3_INDEX_DDL = (
     "CREATE INDEX IF NOT EXISTS ix_learning_signals_scope_decision ON learning_signals (clinic_id, decision_id, created_at)",
     "CREATE INDEX IF NOT EXISTS ix_checkins_scope_direct ON patient_checkin_sessions (clinic_id, patient_id, session_id)",
     "CREATE INDEX IF NOT EXISTS ix_voice_scope_direct ON voice_captures (clinic_id, patient_id, capture_id)",
+    "CREATE INDEX IF NOT EXISTS ix_care_workflows_scope ON care_workflows (clinic_id, patient_id, status, workflow_id)",
+    "CREATE INDEX IF NOT EXISTS ix_workflow_links_scope ON workflow_links (clinic_id, patient_id, workflow_id, to_id)",
 )
 
 
 _A3_TRIGGER_DDL = (
+    """
+    CREATE TRIGGER IF NOT EXISTS a3_care_workflow_scope_insert
+    BEFORE INSERT ON care_workflows
+    WHEN NOT EXISTS (
+        SELECT 1 FROM patients p JOIN events e
+          ON e.event_id = NEW.root_event_id AND e.patient_id = p.patient_id
+         AND e.clinic_id = p.clinic_id
+        WHERE p.patient_id = NEW.patient_id AND p.clinic_id = NEW.clinic_id
+    ) OR (NEW.created_by_user_id IS NOT NULL AND NOT EXISTS (
+        SELECT 1 FROM users u WHERE u.user_id = NEW.created_by_user_id
+          AND u.clinic_id = NEW.clinic_id AND u.role = NEW.created_by_role
+    ))
+    BEGIN SELECT RAISE(ABORT, 'ownership:care_workflow_scope'); END
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS a3_care_workflow_scope_update
+    BEFORE UPDATE OF clinic_id, patient_id, root_event_id, created_by_role, created_by_user_id ON care_workflows
+    WHEN NOT EXISTS (
+        SELECT 1 FROM patients p JOIN events e
+          ON e.event_id = NEW.root_event_id AND e.patient_id = p.patient_id
+         AND e.clinic_id = p.clinic_id
+        WHERE p.patient_id = NEW.patient_id AND p.clinic_id = NEW.clinic_id
+    ) OR (NEW.created_by_user_id IS NOT NULL AND NOT EXISTS (
+        SELECT 1 FROM users u WHERE u.user_id = NEW.created_by_user_id
+          AND u.clinic_id = NEW.clinic_id AND u.role = NEW.created_by_role
+    ))
+    BEGIN SELECT RAISE(ABORT, 'ownership:care_workflow_scope'); END
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS a3_workflow_link_scope_insert
+    BEFORE INSERT ON workflow_links
+    WHEN NOT EXISTS (
+        SELECT 1 FROM care_workflows w
+        WHERE w.workflow_id = NEW.workflow_id AND w.clinic_id = NEW.clinic_id
+          AND w.patient_id = NEW.patient_id
+    ) OR NOT EXISTS (
+        SELECT 1 FROM tasks t WHERE t.task_id = NEW.to_id
+          AND t.workflow_id = NEW.workflow_id AND t.clinic_id = NEW.clinic_id
+          AND t.patient_id = NEW.patient_id
+    ) OR (NEW.from_type = 'event' AND (
+        NEW.relation_type NOT IN ('triggered_review', 'triggered_action') OR NOT EXISTS (
+          SELECT 1 FROM care_workflows w WHERE w.workflow_id = NEW.workflow_id
+            AND w.root_event_id = NEW.from_id
+        )
+    )) OR (NEW.from_type = 'task' AND (
+        NEW.relation_type IN ('triggered_review', 'triggered_action') OR NOT EXISTS (
+          SELECT 1 FROM tasks t WHERE t.task_id = NEW.from_id
+            AND t.workflow_id = NEW.workflow_id AND t.clinic_id = NEW.clinic_id
+            AND t.patient_id = NEW.patient_id
+        )
+    )) OR (NEW.from_type = 'task' AND NEW.from_id = NEW.to_id)
+    BEGIN SELECT RAISE(ABORT, 'ownership:workflow_link_scope'); END
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS a3_workflow_link_scope_update
+    BEFORE UPDATE OF workflow_id, clinic_id, patient_id, from_type, from_id, relation_type, to_type, to_id ON workflow_links
+    WHEN NOT EXISTS (
+        SELECT 1 FROM care_workflows w
+        WHERE w.workflow_id = NEW.workflow_id AND w.clinic_id = NEW.clinic_id
+          AND w.patient_id = NEW.patient_id
+    ) OR NOT EXISTS (
+        SELECT 1 FROM tasks t WHERE t.task_id = NEW.to_id
+          AND t.workflow_id = NEW.workflow_id AND t.clinic_id = NEW.clinic_id
+          AND t.patient_id = NEW.patient_id
+    ) OR (NEW.from_type = 'event' AND (
+        NEW.relation_type NOT IN ('triggered_review', 'triggered_action') OR NOT EXISTS (
+          SELECT 1 FROM care_workflows w WHERE w.workflow_id = NEW.workflow_id
+            AND w.root_event_id = NEW.from_id
+        )
+    )) OR (NEW.from_type = 'task' AND (
+        NEW.relation_type IN ('triggered_review', 'triggered_action') OR NOT EXISTS (
+          SELECT 1 FROM tasks t WHERE t.task_id = NEW.from_id
+            AND t.workflow_id = NEW.workflow_id AND t.clinic_id = NEW.clinic_id
+            AND t.patient_id = NEW.patient_id
+        )
+    )) OR (NEW.from_type = 'task' AND NEW.from_id = NEW.to_id)
+    BEGIN SELECT RAISE(ABORT, 'ownership:workflow_link_scope'); END
+    """,
     """
     CREATE TRIGGER IF NOT EXISTS a3_event_scope_insert
     BEFORE INSERT ON events
@@ -783,6 +897,8 @@ _A3_PREFLIGHT = {
     "glance_projection_scope": "SELECT COUNT(*) FROM glance_projections g LEFT JOIN highlights h ON h.highlight_id=g.highlight_id AND h.patient_id=g.patient_id LEFT JOIN events e ON e.event_id=h.event_id AND e.patient_id=g.patient_id AND e.clinic_id=g.clinic_id WHERE h.highlight_id IS NULL OR e.event_id IS NULL",
     "checkin_scope": "SELECT COUNT(*) FROM patient_checkin_sessions s LEFT JOIN patients p ON p.patient_id=s.patient_id AND p.clinic_id=s.clinic_id LEFT JOIN events e ON e.event_id=s.event_id AND e.patient_id=s.patient_id AND e.clinic_id=s.clinic_id LEFT JOIN artifacts a ON a.artifact_id=s.raw_artifact_id AND a.event_id=s.event_id LEFT JOIN users u ON u.user_id=s.patient_user_id AND u.patient_id=s.patient_id AND u.clinic_id=s.clinic_id WHERE p.patient_id IS NULL OR e.event_id IS NULL OR a.artifact_id IS NULL OR u.user_id IS NULL",
     "voice_scope": "SELECT COUNT(*) FROM voice_captures v LEFT JOIN patients p ON p.patient_id=v.patient_id AND p.clinic_id=v.clinic_id LEFT JOIN users u ON u.user_id=v.created_by AND u.clinic_id=v.clinic_id LEFT JOIN events e ON e.event_id=v.event_id AND e.patient_id=v.patient_id AND e.clinic_id=v.clinic_id LEFT JOIN artifacts a ON a.artifact_id=v.transcript_artifact_id LEFT JOIN events ae ON ae.event_id=a.event_id AND ae.patient_id=v.patient_id AND ae.clinic_id=v.clinic_id WHERE p.patient_id IS NULL OR u.user_id IS NULL OR (v.event_id IS NOT NULL AND e.event_id IS NULL) OR (v.transcript_artifact_id IS NOT NULL AND (a.artifact_id IS NULL OR ae.event_id IS NULL))",
+    "care_workflow_scope": "SELECT COUNT(*) FROM care_workflows w LEFT JOIN patients p ON p.patient_id=w.patient_id AND p.clinic_id=w.clinic_id LEFT JOIN events e ON e.event_id=w.root_event_id AND e.patient_id=w.patient_id AND e.clinic_id=w.clinic_id LEFT JOIN users u ON u.user_id=w.created_by_user_id AND u.clinic_id=w.clinic_id AND u.role=w.created_by_role WHERE p.patient_id IS NULL OR e.event_id IS NULL OR (w.created_by_user_id IS NOT NULL AND u.user_id IS NULL)",
+    "workflow_link_scope": "SELECT COUNT(*) FROM workflow_links l LEFT JOIN care_workflows w ON w.workflow_id=l.workflow_id AND w.clinic_id=l.clinic_id AND w.patient_id=l.patient_id LEFT JOIN tasks t ON t.task_id=l.to_id AND t.workflow_id=l.workflow_id AND t.clinic_id=l.clinic_id AND t.patient_id=l.patient_id LEFT JOIN tasks f ON l.from_type='task' AND f.task_id=l.from_id AND f.workflow_id=l.workflow_id AND f.clinic_id=l.clinic_id AND f.patient_id=l.patient_id WHERE w.workflow_id IS NULL OR t.task_id IS NULL OR (l.from_type='event' AND (w.root_event_id!=l.from_id OR l.relation_type NOT IN ('triggered_review','triggered_action'))) OR (l.from_type='task' AND (f.task_id IS NULL OR l.relation_type IN ('triggered_review','triggered_action') OR l.from_id=l.to_id))",
 }
 
 
@@ -801,6 +917,7 @@ def install_clinic_isolation_schema(target_engine: Engine = engine) -> None:
             "patients", "users", "events", "artifacts", "highlights", "tasks",
             "glance_projections", "ranking_runs", "ranking_decisions",
             "learning_signals", "patient_checkin_sessions", "voice_captures",
+            "care_workflows", "workflow_links",
         }
         if not required <= tables:
             return

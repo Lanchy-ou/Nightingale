@@ -17,7 +17,7 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from .highlights import compute_score
-from .ids import new_id
+from .ids import stable_id
 from .models import Artifact, Highlight, Task
 from .provenance_binding import create_source_binding
 
@@ -203,8 +203,20 @@ def link_task_highlight(db: Session, task: Task) -> Highlight:
     now = datetime.now()
     source = db.get(Artifact, task.source_artifact_id) if task.source_artifact_id else None
     source_version, quote_hash = create_source_binding(source, task.source_span)
+    task_flags = {
+        **TASK_HIGHLIGHT_FLAGS,
+        "unresolved_task": task.status in UNRESOLVED_TASK_STATUSES,
+    }
+    dedicated_id = f"hl_{stable_id(task.task_id, 'task-highlight-v1')}"
+    existing_dedicated = db.get(Highlight, dedicated_id)
+    if existing_dedicated is not None:
+        if existing_dedicated.task_id not in {None, task.task_id}:
+            raise RuntimeError("Dedicated Task Highlight identity is already owned")
+        existing_dedicated.task_id = task.task_id
+        db.add(existing_dedicated)
+        return existing_dedicated
     highlight = Highlight(
-        highlight_id=new_id("hl"),
+        highlight_id=dedicated_id,
         patient_id=task.patient_id,
         event_id=task.event_id,
         artifact_id=task.source_artifact_id,
@@ -214,12 +226,16 @@ def link_task_highlight(db: Session, task: Task) -> Highlight:
         source_quote_sha256=quote_hash,
         task_id=task.task_id,
         text=task.title,
-        risk_reason=f"Unresolved care task ({task.assigned_role})",
-        feature_flags=dict(TASK_HIGHLIGHT_FLAGS),
-        base_importance_score=compute_score(TASK_HIGHLIGHT_FLAGS),
+        risk_reason=(
+            f"Unresolved care task ({task.assigned_role})"
+            if task_flags["unresolved_task"]
+            else f"Care task {task.status.replace('_', ' ')} ({task.assigned_role})"
+        ),
+        feature_flags=task_flags,
+        base_importance_score=compute_score(task_flags),
         adaptive_adjustment=0,
         decay_adjustment=0,
-        importance_score=compute_score(TASK_HIGHLIGHT_FLAGS),
+        importance_score=compute_score(task_flags),
         learning_metadata={
             "feedback_key": "task",
             "review_count": 0,
@@ -237,7 +253,7 @@ def link_task_highlight(db: Session, task: Task) -> Highlight:
         updated_at=now,
         entity_type="task",
         entity_key=f"task:{task.task_id}",
-        assertion_value=None,
+        assertion_value=task.status,
         conflict_with_artifact_id=None,
         review_status=None,
     )

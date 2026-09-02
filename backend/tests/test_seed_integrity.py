@@ -169,26 +169,31 @@ def test_all_candidate_quotes_anchor(db_session):
 
 def test_all_highlights_seeded_for_their_own_patient(db_session):
     highlights = db_session.scalars(select(Highlight)).all()
-    assert len(highlights) == len(fixture.HIGHLIGHT_CANDIDATES) == 14
+    assert len(fixture.HIGHLIGHT_CANDIDATES) == 14
     expected_patient = {
         candidate["highlight_id"]: candidate.get("patient_id", fixture.PATIENT_ID)
         for candidate in fixture.HIGHLIGHT_CANDIDATES
     }
-    assert {highlight.highlight_id: highlight.patient_id for highlight in highlights} == expected_patient
+    actual = {highlight.highlight_id: highlight.patient_id for highlight in highlights}
+    assert {key: actual[key] for key in expected_patient} == expected_patient
+    for highlight in highlights:
+        if highlight.highlight_id not in expected_patient:
+            task = db_session.get(Task, highlight.task_id)
+            assert task is not None
+            assert highlight.patient_id == task.patient_id
 
 
 def test_d2_task_glance_mapping_is_explicit(db_session):
-    # The blood-test Task owns exactly the blood-test highlight; no other
-    # highlight carries a task_id and the mapping is never event-inferred.
+    # Every Task owns exactly one explicit Highlight after SL1; ownership is
+    # never inferred from Event/date proximity.
     pending = db_session.get(Highlight, "hl_blood_test_pending")
     assert pending.task_id == fixture.TASK_BLOOD_TEST
-    others = db_session.scalars(
-        select(Highlight).where(
-            Highlight.patient_id == fixture.PATIENT_ID,
-            Highlight.highlight_id != "hl_blood_test_pending",
-        )
-    ).all()
-    assert all(highlight.task_id is None for highlight in others)
+    tasks = db_session.scalars(select(Task)).all()
+    for task in tasks:
+        owned = db_session.scalars(
+            select(Highlight).where(Highlight.task_id == task.task_id)
+        ).all()
+        assert len(owned) == 1
 
 
 def test_d1_demo_credentials_argon2_hashed_for_all_seeded_users(db_session):

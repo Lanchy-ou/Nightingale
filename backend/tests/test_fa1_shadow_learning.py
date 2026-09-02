@@ -57,15 +57,15 @@ def test_projection_rebuild_records_top_five_and_unsurfaced_candidates(
 
 
 def test_identical_projection_state_reuses_ranking_run(db_session):
+    from datetime import datetime
     from app.glance_projection import rebuild_glance_projections
 
-    before = db_session.query(RankingRun).count()
-    rebuild_glance_projections(db_session, fixture.PATIENT_ID)
+    as_of = datetime(2026, 9, 2, 12, 0)
+    rebuild_glance_projections(db_session, fixture.PATIENT_ID, as_of=as_of)
     db_session.commit()
     first = db_session.query(RankingRun).count()
-    rebuild_glance_projections(db_session, fixture.PATIENT_ID)
+    rebuild_glance_projections(db_session, fixture.PATIENT_ID, as_of=as_of)
     db_session.commit()
-    assert first == before
     assert db_session.query(RankingRun).count() == first
 
 

@@ -21,6 +21,7 @@ from app.models import (
     AuthSession,
     Clinic,
     Comment,
+    CareWorkflow,
     Event,
     Highlight,
     GlanceProjection,
@@ -36,6 +37,7 @@ from app.models import (
     RankingDecision,
     RankingRun,
     Task,
+    WorkflowLink,
     SystemSettings,
     User,
     UserCredential,
@@ -96,7 +98,9 @@ def seed(db: Session) -> None:
     db.execute(delete(GlanceProjection))
     db.execute(delete(PatientReviewItem))
     db.execute(delete(Highlight))
+    db.execute(delete(WorkflowLink))
     db.execute(delete(Task))
+    db.execute(delete(CareWorkflow))
     db.execute(delete(Artifact))
     db.execute(delete(Event))
     db.execute(delete(User))
@@ -120,7 +124,18 @@ def seed(db: Session) -> None:
     db.add_all(fixture.build_comments())
     db.commit()
 
+    from app.workflow_state import backfill_workflows
+
+    backfill_workflows(db)
+    db.commit()
+
     generate_highlights(db)
+    from app.tasks import link_task_highlight
+
+    for task in db.scalars(select(Task).order_by(Task.task_id)).all():
+        if db.scalar(select(Highlight.highlight_id).where(Highlight.task_id == task.task_id)) is None:
+            link_task_highlight(db, task)
+    db.flush()
     from app.glance_projection import rebuild_glance_projections
 
     for patient_id in db.scalars(select(Patient.patient_id)).all():

@@ -12,6 +12,7 @@ from .glance_projection import rebuild_glance_projections
 from .ids import stable_id
 from .models import Artifact, Event, Highlight, PatientCheckInSession, PatientReviewItem, Task
 from .tasks import link_task_highlight
+from .workflow_state import create_workflow_link, ensure_task_workflow
 
 ROUTING_RULE_VERSION = "patient-review-route-v1"
 EXTRACTOR_VERSION = "checkin-summary-v1"
@@ -104,6 +105,13 @@ def _create_review_task(
     task_id = _task_id(workflow_id, kind, role)
     existing = db.get(Task, task_id)
     if existing is not None:
+        ensure_task_workflow(
+            db,
+            existing,
+            created_by_role="system",
+            created_by_user_id=None,
+            workflow_kind="patient_report_response",
+        )
         return existing
     title = (
         "Review priority patient update"
@@ -153,6 +161,13 @@ def _create_review_task(
     )
     db.add(task)
     db.flush()
+    ensure_task_workflow(
+        db,
+        task,
+        created_by_role="system",
+        created_by_user_id=None,
+        workflow_kind="patient_report_response",
+    )
     link_task_highlight(db, task)
     add_audit(
         db,
@@ -208,6 +223,24 @@ def ensure_clinician_review_task(
     )
     task.verification_outcome = staff_task.verification_outcome
     db.add(task)
+    workflow = ensure_task_workflow(
+        db,
+        staff_task,
+        created_by_role="system",
+        created_by_user_id=None,
+        workflow_kind="patient_report_response",
+    )
+    create_workflow_link(
+        db,
+        workflow=workflow,
+        from_type="task",
+        from_id=staff_task.task_id,
+        relation_type="verification_updates",
+        to_id=task.task_id,
+        created_by_role="system",
+        created_by_user_id=None,
+        created_at=now,
+    )
     return task
 
 

@@ -134,6 +134,9 @@ def test_only_real_unresolved_task_protects_old_artifact(db_session):
     task.source_artifact_id = fixture.ART_HIST_2025_NOTE
     task.source_span = old_highlight.source_span
     task.status = "open"
+    current = db_session.scalar(select(Highlight).where(Highlight.task_id == task.task_id))
+    if current is not None:
+        current.task_id = None
     db_session.flush()
     old_highlight.task_id = task.task_id
     db_session.commit()
@@ -155,6 +158,9 @@ def test_old_event_only_resolved_task_highlight_decays_until_real_task_reopens(
     task.source_artifact_id = None
     task.source_span = None
     task.status = "completed"
+    current = db_session.scalar(select(Highlight).where(Highlight.task_id == task.task_id))
+    if current is not None:
+        current.task_id = None
     db_session.flush()
     highlight.artifact_id = None
     highlight.source_artifact_id = None
@@ -236,7 +242,7 @@ def test_old_low_value_decay_can_move_it_out_of_glance_top_five(
         highlights["hl_headache_worsening"],
         highlights["hl_nausea_persists"],
         highlights["hl_bp_elevated"],
-        highlights["hl_blood_test_pending"],
+        highlights["hl_medication_existing"],
     ]
     for row in leaders:
         row.status = "suggested"

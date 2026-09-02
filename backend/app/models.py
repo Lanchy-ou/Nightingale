@@ -13,6 +13,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     JSON,
     DateTime,
     ForeignKey,
@@ -48,6 +49,19 @@ ARTIFACT_TYPES = (
 )
 
 HIGHLIGHT_STATUSES = ("suggested", "accepted", "rejected", "pinned")
+
+WORKFLOW_KINDS = ("patient_report_response", "care_action_chain")
+WORKFLOW_STATUSES = ("active", "completed", "cancelled")
+WORKFLOW_NODE_TYPES = ("event", "task")
+WORKFLOW_RELATION_TYPES = (
+    "triggered_review",
+    "triggered_action",
+    "verification_updates",
+    "depends_on",
+    "requires_action",
+    "follow_up_for",
+    "superseded_by",
+)
 
 COMMENT_ANCHOR_TYPES = ("event", "artifact")
 
@@ -372,6 +386,50 @@ class AuditLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
 
+class CareWorkflow(Base):
+    """One explicit clinic/patient-scoped operational handling process.
+
+    This is metadata-only workflow identity. It never replaces the root Event
+    or stores copied clinical content.
+    """
+
+    __tablename__ = "care_workflows"
+    __table_args__ = (
+        CheckConstraint(
+            "workflow_kind IN ('patient_report_response', 'care_action_chain')",
+            name="ck_care_workflow_kind",
+        ),
+        CheckConstraint(
+            "status IN ('active', 'completed', 'cancelled')",
+            name="ck_care_workflow_status",
+        ),
+        CheckConstraint(
+            "created_by_role IN ('system', 'staff', 'clinician')",
+            name="ck_care_workflow_creator_role",
+        ),
+    )
+
+    workflow_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    clinic_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("clinics.clinic_id"), nullable=False, index=True
+    )
+    patient_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("patients.patient_id"), nullable=False, index=True
+    )
+    workflow_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    root_event_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("events.event_id"), nullable=False, index=True
+    )
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
+    created_by_role: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("users.user_id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 class Task(Base):
     """First-class, provenance-linked care action (D2)."""
 
@@ -443,6 +501,58 @@ class Task(Base):
             "workflow_id", "task_kind", "assigned_role", name="uq_task_workflow_role"
         ),
     )
+
+
+class WorkflowLink(Base):
+    """A validated directed edge between the workflow root and Task steps."""
+
+    __tablename__ = "workflow_links"
+    __table_args__ = (
+        UniqueConstraint(
+            "workflow_id",
+            "from_type",
+            "from_id",
+            "relation_type",
+            "to_type",
+            "to_id",
+            name="uq_workflow_link_edge",
+        ),
+        CheckConstraint(
+            "from_type IN ('event', 'task')", name="ck_workflow_link_from_type"
+        ),
+        CheckConstraint("to_type = 'task'", name="ck_workflow_link_to_type"),
+        CheckConstraint(
+            "relation_type IN ('triggered_review', 'triggered_action', "
+            "'verification_updates', 'depends_on', 'requires_action', "
+            "'follow_up_for', 'superseded_by')",
+            name="ck_workflow_link_relation",
+        ),
+        CheckConstraint(
+            "created_by_role IN ('system', 'staff', 'clinician')",
+            name="ck_workflow_link_creator_role",
+        ),
+    )
+
+    link_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    workflow_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("care_workflows.workflow_id"), nullable=False, index=True
+    )
+    clinic_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("clinics.clinic_id"), nullable=False, index=True
+    )
+    patient_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("patients.patient_id"), nullable=False, index=True
+    )
+    from_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    from_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    relation_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    to_type: Mapped[str] = mapped_column(String(16), nullable=False, default="task")
+    to_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    created_by_role: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("users.user_id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
 
 class PatientReviewItem(Base):

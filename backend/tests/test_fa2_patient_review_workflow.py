@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from sqlalchemy import select
 
-from app.models import GlanceProjection, LearningSignal, PatientReviewItem, Task
+from app.attention_items import build_attention_items
+from app.models import GlanceProjection, LearningSignal, PatientReviewItem, Task, WorkflowLink
 from app.patient_review import materialize_due_escalations, review_window_minutes
 from seed import fixture
 
@@ -120,6 +121,23 @@ def test_priority_patient_report_routes_to_both_roles_and_records_two_axis_label
         "patient_explicit_severe_intensity",
         "patient_explicit_worsening",
     ]
+    role_items = build_attention_items(
+        db_session,
+        patient_id=fixture.PATIENT_ID,
+        viewer_role="clinician",
+        as_of=datetime.now(),
+    )
+    workflow_items = [item for item in role_items if item.workflow_id == staff_task.workflow_id]
+    assert len(workflow_items) >= 2
+    assert {item.workflow_group_key for item in workflow_items} == {
+        f"workflow:{staff_task.workflow_id}"
+    }
+    assert len({item.independence_key for item in workflow_items}) == len(workflow_items)
+    assert all(
+        item.source_binding_status == "not_applicable"
+        for item in workflow_items
+        if item.source_kind == "task" and item.exact_span_available is False
+    )
 
     _review_all_candidates(staff_client, staff_task.task_id)
 
@@ -135,6 +153,19 @@ def test_priority_patient_report_routes_to_both_roles_and_records_two_axis_label
     db_session.expire_all()
     assert db_session.get(Task, staff_task.task_id).status == "completed"
     assert db_session.get(Task, clinician_task.task_id).verification_outcome == "verified"
+    clinician_item = next(
+        item
+        for item in build_attention_items(
+            db_session,
+            patient_id=fixture.PATIENT_ID,
+            viewer_role="clinician",
+            as_of=datetime.now(),
+        )
+        if item.source_id == clinician_task.task_id
+    )
+    assert clinician_item.upstream_verification_known is True
+    assert clinician_item.upstream_verification_outcome == "verified"
+    assert "verification_updates" in clinician_item.inbound_relation_types
 
     invalid = clinician_client.post(
         f"/api/tasks/{clinician_task.task_id}/complete-clinician-review",
@@ -183,6 +214,16 @@ def test_priority_patient_report_routes_to_both_roles_and_records_two_axis_label
     assert completed.json()["routing_metadata"]["attention_label_version"] == "attention-label-v1"
     assert completed.json()["follow_up_task_id"] == follow_up.json()["task_id"]
     db_session.expire_all()
+    linked_follow_up = db_session.get(Task, follow_up.json()["task_id"])
+    assert linked_follow_up.workflow_id == clinician_task.workflow_id
+    assert db_session.scalar(
+        select(WorkflowLink).where(
+            WorkflowLink.workflow_id == clinician_task.workflow_id,
+            WorkflowLink.from_id == clinician_task.task_id,
+            WorkflowLink.relation_type == "requires_action",
+            WorkflowLink.to_id == linked_follow_up.task_id,
+        )
+    ) is not None
     outcome = db_session.scalar(
         select(LearningSignal).where(
             LearningSignal.signal_type == "outcome_label",
@@ -289,6 +330,24 @@ def test_candidate_review_is_itemized_and_corrected_requires_staff_note(
     persisted = next(item for item in refreshed["candidates"] if item["review_item_id"] == first["review_item_id"])
     assert persisted["review_outcome"] == "corrected"
     assert persisted["correction_artifact_id"] == note.json()["artifact_id"]
+    db_session.expire_all()
+    clinician_task = db_session.scalar(
+        select(Task).where(
+            Task.workflow_id == staff_task.workflow_id,
+            Task.task_kind == "clinician_priority_review",
+        )
+    )
+    clinician_item = next(
+        item
+        for item in build_attention_items(
+            db_session,
+            patient_id=fixture.PATIENT_ID,
+            viewer_role="clinician",
+            as_of=datetime.now(),
+        )
+        if item.source_id == clinician_task.task_id
+    )
+    assert clinician_item.upstream_verification_outcome == "corrected"
 
 
 def test_time_sensitive_follow_up_must_have_due_time(

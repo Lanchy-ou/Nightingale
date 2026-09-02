@@ -6,7 +6,7 @@ from datetime import timedelta
 from sqlalchemy import select
 
 from app.highlights import extract_text, locate_span
-from app.models import Artifact, Highlight
+from app.models import Artifact, Highlight, Task
 from seed import fixture
 from seed.highlights import (
     SEED_AS_OF,
@@ -87,18 +87,17 @@ def test_fixture_candidates_do_not_hand_fill_structural_flags():
 
 
 def test_seed_unresolved_task_flag_matches_real_task_provenance(db_session):
-    expected_ids = {
-        "hl_blood_test_pending",
-        "hl_maya_bp_log",
-        "hl_daniel_physio",
-    }
     for highlight in db_session.scalars(select(Highlight)).all():
-        expected = highlight.highlight_id in expected_ids
+        task = db_session.get(Task, highlight.task_id) if highlight.task_id else None
+        expected = bool(task and task.status in {"open", "in_progress", "reported_done"})
         assert highlight.feature_flags["unresolved_task"] is expected
 
 
 def test_seed_highlight_provenance_resolves(db_session):
     for h in db_session.scalars(select(Highlight)).all():
+        if h.source_artifact_id is None:
+            assert h.task_id is not None and h.source_span is None
+            continue
         src = db_session.get(Artifact, h.source_artifact_id)
         assert src is not None, h.highlight_id
         quote = extract_text(src.content, h.source_span)

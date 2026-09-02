@@ -24,13 +24,7 @@ def test_maya_glance_tasks_patient_projection_and_comments(clinician_client):
     assert glance.status_code == 200
     assert {item["highlight_id"] for item in glance.json()["highlights"]} == {
         "hl_maya_lightheaded",
-        "hl_maya_bp_log",
     }
-    task_highlight = next(
-        item for item in glance.json()["highlights"] if item["highlight_id"] == "hl_maya_bp_log"
-    )
-    assert task_highlight["feature_flags"]["unresolved_task"] is True
-
     comments = clinician_client.get(f"/api/events/{fixture.EVT_MAYA_DOCTOR}/comments")
     assert comments.status_code == 200
     assert {item["comment_id"] for item in comments.json()} == {
@@ -62,7 +56,6 @@ def test_daniel_dense_history_and_open_action(clinician_client):
     assert glance.status_code == 200
     assert {item["highlight_id"] for item in glance.json()["highlights"]} == {
         "hl_daniel_walking_discomfort",
-        "hl_daniel_physio",
     }
 
 

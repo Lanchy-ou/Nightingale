@@ -164,7 +164,9 @@ def is_negative_protected(highlight: Highlight, task: Task | None) -> bool:
     )
 
 
-def _binding_status(db: Session, highlight: Highlight) -> str:
+def _binding_status(db: Session, highlight: Highlight, task: Task | None = None) -> str:
+    if task is not None and highlight.source_span is None:
+        return "not_applicable"
     if highlight.source_artifact_id is None and highlight.source_span is None:
         return "not_applicable"
     return resolve_highlight_source(db, highlight).status
@@ -226,7 +228,7 @@ def capture_ranking_runs(
             )
             if adjustment < 0 and is_negative_protected(highlight, task):
                 adjustment = 0
-            binding = _binding_status(db, highlight)
+            binding = _binding_status(db, highlight, task)
             item = {
                 "projection": projection,
                 "highlight": highlight,
@@ -241,17 +243,9 @@ def capture_ranking_runs(
             state.append(
                 {
                     "highlight_id": highlight.highlight_id,
-                    "eligible": projection.eligible,
-                    "exclusion": projection.exclusion_reason,
-                    "band": projection.priority_band,
-                    "base": base_score,
-                    "shadow": item["shadow_score"],
-                    "status": highlight.status,
-                    "review_status": highlight.review_status,
-                    "task_status": task.status if task else None,
-                    "task_role": task.assigned_role if task else None,
-                    "due_at": projection.due_at.isoformat() if projection.due_at else None,
-                    "binding": binding,
+                    "feature_snapshot": dict(projection.factor_explanation or {}),
+                    "shadow_score": item["shadow_score"],
+                    "source_binding_status": binding,
                 }
             )
         fingerprint = hashlib.sha256(
@@ -305,12 +299,6 @@ def capture_ranking_runs(
                     priority_band=item["projection"].priority_band,
                     factor_snapshot={
                         **dict(item["projection"].factor_explanation or {}),
-                        "status": highlight.status,
-                        "review_status": highlight.review_status,
-                        "due_at": item["projection"].due_at.isoformat() if item["projection"].due_at else None,
-                        "created_at": highlight.created_at.isoformat(),
-                        "task_assigned_role": task.assigned_role if task else None,
-                        "task_status": task.status if task else None,
                         "negative_protected": is_negative_protected(highlight, task),
                     },
                     base_score=item["base_score"],
@@ -396,8 +384,7 @@ def evaluate_runs(
     ideal = _dcg(ideal_grades)
     actionable = [
         row for row in decisions
-        if (row.factor_snapshot or {}).get("task_assigned_role")
-        == next((run.viewer_role for run in runs if run.run_id == row.run_id), None)
+        if (row.factor_snapshot or {}).get("assigned_to_viewer_role") is True
     ]
     surfaced_workflows = [row.workflow_id for row in decisions if row.surfaced_base and row.workflow_id]
     metrics = {
@@ -422,7 +409,11 @@ def evaluate_runs(
         "important_unsurfaced_count": sum(not row.surfaced_base for row in grade_2_3),
         "current_role_actionable_top5_rate": (sum(row.surfaced_base for row in actionable) / len(actionable)) if actionable else None,
         "duplicate_workflow_top5_rate": ((len(surfaced_workflows) - len(set(surfaced_workflows))) / len(surfaced_workflows)) if surfaced_workflows else 0.0,
-        "independent_workflow_count": len({row.workflow_id or row.highlight_id for row in labelled}),
+        "duplicate_workflow_rate": ((len(surfaced_workflows) - len(set(surfaced_workflows))) / len(surfaced_workflows)) if surfaced_workflows else 0.0,
+        "independent_workflow_count": len({
+            (row.factor_snapshot or {}).get("independence_key") or row.highlight_id
+            for row in labelled
+        }),
         "clinician_count": len({signal.actor_id for signal in outcome_signals}),
         "label_missing_rate": (len(decisions) - len(labelled)) / len(decisions) if decisions else 0.0,
     }
@@ -493,7 +484,9 @@ def record_outcome_label(
         signal_value=grade,
         eligible_for_shadow=False,
         ineligibility_reason="evaluation_label_only",
-        independence_key=f"{task.clinic_id}:{actor_id}:{task.workflow_id or task.task_id}",
+        independence_key=(decision.factor_snapshot or {}).get(
+            "independence_key", f"task:{task.task_id}"
+        ),
         policy_version=policy.version_name,
         supersedes_signal_id=previous.signal_id if previous else None,
         created_at=now,

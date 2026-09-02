@@ -153,13 +153,14 @@ def submit_learning_signal(
     protected = is_negative_protected(highlight, task)
     current_binding = (
         "not_applicable"
-        if highlight.source_artifact_id is None and highlight.source_span is None
+        if (task is not None and highlight.source_span is None)
+        or (highlight.source_artifact_id is None and highlight.source_span is None)
         else resolve_highlight_source(db, highlight).status
     )
     eligible_for_shadow = bool(
         body.signal_type == "explicit_demotion"
         and decision.eligible
-        and current_binding in {"current", "historical", "not_applicable"}
+        and current_binding in {"current", "not_applicable"}
         and not protected
     )
     if body.signal_type == "quality_issue":
@@ -168,11 +169,13 @@ def submit_learning_signal(
         ineligibility = "negative_generalization_protected"
     elif not decision.eligible:
         ineligibility = "candidate_not_eligible"
-    elif current_binding not in {"current", "historical", "not_applicable"}:
+    elif current_binding not in {"current", "not_applicable"}:
         ineligibility = "source_binding_invalid"
     else:
         ineligibility = None
-    independence_key = f"{run.clinic_id}:{ctx.user_id}:{decision.workflow_id or decision.highlight_id}"
+    independence_key = (decision.factor_snapshot or {}).get(
+        "independence_key", f"highlight:{decision.highlight_id}"
+    )
     previous = db.scalar(
         select(LearningSignal)
         .where(

@@ -1,11 +1,10 @@
-"""Required test: every highlight has a provenance_pointer that resolves hop by
-hop to a real event/artifact/span, including AI-scribed highlights."""
+"""Required provenance gate for exact-source and Event/Task-level Highlights."""
 from __future__ import annotations
 
 from sqlalchemy import select
 
 from app.highlights import extract_text, locate_span
-from app.models import Artifact, Event, Highlight
+from app.models import Artifact, Event, Highlight, Task
 from seed import fixture
 
 AI_SUMMARY_IDS = {
@@ -22,15 +21,32 @@ AI_SUMMARY_IDS = {
 
 def test_all_candidates_become_highlights(db_session):
     highlights = db_session.scalars(select(Highlight)).all()
-    # All canonical candidates have exact source quotes and become highlights.
-    assert len(highlights) == len(fixture.HIGHLIGHT_CANDIDATES)
+    # Canonical Artifact candidates remain exact-source Highlights. SL1 also
+    # projects Tasks that had no prior candidate so excluded/terminal work is
+    # represented in the complete impression.
+    candidate_ids = {row["highlight_id"] for row in fixture.HIGHLIGHT_CANDIDATES}
+    assert candidate_ids <= {row.highlight_id for row in highlights}
+    candidate_task_ids = {
+        row.get("task_id") for row in fixture.HIGHLIGHT_CANDIDATES if row.get("task_id")
+    }
+    extra_task_ids = {
+        task.task_id for task in db_session.scalars(select(Task)).all()
+        if task.task_id not in candidate_task_ids
+    }
+    assert {row.task_id for row in highlights if row.highlight_id not in candidate_ids} == extra_task_ids
 
 
 def test_every_highlight_has_complete_provenance_pointer(db_session):
     for h in db_session.scalars(select(Highlight)).all():
         assert h.event_id
+        if h.source_artifact_id is None:
+            assert h.task_id is not None
+            assert h.artifact_id is None
+            assert h.source_span is None
+            assert h.source_artifact_version is None
+            assert h.source_quote_sha256 is None
+            continue
         assert h.artifact_id
-        assert h.source_artifact_id
         assert h.source_span
         assert h.source_span.get("kind") in {
             "segment",
@@ -47,12 +63,18 @@ def test_every_highlight_has_complete_provenance_pointer(db_session):
 def test_provenance_resolves_hop_by_hop(db_session):
     for h in db_session.scalars(select(Highlight)).all():
         assert db_session.get(Event, h.event_id) is not None, f"dangling event {h.event_id}"
+        if h.source_artifact_id is None:
+            assert db_session.get(Task, h.task_id) is not None, f"dangling task {h.task_id}"
+            continue
         assert db_session.get(Artifact, h.artifact_id) is not None, f"dangling artifact {h.artifact_id}"
         assert db_session.get(Artifact, h.source_artifact_id) is not None, f"dangling source {h.source_artifact_id}"
 
 
 def test_span_resolves_to_real_source_substring(db_session):
     for h in db_session.scalars(select(Highlight)).all():
+        if h.source_artifact_id is None:
+            assert h.task_id is not None and h.source_span is None
+            continue
         src = db_session.get(Artifact, h.source_artifact_id)
         quote = extract_text(src.content, h.source_span)
         assert quote is not None, f"{h.highlight_id}: span does not resolve"

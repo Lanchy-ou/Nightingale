@@ -160,6 +160,14 @@ def create_task(
     )
     db.add(task)
     db.flush()
+    from ..workflow_state import ensure_task_workflow
+
+    ensure_task_workflow(
+        db,
+        task,
+        created_by_role=ctx.role,
+        created_by_user_id=ctx.user_id,
+    )
     link_task_highlight(db, task)
     # autoflush is disabled project-wide: persist the adopted/dedicated
     # highlight row so recompute_task_highlights can see the new mapping.
@@ -548,6 +556,20 @@ def complete_clinician_review(
         ("action_required", "time_sensitive"): 3,
     }[(parsed.review_outcome, parsed.time_sensitivity)]
     now = datetime.now()
+    if follow_up is not None:
+        from ..workflow_state import attach_task_to_workflow, ensure_task_workflow
+
+        workflow = ensure_task_workflow(db, task)
+        attach_task_to_workflow(
+            db,
+            task=follow_up,
+            workflow=workflow,
+            relation_from_task_id=task.task_id,
+            relation_type="requires_action",
+            created_by_role=ctx.role,
+            created_by_user_id=ctx.user_id,
+            created_at=now,
+        )
     metadata = dict(task.routing_metadata or {})
     metadata.update(attention_label_version="attention-label-v1", attention_label_grade=grade)
     result = db.execute(
@@ -566,6 +588,10 @@ def complete_clinician_review(
     )
     if result.rowcount != 1:
         return _conflict(db, ctx, task, parsed.expected_status)
+    task.status = "completed"
+    task.review_outcome = parsed.review_outcome
+    task.time_sensitivity = parsed.time_sensitivity
+    task.follow_up_task_id = parsed.follow_up_task_id
     add_audit(
         db,
         actor_id=ctx.user_id,

@@ -10,7 +10,7 @@ from sqlalchemy import UniqueConstraint
 
 from app.highlights import WEIGHTS
 from app.main import app
-from app.models import Event, Highlight
+from app.models import Event, GlanceProjection, Highlight
 from seed import fixture
 
 
@@ -220,8 +220,15 @@ def test_event_only_task_enters_glance_without_any_existing_highlight(
 
     glance = clinician_client.get(f"/api/patients/{fixture.PATIENT_B_ID}/glance")
     assert glance.status_code == 200
-    assert hl.highlight_id in {h["highlight_id"] for h in glance.json()["highlights"]}
-    assert all(h["task_id"] == task_id for h in glance.json()["highlights"] if h["highlight_id"] == hl.highlight_id)
+    assert hl.highlight_id not in {h["highlight_id"] for h in glance.json()["highlights"]}
+    projection = db_session.scalar(
+        select(GlanceProjection).where(
+            GlanceProjection.highlight_id == hl.highlight_id,
+            GlanceProjection.viewer_role == "clinician",
+        )
+    )
+    assert projection.eligible is False
+    assert projection.exclusion_reason == "other_role_queue"
 
 
 def test_cancel_deterministically_clears_own_highlight(clinician_client, db_session):
@@ -324,8 +331,8 @@ def test_exact_matching_unowned_highlight_is_adopted_not_duplicated(
     assert len(own) == 1  # adopted, not duplicated
 
 
-def test_rejected_unowned_highlight_is_not_adopted_and_task_still_enters_glance(
-    clinician_client, db_session
+def test_rejected_unowned_highlight_is_not_adopted_and_task_routes_to_assigned_role(
+    clinician_client, staff_client, db_session
 ):
     rejected = _unowned_highlight(
         db_session, highlight_id="hl_rejected_unowned", status="rejected"
@@ -344,9 +351,11 @@ def test_rejected_unowned_highlight_is_not_adopted_and_task_still_enters_glance(
     assert linked[0].highlight_id != rejected.highlight_id
     assert linked[0].status != "rejected"
 
-    glance = clinician_client.get(f"/api/patients/{fixture.PATIENT_ID}/glance")
-    assert glance.status_code == 200
-    assert task_id in {row["task_id"] for row in glance.json()["highlights"]}
+    clinician_glance = clinician_client.get(f"/api/patients/{fixture.PATIENT_ID}/glance")
+    staff_glance = staff_client.get(f"/api/patients/{fixture.PATIENT_ID}/glance")
+    assert clinician_glance.status_code == staff_glance.status_code == 200
+    assert task_id not in {row["task_id"] for row in clinician_glance.json()["highlights"]}
+    assert task_id in {row["task_id"] for row in staff_glance.json()["highlights"]}
 
 
 def test_task_highlight_mapping_has_foreign_key_and_unique_constraint():
