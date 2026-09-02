@@ -48,7 +48,23 @@ export default function AdminLearningPage() {
           <button className="secondary-button" disabled={pending} onClick={() => act(() => api.freezeLearning(status.frozen, !status.frozen))}>{status.frozen ? 'Resume Shadow signals' : 'Freeze Shadow signals'}</button>
         </div>
         <section className="learning-policy-list"><h3>Shadow policy rollback</h3><p>Switching policies changes offline comparison only.</p>{status.policies.map((policy) => <button key={policy.version_name} disabled={pending || policy.active} onClick={() => act(() => api.activateLearningPolicy(policy.version_name))}><strong>{policy.version_name}</strong><span>{policy.active ? 'Active' : 'Activate for Shadow'}</span></button>)}</section>
-        {status.latest_evaluation && <section className="learning-metrics"><h3>Latest evaluation</h3><dl>{Object.entries(status.latest_evaluation.metrics).map(([key, value]) => <div key={key}><dt>{metricLabel(key)}</dt><dd>{value === null ? 'Not enough labels' : typeof value === 'number' ? Number(value.toFixed?.(3) ?? value) : String(value)}</dd></div>)}</dl></section>}
+        <section className="learning-metrics">
+          <h3>SL2 frozen artifact evidence</h3>
+          {!status.sl2_evidence.dataset || !status.sl2_evidence.artifacts || !status.sl2_evidence.evaluation
+            ? <div className="form-error">SL2 artifacts unavailable: {(status.sl2_evidence.reason ?? 'unknown failure').replace(/_/g, ' ')}</div>
+            : <>
+              <dl>
+                <div><dt>Frozen scenarios</dt><dd>{status.sl2_evidence.dataset.scenario_count} (15 staff / 15 clinician)</dd></div>
+                <div><dt>Mechanism thresholds</dt><dd>{status.sl2_evidence.evaluation.all_thresholds_pass ? 'PASS' : 'FAIL'}</dd></div>
+                <div><dt>Staff artifact</dt><dd>{status.sl2_evidence.artifacts.staff.valid ? 'valid' : 'invalid'} · {status.sl2_evidence.artifacts.staff.artifact_sha256.slice(0, 12)}</dd></div>
+                <div><dt>Clinician artifact</dt><dd>{status.sl2_evidence.artifacts.clinician.valid ? 'valid' : 'invalid'} · {status.sl2_evidence.artifacts.clinician.artifact_sha256.slice(0, 12)}</dd></div>
+                <div><dt>Staff validation strict accuracy</dt><dd>{Number(status.sl2_evidence.evaluation.role_metrics.staff.validation.strict_pair_accuracy.toFixed(3))}</dd></div>
+                <div><dt>Test strict accuracy</dt><dd>staff {Number(status.sl2_evidence.evaluation.role_metrics.staff.test.strict_pair_accuracy.toFixed(3))} · clinician {Number(status.sl2_evidence.evaluation.role_metrics.clinician.test.strict_pair_accuracy.toFixed(3))}</dd></div>
+              </dl>
+              <p>Passing authorizes Shadow evaluation only. The lower staff validation result remains visible and is not a clinical-validity claim.</p>
+            </>}
+        </section>
+        {status.latest_evaluation && <section className="learning-metrics"><h3>Latest replay</h3><dl>{Object.entries(status.latest_evaluation.metrics).filter(([, value]) => value === null || ['string', 'number', 'boolean'].includes(typeof value)).map(([key, value]) => <div key={key}><dt>{metricLabel(key)}</dt><dd>{value === null ? 'Not enough labels' : typeof value === 'number' ? Number(value.toFixed?.(3) ?? value) : String(value)}</dd></div>)}</dl></section>}
       </>}
     </section>
   );

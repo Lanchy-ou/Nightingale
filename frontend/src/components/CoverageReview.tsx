@@ -35,7 +35,16 @@ function DecisionCard({
     <article className="coverage-decision-card">
       <header><span>Band {item.priority_band} · base rank {item.base_rank ?? 'excluded'}</span><strong>{item.source_binding_status}</strong></header>
       <h4>{item.text}</h4>
-      <p>Base {item.base_score} · Shadow {item.shadow_score} ({item.shadow_adjustment >= 0 ? '+' : ''}{item.shadow_adjustment}){item.exclusion_reason ? ` · ${item.exclusion_reason.replace(/_/g, ' ')}` : ''}</p>
+      <p>
+        Base {item.base_score}
+        {item.sl2_model_score !== null
+          ? ` · Shadow simulation rank ${item.shadow_rank ?? 'excluded'} · model score ${item.sl2_model_score.toFixed(3)}`
+          : item.shadow_artifact_version
+            ? ` · Shadow simulation rank ${item.shadow_rank ?? 'excluded'} · base-preserved`
+          : ` · Shadow ${item.shadow_score} (${item.shadow_adjustment >= 0 ? '+' : ''}${item.shadow_adjustment})`}
+        {item.shadow_fallback_reason ? ` · fallback: ${item.shadow_fallback_reason.replace(/_/g, ' ')}` : ''}
+        {item.exclusion_reason ? ` · ${item.exclusion_reason.replace(/_/g, ' ')}` : ''}
+      </p>
       <div className="coverage-card-actions"><button disabled={item.source_binding_status === 'not_applicable'} onClick={() => onSource(item)}>{item.source_binding_status === 'not_applicable' ? 'Event / Task-level source' : 'Open exact source'}</button></div>
       <details className="coverage-signal-form">
         <summary>Review this decision</summary>
@@ -114,7 +123,7 @@ export default function CoverageReview({
       {error && <div className="form-error">{error}</div>}
       {message && <div className="success-message">{message}</div>}
       {coverage && <>
-        <p className="coverage-meta">{coverage.viewer_role} projection · {coverage.shadow_policy} · evaluated {new Date(coverage.evaluated_at).toLocaleString()}</p>
+        <p className="coverage-meta">{coverage.viewer_role} projection · run policy {coverage.run_policy_version} · Shadow simulation only · evaluated {new Date(coverage.evaluated_at).toLocaleString()}</p>
         {section('Eligible but not shown', 'Candidates ranked below the formal Top 5.', coverage.eligible_unsurfaced)}
         {section('Formal Top 5', 'The deterministic A2 serving result.', coverage.base_top_five)}
         {section('Excluded', 'Candidates retained for audit with an explicit exclusion reason.', coverage.excluded)}

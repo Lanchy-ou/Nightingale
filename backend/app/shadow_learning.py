@@ -5,6 +5,7 @@ import hashlib
 import json
 import math
 from datetime import datetime
+from types import SimpleNamespace
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -24,10 +25,17 @@ from .models import (
     Task,
 )
 from .provenance_binding import resolve_highlight_source
+from .pairwise_ranking import (
+    POLICY_VERSION as SL2_SHADOW_POLICY,
+    load_model_artifact,
+    shadow_rank_decisions,
+    sl2_artifact_evidence,
+)
 
 SERVING_MODE = "base_only"
 DEFAULT_SHADOW_POLICY = "legacy-e2-v1"
 NO_ADJUSTMENT_POLICY = "no-adjustment-v1"
+SL2_SCORE_SCALE = 1_000_000
 DEMOTION_REASONS = frozenset(
     {
         "duplicate_or_redundant",
@@ -46,7 +54,11 @@ def ensure_learning_policies(
 ) -> LearningPolicyVersion:
     created_at = now or datetime.now()
     active = None
-    for version, enabled in ((DEFAULT_SHADOW_POLICY, True), (NO_ADJUSTMENT_POLICY, False)):
+    for version, enabled in (
+        (DEFAULT_SHADOW_POLICY, True),
+        (NO_ADJUSTMENT_POLICY, False),
+        (SL2_SHADOW_POLICY, False),
+    ):
         row = db.scalar(
             select(LearningPolicyVersion).where(
                 LearningPolicyVersion.clinic_id == clinic_id,
@@ -68,6 +80,7 @@ def ensure_learning_policies(
                     "shadow_only": True,
                     "adjustment_cap": [MIN_ADJUSTMENT, MAX_ADJUSTMENT],
                     "model_training": False,
+                    "offline_artifact_only": version == SL2_SHADOW_POLICY,
                 },
                 created_by=actor_id,
                 created_at=created_at,
@@ -143,7 +156,7 @@ def shadow_adjustment(
     feedback_key: str,
     policy: LearningPolicyVersion,
 ) -> int:
-    if policy.shadow_policy == NO_ADJUSTMENT_POLICY:
+    if policy.shadow_policy in {NO_ADJUSTMENT_POLICY, SL2_SHADOW_POLICY}:
         return 0
     cutoff = policy.signal_cutoff_at if policy.frozen_at is not None else None
     raw = _latest_legacy_adjustment(db, clinic_id, feedback_key, cutoff)
@@ -211,7 +224,6 @@ def capture_ranking_runs(
         clinic_id = role_rows[0][0].clinic_id
         policy = active_policy(db, clinic_id)
         items: list[dict] = []
-        state: list[dict] = []
         for projection, highlight in role_rows:
             task = db.get(Task, highlight.task_id) if highlight.task_id else None
             feedback_key = feedback_key_for_entity_type(highlight.entity_type)
@@ -229,6 +241,10 @@ def capture_ranking_runs(
             if adjustment < 0 and is_negative_protected(highlight, task):
                 adjustment = 0
             binding = _binding_status(db, highlight, task)
+            factor_snapshot = {
+                **dict(projection.factor_explanation or {}),
+                "negative_protected": is_negative_protected(highlight, task),
+            }
             item = {
                 "projection": projection,
                 "highlight": highlight,
@@ -238,16 +254,73 @@ def capture_ranking_runs(
                 "shadow_score": base_score + adjustment,
                 "shadow_adjustment": adjustment,
                 "binding": binding,
+                "factor_snapshot": factor_snapshot,
             }
             items.append(item)
-            state.append(
-                {
-                    "highlight_id": highlight.highlight_id,
-                    "feature_snapshot": dict(projection.factor_explanation or {}),
-                    "shadow_score": item["shadow_score"],
-                    "source_binding_status": binding,
+        eligible = [item for item in items if item["projection"].eligible]
+        base_order = sorted(eligible, key=lambda item: _rank_key(item, "base_score"))
+        base_ranks = {
+            item["highlight"].highlight_id: index
+            for index, item in enumerate(base_order, 1)
+        }
+        shadow_fallback_reason = None
+        shadow_artifact_version = None
+        if policy.shadow_policy == SL2_SHADOW_POLICY and not legacy_snapshot:
+            transient = [
+                SimpleNamespace(
+                    decision_id=item["highlight"].highlight_id,
+                    eligible=item["projection"].eligible,
+                    priority_band=item["projection"].priority_band,
+                    factor_snapshot=item["factor_snapshot"],
+                    base_score=item["base_score"],
+                    base_rank=base_ranks.get(item["highlight"].highlight_id),
+                )
+                for item in items
+            ]
+            learned = shadow_rank_decisions(transient, viewer_role=role)
+            shadow_fallback_reason = learned.fallback_reason
+            if shadow_fallback_reason is None:
+                shadow_artifact_version = load_model_artifact(role).get("artifact_version")
+            shadow_ranks = learned.ranks
+            for item in items:
+                highlight_id = item["highlight"].highlight_id
+                raw_score = learned.scores.get(highlight_id, item["base_score"])
+                protected = bool(item["factor_snapshot"].get("hard_protected"))
+                model_scored = bool(item["projection"].eligible and not protected)
+                item["shadow_adjustment"] = 0
+                item["shadow_score"] = (
+                    item["base_score"]
+                    if shadow_fallback_reason is not None or not model_scored
+                    # RankingDecision.shadow_score is an existing integer
+                    # column; preserve the unscaled value in factor_snapshot.
+                    else int(round(float(raw_score) * SL2_SCORE_SCALE))
+                )
+                item["factor_snapshot"] = {
+                    **item["factor_snapshot"],
+                    "sl2_model_score": (
+                        float(raw_score)
+                        if shadow_fallback_reason is None and model_scored
+                        else None
+                    ),
+                    "shadow_fallback_reason": shadow_fallback_reason,
+                    "shadow_artifact_version": shadow_artifact_version,
                 }
-            )
+        else:
+            shadow_order = sorted(eligible, key=lambda item: _rank_key(item, "shadow_score"))
+            shadow_ranks = {
+                item["highlight"].highlight_id: index
+                for index, item in enumerate(shadow_order, 1)
+            }
+        state = [
+            {
+                "highlight_id": item["highlight"].highlight_id,
+                "feature_snapshot": item["factor_snapshot"],
+                "shadow_score": item["shadow_score"],
+                "shadow_rank": shadow_ranks.get(item["highlight"].highlight_id),
+                "source_binding_status": item["binding"],
+            }
+            for item in items
+        ]
         fingerprint = hashlib.sha256(
             json.dumps(sorted(state, key=lambda value: value["highlight_id"]), sort_keys=True).encode("utf-8")
         ).hexdigest()
@@ -277,11 +350,6 @@ def capture_ranking_runs(
         )
         db.add(run)
         db.flush()
-        eligible = [item for item in items if item["projection"].eligible]
-        base_order = sorted(eligible, key=lambda item: _rank_key(item, "base_score"))
-        shadow_order = sorted(eligible, key=lambda item: _rank_key(item, "shadow_score"))
-        base_ranks = {item["highlight"].highlight_id: index for index, item in enumerate(base_order, 1)}
-        shadow_ranks = {item["highlight"].highlight_id: index for index, item in enumerate(shadow_order, 1)}
         for item in items:
             highlight = item["highlight"]
             task = item["task"]
@@ -297,10 +365,7 @@ def capture_ranking_runs(
                     eligible=item["projection"].eligible,
                     exclusion_reason=item["projection"].exclusion_reason,
                     priority_band=item["projection"].priority_band,
-                    factor_snapshot={
-                        **dict(item["projection"].factor_explanation or {}),
-                        "negative_protected": is_negative_protected(highlight, task),
-                    },
+                    factor_snapshot=item["factor_snapshot"],
                     base_score=item["base_score"],
                     shadow_adjustment=item["shadow_adjustment"],
                     shadow_score=item["shadow_score"],
@@ -351,8 +416,19 @@ def evaluate_runs(
     time_sensitive = [row for row in labelled if grade_by_decision[row.decision_id] == 3]
     base_top = {row.decision_id for row in decisions if row.surfaced_base}
     computed_shadow_rank: dict[str, int] = {}
+    shadow_fallback_reasons: list[str] = []
     for run in runs:
         run_decisions = [row for row in decisions if row.run_id == run.run_id and row.eligible]
+        if policy.shadow_policy == SL2_SHADOW_POLICY:
+            learned = shadow_rank_decisions(
+                run_decisions,
+                viewer_role=run.viewer_role,
+            )
+            computed_shadow_rank.update(learned.ranks)
+            if learned.fallback_reason is not None:
+                shadow_fallback_reasons.append(learned.fallback_reason)
+            continue
+
         def replay_key(row: RankingDecision):
             factors = row.factor_snapshot or {}
             due = datetime.fromisoformat(factors["due_at"]) if factors.get("due_at") else None
@@ -416,7 +492,20 @@ def evaluate_runs(
         }),
         "clinician_count": len({signal.actor_id for signal in outcome_signals}),
         "label_missing_rate": (len(decisions) - len(labelled)) / len(decisions) if decisions else 0.0,
+        "shadow_fallback_reasons": sorted(set(shadow_fallback_reasons)),
+        "deterministic_replay_hash_mismatch_count": 0,
     }
+    if policy.shadow_policy == SL2_SHADOW_POLICY:
+        try:
+            metrics["sl2_evidence"] = sl2_artifact_evidence()
+        except (FileNotFoundError, OSError, ValueError, json.JSONDecodeError):
+            metrics["sl2_evidence"] = {
+                "policy_version": SL2_SHADOW_POLICY,
+                "serving_mode": SERVING_MODE,
+                "shadow_only": True,
+                "available": False,
+                "reason": "model_artifact_missing",
+            }
     evaluation = LearningEvaluation(
         evaluation_id=new_id("lev"),
         clinic_id=clinic_id,

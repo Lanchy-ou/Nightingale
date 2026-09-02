@@ -25,6 +25,7 @@ from ..models import (
 )
 from ..role_context import RoleContext
 from ..provenance_binding import resolve_highlight_source
+from ..pairwise_ranking import sl2_artifact_evidence
 from ..schemas import (
     LearningEvaluationOut,
     LearningFreezeRequest,
@@ -67,6 +68,13 @@ def _coverage_item(db: Session, decision: RankingDecision) -> dict:
         "surfaced_shadow": decision.surfaced_shadow,
         "source_binding_status": decision.source_binding_status,
         "factor_snapshot": decision.factor_snapshot,
+        "sl2_model_score": (decision.factor_snapshot or {}).get("sl2_model_score"),
+        "shadow_fallback_reason": (decision.factor_snapshot or {}).get(
+            "shadow_fallback_reason"
+        ),
+        "shadow_artifact_version": (decision.factor_snapshot or {}).get(
+            "shadow_artifact_version"
+        ),
     }
 
 
@@ -117,7 +125,9 @@ def coverage_review(
         "viewer_role": viewer_role,
         "serving_mode": SERVING_MODE,
         "shadow_policy": policy.version_name,
+        "run_policy_version": run.policy_version,
         "shadow_only": True,
+        "shadow_simulation_only": True,
         "evaluated_at": run.evaluated_at,
         "base_top_five": top,
         "eligible_unsurfaced": unsurfaced,
@@ -245,6 +255,16 @@ def learning_status(
         .where(LearningEvaluation.clinic_id == ctx.clinic_id)
         .order_by(LearningEvaluation.created_at.desc(), LearningEvaluation.evaluation_id.desc())
     )
+    try:
+        sl2_evidence = sl2_artifact_evidence()
+    except (FileNotFoundError, OSError, ValueError):
+        sl2_evidence = {
+            "policy_version": "sl2-pairwise-linear-v1",
+            "serving_mode": SERVING_MODE,
+            "shadow_only": True,
+            "available": False,
+            "reason": "model_artifact_missing",
+        }
     return {
         "serving_mode": SERVING_MODE,
         "shadow_only": True,
@@ -258,9 +278,11 @@ def learning_status(
                 "active": row.active,
                 "serving_mode": row.serving_mode,
                 "shadow_policy": row.shadow_policy,
+                "config": row.config,
             }
             for row in policies
         ],
+        "sl2_evidence": sl2_evidence,
         "latest_evaluation": (
             LearningEvaluationOut.model_validate(latest).model_dump(mode="json")
             if latest

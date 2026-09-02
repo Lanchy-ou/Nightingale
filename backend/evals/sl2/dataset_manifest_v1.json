@@ -1,0 +1,198 @@
+{
+  "dataset_version": "sl2-synthetic-workflow-v1",
+  "label_schema_version": "sl2-gold-order-v1",
+  "feature_schema_version": "attention-feature-v1",
+  "transform_version": "sl2-transform-v1",
+  "feature_schema_sha256": "0560cea19b6cdac9f6005cc589b7f8392facd8195085cff19016753a649818bf",
+  "gold_order_sha256": "9f93bf185d37f8491b03218e0f09339b29547f28c6dd701b5e2c1e2ac25fcedb",
+  "scenario_count": 30,
+  "role_counts": {
+    "staff": 15,
+    "clinician": 15
+  },
+  "split_group_counts": {
+    "train": 18,
+    "validation": 6,
+    "test": 6
+  },
+  "pair_counts": {
+    "train": {
+      "strict": 108,
+      "tie": 18
+    },
+    "validation": {
+      "strict": 36,
+      "tie": 6
+    },
+    "test": {
+      "strict": 36,
+      "tie": 6
+    },
+    "total": {
+      "strict": 180,
+      "tie": 30
+    }
+  },
+  "allowed_reason_codes": [
+    "explicit_downstream_blocker_first",
+    "closer_due_first_when_other_context_equal",
+    "longer_wait_first_when_no_due",
+    "explicit_decision_before_equivalent_execution",
+    "reported_done_verification_before_routine_open_task",
+    "updated_upstream_verification_before_unchanged_context",
+    "more_open_downstream_obligations_first",
+    "equivalent_workflow_state_tie"
+  ],
+  "scenarios": [
+    {
+      "scenario_group_id": "staff_train_01",
+      "viewer_role": "staff",
+      "split": "train"
+    },
+    {
+      "scenario_group_id": "staff_train_02",
+      "viewer_role": "staff",
+      "split": "train"
+    },
+    {
+      "scenario_group_id": "staff_train_03",
+      "viewer_role": "staff",
+      "split": "train"
+    },
+    {
+      "scenario_group_id": "staff_train_04",
+      "viewer_role": "staff",
+      "split": "train"
+    },
+    {
+      "scenario_group_id": "staff_train_05",
+      "viewer_role": "staff",
+      "split": "train"
+    },
+    {
+      "scenario_group_id": "staff_train_06",
+      "viewer_role": "staff",
+      "split": "train"
+    },
+    {
+      "scenario_group_id": "staff_train_07",
+      "viewer_role": "staff",
+      "split": "train"
+    },
+    {
+      "scenario_group_id": "staff_train_08",
+      "viewer_role": "staff",
+      "split": "train"
+    },
+    {
+      "scenario_group_id": "staff_train_09",
+      "viewer_role": "staff",
+      "split": "train"
+    },
+    {
+      "scenario_group_id": "staff_validation_01",
+      "viewer_role": "staff",
+      "split": "validation"
+    },
+    {
+      "scenario_group_id": "staff_validation_02",
+      "viewer_role": "staff",
+      "split": "validation"
+    },
+    {
+      "scenario_group_id": "staff_validation_03",
+      "viewer_role": "staff",
+      "split": "validation"
+    },
+    {
+      "scenario_group_id": "staff_test_01",
+      "viewer_role": "staff",
+      "split": "test"
+    },
+    {
+      "scenario_group_id": "staff_test_02",
+      "viewer_role": "staff",
+      "split": "test"
+    },
+    {
+      "scenario_group_id": "staff_test_03",
+      "viewer_role": "staff",
+      "split": "test"
+    },
+    {
+      "scenario_group_id": "clinician_train_01",
+      "viewer_role": "clinician",
+      "split": "train"
+    },
+    {
+      "scenario_group_id": "clinician_train_02",
+      "viewer_role": "clinician",
+      "split": "train"
+    },
+    {
+      "scenario_group_id": "clinician_train_03",
+      "viewer_role": "clinician",
+      "split": "train"
+    },
+    {
+      "scenario_group_id": "clinician_train_04",
+      "viewer_role": "clinician",
+      "split": "train"
+    },
+    {
+      "scenario_group_id": "clinician_train_05",
+      "viewer_role": "clinician",
+      "split": "train"
+    },
+    {
+      "scenario_group_id": "clinician_train_06",
+      "viewer_role": "clinician",
+      "split": "train"
+    },
+    {
+      "scenario_group_id": "clinician_train_07",
+      "viewer_role": "clinician",
+      "split": "train"
+    },
+    {
+      "scenario_group_id": "clinician_train_08",
+      "viewer_role": "clinician",
+      "split": "train"
+    },
+    {
+      "scenario_group_id": "clinician_train_09",
+      "viewer_role": "clinician",
+      "split": "train"
+    },
+    {
+      "scenario_group_id": "clinician_validation_01",
+      "viewer_role": "clinician",
+      "split": "validation"
+    },
+    {
+      "scenario_group_id": "clinician_validation_02",
+      "viewer_role": "clinician",
+      "split": "validation"
+    },
+    {
+      "scenario_group_id": "clinician_validation_03",
+      "viewer_role": "clinician",
+      "split": "validation"
+    },
+    {
+      "scenario_group_id": "clinician_test_01",
+      "viewer_role": "clinician",
+      "split": "test"
+    },
+    {
+      "scenario_group_id": "clinician_test_02",
+      "viewer_role": "clinician",
+      "split": "test"
+    },
+    {
+      "scenario_group_id": "clinician_test_03",
+      "viewer_role": "clinician",
+      "split": "test"
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "feature_schema_version": "attention-feature-v1",
+  "transform_version": "sl2-transform-v1",
+  "ordered_feature_names": [
+    "due_known",
+    "due_proximity_7d",
+    "overdue_age_7d",
+    "waiting_age_7d",
+    "workflow_blocking_known",
+    "workflow_blocking_value",
+    "open_downstream_action_count_cap3",
+    "requires_action_from_viewer",
+    "requires_decision_from_viewer",
+    "upstream_verification_known",
+    "upstream_verified",
+    "upstream_corrected",
+    "upstream_unable_to_verify",
+    "patient_reported_done_pending_verification",
+    "attention_kind_care_task",
+    "attention_kind_patient_report_review",
+    "attention_kind_clinician_priority_review",
+    "attention_kind_artifact_highlight"
+  ],
+  "normalization": {
+    "seconds_7d": 604800,
+    "open_downstream_cap": 3,
+    "unknown_encoding": 0,
+    "tie_margin": 0.1
+  }
+}

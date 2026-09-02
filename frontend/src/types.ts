@@ -124,6 +124,9 @@ export interface CoverageDecision {
   surfaced_shadow: boolean;
   source_binding_status: string;
   factor_snapshot: Record<string, any>;
+  sl2_model_score: number | null;
+  shadow_fallback_reason: string | null;
+  shadow_artifact_version: string | null;
 }
 
 export interface CoverageReview {
@@ -132,7 +135,9 @@ export interface CoverageReview {
   viewer_role: 'staff' | 'clinician';
   serving_mode: 'base_only';
   shadow_policy: string;
+  run_policy_version: string;
   shadow_only: true;
+  shadow_simulation_only: true;
   evaluated_at: string;
   base_top_five: CoverageDecision[];
   eligible_unsurfaced: CoverageDecision[];
@@ -174,7 +179,27 @@ export interface LearningStatus {
   frozen: boolean;
   frozen_at: string | null;
   signal_cutoff_at: string | null;
-  policies: { version_name: string; active: boolean; serving_mode: string; shadow_policy: string }[];
+  policies: { version_name: string; active: boolean; serving_mode: string; shadow_policy: string; config: Record<string, any> }[];
+  sl2_evidence: {
+    policy_version: string;
+    serving_mode: 'base_only';
+    shadow_only: true;
+    available?: boolean;
+    reason?: string;
+    dataset?: {
+      scenario_count: number;
+      role_split_counts: Record<'staff' | 'clinician', Record<'train' | 'validation' | 'test', number>>;
+      feature_schema_sha256: string;
+      dataset_manifest_sha256: string;
+      gold_order_sha256: string;
+    };
+    artifacts?: Record<'staff' | 'clinician', { artifact_version: string; artifact_sha256: string; valid: boolean }>;
+    evaluation?: {
+      all_thresholds_pass: boolean;
+      threshold_checks: Record<string, boolean>;
+      role_metrics: Record<'staff' | 'clinician', Record<string, any>>;
+    };
+  };
   latest_evaluation: LearningEvaluation | null;
 }
 
