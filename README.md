@@ -176,6 +176,7 @@ frontend/src/       React/TypeScript patient and clinical journeys
 deploy/             Caddy configuration and environment template (no secrets)
 docs/               decisions and dated evidence
 output/pdf/         final Technical Brief PDF
+scripts/            reproducible deliverable generation
 ```
 
 ## Setup
@@ -419,6 +420,6 @@ This matrix is a navigation index, not a substitute for the tests. The authorita
 - Self-Learning evidence: `docs/sl1_attention_ranking_evidence_2026-09-02.md`, `docs/sl2_shadow_pairwise_evidence_2026-09-03.md`, and `docs/sl3_observed_feedback_training_bridge_evidence_2026-09-03.md`.
 - Frontend pre-visual repair evidence: `docs/frontend_previsual_repair_evidence_2026-08-28.md`
 - Submission email draft: `docs/submission_email_draft_2026-08-28.md`
-- Technical Brief: `output/pdf/Nightingale_Technical_Brief.pdf`
+- Technical Brief: `output/pdf/Nightingale_Technical_Brief.pdf` (exactly 3 pages). It covers numbered feedback scenarios 1–16 plus the source document's concluding cross-cutting capability checklist as synthesis item 17, including build integration, first failures, unsuccessful/blocked attempts, and assumptions that still stand or no longer stand. Reviewable source: `docs/Nightingale_Technical_Brief.md`; reproducible generator: `scripts/generate_technical_brief.py`.
 
 The final evidence manifest is authoritative for its dated command outcomes and capability boundaries. Current external delivery status is owner-controlled and may be newer than that dated manifest.
