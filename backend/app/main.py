@@ -20,11 +20,16 @@ from .api import (
     auth,
     comments,
     checkins,
+    clinic_settings,
     copilot,
     events,
     highlights,
+    instruction_receipts,
+    instruction_publications,
     learning,
     notes,
+    onboarding,
+    patient_imports,
     patient_view,
     patients,
     sources,
@@ -111,11 +116,16 @@ app.add_middleware(SecurityMiddleware)
 app.add_middleware(RequestIdMiddleware)
 
 app.include_router(auth.router)
+app.include_router(onboarding.router)
+app.include_router(patient_imports.router)
+app.include_router(clinic_settings.router)
 app.include_router(admin.router)
 app.include_router(patients.router)
 app.include_router(patient_view.router)
 app.include_router(events.router)
 app.include_router(highlights.router)
+app.include_router(instruction_receipts.router)
+app.include_router(instruction_publications.router)
 app.include_router(learning.router)
 app.include_router(notes.router)
 app.include_router(comments.router)

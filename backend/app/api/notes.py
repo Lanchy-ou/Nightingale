@@ -21,6 +21,10 @@ from ..copilot_confirmation import audit_details, validate_confirmation_token
 from ..db import get_db
 from ..clinic_scope import load_artifact_with_event, load_event
 from ..ids import new_id
+from ..instruction_publications import (
+    create_draft_publication,
+    normalize_instruction_content,
+)
 from ..models import Artifact, ArtifactVersion, Event
 from ..revisions import diff_text
 from ..role_context import RoleContext
@@ -37,17 +41,9 @@ router = APIRouter(prefix="/api", tags=["notes"])
 
 
 def _validate_patient_instruction(content: dict) -> None:
-    if set(content) - {"instruction", "follow_up"}:
-        raise HTTPException(status_code=422, detail="Invalid patient instruction")
-    instruction = content.get("instruction")
-    follow_up = content.get("follow_up")
-    if (
-        not isinstance(instruction, str)
-        or not instruction.strip()
-        or len(instruction) > 2000
-        or instruction.strip().upper().startswith("EDIT REQUIRED")
-        or (follow_up is not None and (not isinstance(follow_up, str) or len(follow_up) > 2000))
-    ):
+    try:
+        normalize_instruction_content(content)
+    except ValueError:
         raise HTTPException(status_code=422, detail="Invalid patient instruction")
 
 
@@ -135,8 +131,7 @@ def create_note(
 
     now = datetime.now()
     artifact_id = new_id("art")
-    db.add(
-        Artifact(
+    artifact = Artifact(
             artifact_id=artifact_id,
             event_id=event_id,
             artifact_type=body.artifact_type,
@@ -147,7 +142,7 @@ def create_note(
             version=1,
             provenance_pointer=None,
         )
-    )
+    db.add(artifact)
     db.add(
         ArtifactVersion(
             version_id=new_id("ver"),
@@ -173,6 +168,8 @@ def create_note(
         to_version=1,
         details=audit_details(confirmation),
     )
+    if body.artifact_type == "patient_instruction":
+        create_draft_publication(db, artifact, event, ctx.user_id)
     db.commit()
     artifact = db.get(Artifact, artifact_id)
     return artifact

@@ -455,6 +455,65 @@ export interface AdminSystemSettings {
   };
 }
 
+export interface ClinicSettings {
+  scope: 'clinic';
+  clinic_id: string;
+  version: number;
+  updated_at: string;
+  ai: {
+    selected_mode: 'inherit' | 'local' | 'deepseek';
+    effective_mode: 'local' | 'deepseek';
+    inherited: boolean;
+    provider_available: boolean;
+    online_text_egress: boolean;
+  };
+  voice: {
+    selected_mode: 'inherit' | 'enabled' | 'disabled';
+    effective_enabled: boolean;
+    inherited: boolean;
+    provider: string;
+    model_status: 'missing' | 'downloading' | 'ready' | 'failed';
+    model: string;
+    revision: string;
+    download_bytes_approx: number;
+    storage_mode: 'sqlite' | 'sqlcipher';
+    warning: string | null;
+    error_code: string | null;
+  };
+}
+
+export interface OnboardingPreview {
+  status: 'valid' | 'used' | 'expired';
+  expires_at: string;
+}
+
+export interface OnboardingComplete {
+  clinic_id: string;
+  user_id: string;
+  email: string;
+  login_required: true;
+}
+
+export interface PatientImportRow {
+  row_number: number;
+  external_patient_id: string;
+  name: string;
+  status: 'ready' | 'imported' | 'unchanged' | 'invalid' | 'conflict';
+  error_code: string | null;
+  patient_id: string | null;
+}
+
+export interface PatientImportBatch {
+  batch_id: string;
+  source_system: string;
+  content_sha256: string;
+  status: 'previewed' | 'committed';
+  counts: Record<'ready' | 'imported' | 'unchanged' | 'invalid' | 'conflict', number>;
+  rows: PatientImportRow[];
+  created_at: string;
+  committed_at: string | null;
+}
+
 export interface VoiceModelStatus {
   status: 'missing' | 'downloading' | 'ready' | 'failed';
   error_code: string | null;
@@ -504,10 +563,37 @@ export interface RegisterResult {
 // --- D2 Care Tasks + Patient Experience ---
 export interface PatientViewInstruction {
   artifact_id: string;
+  artifact_version: number;
   event_id: string;
   event_time: string;
   instruction: string;
   follow_up: string | null;
+  receipt: PatientInstructionReceipt;
+}
+
+export interface PatientInstructionReceipt {
+  status: 'not_viewed' | 'viewed' | 'acknowledged';
+  opened_at: string | null;
+  acknowledged_at: string | null;
+}
+
+export interface PatientInstructionReceiptHistory extends PatientInstructionReceipt {
+  artifact_id: string;
+  artifact_version: number;
+}
+
+export interface PatientInstructionPublication {
+  artifact_id: string;
+  artifact_version: number;
+  lineage_id: string;
+  lineage_revision: number;
+  state: 'draft' | 'published' | 'superseded' | 'withdrawn';
+  created_at: string;
+  published_at: string | null;
+  superseded_at: string | null;
+  superseded_by_artifact_id: string | null;
+  withdrawn_at: string | null;
+  withdrawal_reason_code: string | null;
 }
 
 export interface PatientViewSession {
@@ -539,6 +625,7 @@ export interface PatientCheckInMessage {
   processing_status: string | null;
   generation_method: string | null;
   degraded: boolean;
+  fallback_reason: string | null;
   created_at: string;
 }
 

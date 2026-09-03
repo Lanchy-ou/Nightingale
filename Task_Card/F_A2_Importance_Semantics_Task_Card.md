@@ -122,9 +122,18 @@ Before implementation, demonstrate at least:
 - `action_required` cannot close without an executable follow-up Task assigned to the clinician or Nurse queue; time-sensitive follow-up has a due time.
 - Glance UI exposes the server-persisted priority band, rule version and factor arithmetic in human-readable form.
 
-## Deferred final reason-code stability gate
+## Final reason-code stability gate — completed 2026-09-02
 
 Execute this only after the full F task set is complete, so it evaluates the final extraction and routing pipeline rather than an intermediate implementation. Build an independent matrix for each approved reason code covering: clear positive, negation, historical-only statement, resolved condition, ambiguous wording, patient correction, multiple people/pronouns, and source/span mismatch. Report `mock`, deterministic `fallback`, and live Provider separately; never merge them into one pass rate. The live run remains `NOT_RUN` until an explicitly authorized Provider/key is available. This gate evaluates extraction/routing stability, not medical validity; clinical thresholds remain `NEEDS_CLINICAL_INPUT`.
+
+Final result: mock plus the Provider-independent server validator passed all
+`32/32` expected outcomes; deterministic fallback carried no priority reason
+code in `28/28` language cases; exact source mismatch dropped `4/4`; live
+Provider is `NOT_RUN`. The first run exposed 19 false-positive mock routes in
+negative/ambiguous cases. `app/priority_routing.py` now fails those codes closed
+to routine Nurse review without deleting the patient report. Evidence:
+`tests/test_f1_reason_code_stability.py` and
+`docs/f1_a_closeout_2026-09-02.md`.
 
 ## Current evidence (2026-09-02)
 

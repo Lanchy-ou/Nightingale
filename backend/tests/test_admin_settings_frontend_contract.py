@@ -8,26 +8,24 @@ def _read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 
-def test_admin_settings_are_routed_and_secret_input_is_ephemeral():
+def test_admin_settings_are_clinic_scoped_and_device_secrets_are_not_editable():
     app = _read("frontend/src/App.tsx")
     workspace = _read("frontend/src/pages/AdminWorkspacePage.tsx")
     settings = _read("frontend/src/pages/AdminSettingsPage.tsx")
     api = _read("frontend/src/api.ts")
     assert "/admin/settings" in app
     assert "AI &amp; Voice settings" in workspace
-    assert "AI API key" in settings
-    assert "DeepSeek API key" not in settings
-    assert "type=\"password\"" in settings
-    assert "autoComplete=\"off\"" in settings
+    assert "Clinic setting" in settings
+    assert "Use device default" in settings
+    assert "Applies to this clinic only" in settings
+    assert "type=\"password\"" not in settings
     assert "localStorage" not in settings
     assert "sessionStorage" not in settings
-    assert "Test, save and enable" in settings
-    assert "Currently active" in settings
-    assert "Set up AI API" in settings
     assert 'type="radio"' in settings
-    assert "<strong>AI API</strong>" in settings
-    assert "Remove key" in settings
-    assert "/api/admin/system-settings/deepseek-key" in api
+    assert "Remove key" not in settings
+    assert "/api/admin/clinic-settings" in api
+    assert "storeDeepSeekKey" not in settings
+    assert "prepareVoiceModel" not in settings
 
 
 def test_voice_disabled_and_provider_labels_are_visible():

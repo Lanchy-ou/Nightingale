@@ -106,6 +106,20 @@ AUDIT_ACTIONS = (
     "voice_model_started",
     "voice_model_completed",
     "voice_model_failed",
+    # F_B5 clinic onboarding and clinic-scoped settings.
+    "clinic_onboarded",
+    "clinic_ai_mode_changed",
+    "clinic_voice_changed",
+    "patient_import_previewed",
+    "patient_import_committed",
+    # F_B12 patient-instruction publication lifecycle (metadata only).
+    "instruction_published",
+    "instruction_superseded",
+    "instruction_corrected",
+    "instruction_withdrawn",
+    # F_B11 exact-version patient portal receipt lifecycle.
+    "instruction_opened",
+    "instruction_acknowledged",
 )
 
 TASK_STATUSES = ("open", "in_progress", "reported_done", "completed", "cancelled")
@@ -138,6 +152,40 @@ class SystemSettings(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
 
+class ClinicOnboardingToken(Base):
+    """Deployment-issued, single-use authority to create one Clinic/Admin."""
+
+    __tablename__ = "clinic_onboarding_tokens"
+
+    onboarding_token_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    clinic_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("clinics.clinic_id", deferrable=True, initially="DEFERRED"),
+        nullable=True,
+    )
+
+
+class ClinicSettings(Base):
+    """Clinic choices layered over deployment-owned device defaults."""
+
+    __tablename__ = "clinic_settings"
+
+    clinic_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("clinics.clinic_id"), primary_key=True
+    )
+    ai_mode_override: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    voice_enabled_override: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    updated_by: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("users.user_id"), nullable=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -163,6 +211,82 @@ class Patient(Base):
         String(64), ForeignKey("clinics.clinic_id"), nullable=False
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+
+
+class PatientExternalIdentity(Base):
+    """Clinic/source-scoped stable identity for idempotent patient imports."""
+
+    __tablename__ = "patient_external_identities"
+
+    external_identity_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    clinic_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("clinics.clinic_id"), nullable=False, index=True
+    )
+    patient_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("patients.patient_id"), nullable=False, index=True
+    )
+    source_system: Mapped[str] = mapped_column(String(64), nullable=False)
+    external_patient_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    name_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "clinic_id",
+            "source_system",
+            "external_patient_id",
+            name="uq_patient_external_identity",
+        ),
+    )
+
+
+class PatientImportBatch(Base):
+    __tablename__ = "patient_import_batches"
+
+    batch_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    clinic_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("clinics.clinic_id"), nullable=False, index=True
+    )
+    source_system: Mapped[str] = mapped_column(String(64), nullable=False)
+    content_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    total_rows: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_by: Mapped[str] = mapped_column(
+        String(64), ForeignKey("users.user_id"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    committed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "clinic_id",
+            "source_system",
+            "content_sha256",
+            name="uq_patient_import_content",
+        ),
+    )
+
+
+class PatientImportRow(Base):
+    __tablename__ = "patient_import_rows"
+
+    import_row_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    batch_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("patient_import_batches.batch_id"), nullable=False, index=True
+    )
+    row_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    external_patient_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    normalized_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    patient_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("patients.patient_id"), nullable=True
+    )
+
+    __table_args__ = (
+        UniqueConstraint("batch_id", "row_number", name="uq_patient_import_row"),
+    )
 
 
 class Event(Base):
@@ -222,6 +346,100 @@ class Artifact(Base):
     @property
     def degraded(self) -> bool:
         return bool((self.generation_metadata or {}).get("degraded", False))
+
+
+class PatientInstructionReceipt(Base):
+    """Patient read receipt for one exact patient-instruction version.
+
+    This is deliberately separate from Task completion and from the later B12
+    publication lifecycle.  It records only portal availability/open/ack.
+    """
+
+    __tablename__ = "patient_instruction_receipts"
+    __table_args__ = (
+        UniqueConstraint(
+            "instruction_artifact_id",
+            "artifact_version",
+            name="uq_patient_instruction_receipt_version",
+        ),
+    )
+
+    receipt_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    clinic_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("clinics.clinic_id"), nullable=False, index=True
+    )
+    patient_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("patients.patient_id"), nullable=False, index=True
+    )
+    instruction_artifact_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("artifacts.artifact_id"), nullable=False, index=True
+    )
+    artifact_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    state: Mapped[str] = mapped_column(String(16), nullable=False, default="available")
+    opened_by_user_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("users.user_id"), nullable=True
+    )
+    opened_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    acknowledged_by_user_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("users.user_id"), nullable=True
+    )
+    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class PatientInstructionPublication(Base):
+    """Clinical authority state for one exact patient-instruction Artifact version."""
+
+    __tablename__ = "patient_instruction_publications"
+    __table_args__ = (
+        UniqueConstraint(
+            "instruction_artifact_id",
+            "artifact_version",
+            name="uq_patient_instruction_publication_version",
+        ),
+        UniqueConstraint(
+            "lineage_id",
+            "lineage_revision",
+            name="uq_patient_instruction_lineage_revision",
+        ),
+    )
+
+    publication_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    clinic_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("clinics.clinic_id"), nullable=False, index=True
+    )
+    patient_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("patients.patient_id"), nullable=False, index=True
+    )
+    lineage_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    lineage_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    instruction_artifact_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("artifacts.artifact_id"), nullable=False, index=True
+    )
+    artifact_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    state: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    created_by_user_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("users.user_id"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    published_by_user_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("users.user_id"), nullable=True
+    )
+    published_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    superseded_by_artifact_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("artifacts.artifact_id"), nullable=True
+    )
+    superseded_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    withdrawn_by_user_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("users.user_id"), nullable=True
+    )
+    withdrawn_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    withdrawal_reason_code: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    correction_key: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, unique=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
 
 class ArtifactStorageState(Base):

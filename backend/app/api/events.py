@@ -9,7 +9,7 @@ from ..authz import PATIENT_VISIBLE_ARTIFACT_TYPES, authorize, require_auth, res
 from ..db import get_db
 from ..clinic_scope import load_event
 from ..checkin_visibility import require_checkin_event_visible
-from ..models import Artifact, Event
+from ..models import Artifact, Event, PatientInstructionPublication
 from ..role_context import RoleContext
 from ..schemas import ArtifactOut
 
@@ -31,6 +31,18 @@ def list_artifacts(
 
     q = select(Artifact).where(Artifact.event_id == event_id)
     if ctx.role == "patient":
-        q = q.where(Artifact.artifact_type.in_(PATIENT_VISIBLE_ARTIFACT_TYPES))
+        q = (
+            q.join(
+                PatientInstructionPublication,
+                (PatientInstructionPublication.instruction_artifact_id == Artifact.artifact_id)
+                & (PatientInstructionPublication.artifact_version == Artifact.version),
+            )
+            .where(
+                Artifact.artifact_type.in_(PATIENT_VISIBLE_ARTIFACT_TYPES),
+                PatientInstructionPublication.state == "published",
+                PatientInstructionPublication.clinic_id == event.clinic_id,
+                PatientInstructionPublication.patient_id == event.patient_id,
+            )
+        )
 
     return db.scalars(q.order_by(Artifact.created_at, Artifact.artifact_id)).all()

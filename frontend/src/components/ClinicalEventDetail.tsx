@@ -6,6 +6,7 @@ import ArtifactContent from './ArtifactContent';
 import ArtifactEdit from './ArtifactEdit';
 import NoteComposer from './NoteComposer';
 import { TaskCreateForm } from './ClinicalTasksView';
+import InstructionPublicationControl from './InstructionPublicationControl';
 
 export interface EventContextState {
   artifacts: Artifact[];
@@ -220,6 +221,16 @@ export default function ClinicalEventDetail({
                 <div className="reader-scroll" aria-label={`${artifactLabel(selectedArtifact)} content`}>
                   <ArtifactContent artifact={selectedArtifact} />
                 </div>
+                {selectedArtifact.artifact_type === 'patient_instruction' && (
+                  <InstructionPublicationControl
+                    artifact={selectedArtifact}
+                    role={role}
+                    onChanged={(nextArtifactId) => {
+                      if (nextArtifactId) setSelectedId(nextArtifactId);
+                      onChanged();
+                    }}
+                  />
+                )}
                 {selectedArtifact.artifact_type === `${role}_note` && (
                   <div className="reader-actions">
                     <ArtifactEdit artifact={selectedArtifact} onSaved={onChanged} />

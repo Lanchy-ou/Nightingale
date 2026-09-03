@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api';
-import type { PatientTask, PatientView, TaskStatus } from '../types';
+import type { PatientInstructionReceipt, PatientTask, PatientView, PatientViewInstruction, TaskStatus } from '../types';
 import PatientCheckIn from '../components/PatientCheckIn';
 
 function fmtLongDate(iso: string | null): string {
@@ -23,6 +23,12 @@ const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
   reported_done: 'Awaiting clinic confirmation',
   completed: 'Clinic confirmed',
   cancelled: 'Cancelled',
+};
+
+const RECEIPT_LABELS: Record<PatientInstructionReceipt['status'], string> = {
+  not_viewed: 'Not viewed',
+  viewed: 'Viewed · awaiting acknowledgement',
+  acknowledged: 'Acknowledged',
 };
 
 type PatientTab = 'today' | 'care' | 'checkin' | 'summaries';
@@ -57,6 +63,9 @@ export default function PatientViewPage({
   const [refreshKey, setRefreshKey] = useState(0);
   const [pendingTaskId, setPendingTaskId] = useState<string | null>(null);
   const [taskError, setTaskError] = useState<string | null>(null);
+  const [selectedInstruction, setSelectedInstruction] = useState<PatientViewInstruction | null>(null);
+  const [receiptPending, setReceiptPending] = useState(false);
+  const [receiptError, setReceiptError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     const controller = new AbortController();
@@ -90,6 +99,8 @@ export default function PatientViewPage({
     // error and pending response even if a host reuses this component.
     setTaskError(null);
     setPendingTaskId(null);
+    setSelectedInstruction(null);
+    setReceiptError(null);
     setTab(patientTabFromPath());
   }, [patientId, roleKey]);
 
@@ -121,6 +132,52 @@ export default function PatientViewPage({
       if (e?.status === 409) setRefreshKey((key) => key + 1);
     } finally {
       setPendingTaskId(null);
+    }
+  }
+
+  function applyReceipt(artifactId: string, receipt: PatientInstructionReceipt) {
+    setView((current) => current ? {
+      ...current,
+      today: {
+        ...current.today,
+        instruction: current.today.instruction?.artifact_id === artifactId
+          ? { ...current.today.instruction, receipt }
+          : current.today.instruction,
+      },
+      visit_summaries: {
+        summaries: current.visit_summaries.summaries.map((item) =>
+          item.artifact_id === artifactId ? { ...item, receipt } : item),
+      },
+    } : current);
+    setSelectedInstruction((current) => current?.artifact_id === artifactId
+      ? { ...current, receipt }
+      : current);
+  }
+
+  async function openInstruction(instruction: PatientViewInstruction) {
+    setReceiptPending(true);
+    setReceiptError(null);
+    try {
+      const receipt = await api.openPatientInstruction(instruction.artifact_id, instruction.artifact_version);
+      applyReceipt(instruction.artifact_id, receipt);
+      setSelectedInstruction({ ...instruction, receipt });
+    } catch (e: any) {
+      setReceiptError(String(e?.message ?? e));
+    } finally {
+      setReceiptPending(false);
+    }
+  }
+
+  async function acknowledgeInstruction(instruction: PatientViewInstruction) {
+    setReceiptPending(true);
+    setReceiptError(null);
+    try {
+      const receipt = await api.acknowledgePatientInstruction(instruction.artifact_id, instruction.artifact_version);
+      applyReceipt(instruction.artifact_id, receipt);
+    } catch (e: any) {
+      setReceiptError(String(e?.message ?? e));
+    } finally {
+      setReceiptPending(false);
     }
   }
 
@@ -164,6 +221,7 @@ export default function PatientViewPage({
 
       <main className={`patient-main patient-main-${tab}`}>
         {taskError && <div className="form-error">{taskError}</div>}
+        {receiptError && <div className="form-error">Could not update instruction status: {receiptError}</div>}
 
         {tab === 'today' && (
           <>
@@ -171,11 +229,20 @@ export default function PatientViewPage({
               <div><p>{new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}</p><h1>{greeting()}, {view.display_name}</h1><span>Here is what you need to know and do next.</span></div>
             </header>
 
+            {selectedInstruction && (
+              <InstructionReader
+                instruction={selectedInstruction}
+                pending={receiptPending}
+                onClose={() => setSelectedInstruction(null)}
+                onAcknowledge={acknowledgeInstruction}
+              />
+            )}
+
             <div className="patient-focus-grid">
               <section className="patient-current-summary">
                 <div className="patient-section-kicker"><span aria-hidden="true">i</span>What you need to know</div>
                 {view.today.instruction ? (
-                  <><h2>{view.today.instruction.instruction}</h2><p>Follow your current care instructions and use Check-in if anything changes.</p><small>Updated {fmtLongDate(view.today.instruction.event_time)}</small></>
+                  <><h2>You have a care instruction from your clinic.</h2><p>{RECEIPT_LABELS[view.today.instruction.receipt.status]}</p><button className="patient-instruction-open" disabled={receiptPending} onClick={() => void openInstruction(view.today.instruction!)}>Open instruction</button><small>Updated {fmtLongDate(view.today.instruction.event_time)}</small></>
                 ) : <><h2>There are no new care instructions today.</h2><p>Your clinic will update this page when there is something you need to know.</p></>}
               </section>
               <section className="patient-followup-card">
@@ -205,7 +272,7 @@ export default function PatientViewPage({
               {view.visit_summaries.summaries.length === 0 ? <div className="patient-empty-compact">No visit summaries are available yet.</div> : (
                 <div className="patient-instruction-list">
                   {view.visit_summaries.summaries.slice(0, 2).map((summary) => (
-                    <button key={summary.artifact_id} onClick={() => navigateTab('summaries')}><span>{fmtLongDate(summary.event_time)}</span><div><strong>Care instruction</strong><p>{summary.instruction}</p></div><span aria-hidden="true">›</span></button>
+                    <button key={summary.artifact_id} onClick={() => void openInstruction(summary)}><span>{fmtLongDate(summary.event_time)}</span><div><strong>Care instruction</strong><p>{RECEIPT_LABELS[summary.receipt.status]}</p></div><span aria-hidden="true">›</span></button>
                   ))}
                 </div>
               )}
@@ -242,15 +309,44 @@ export default function PatientViewPage({
         {tab === 'summaries' && (
           <>
             <header className="patient-view-heading"><p>Your record</p><h1>Visit Summaries</h1><span>Only patient-facing instructions from your care team appear here.</span></header>
+            {selectedInstruction && (
+              <InstructionReader
+                instruction={selectedInstruction}
+                pending={receiptPending}
+                onClose={() => setSelectedInstruction(null)}
+                onAcknowledge={acknowledgeInstruction}
+              />
+            )}
             {view.visit_summaries.summaries.length === 0 ? <div className="patient-surface patient-empty-state">No patient-facing visit summaries are available yet.</div> : (
               <div className="patient-summary-list">{view.visit_summaries.summaries.map((summary) => (
-                <article className="patient-surface patient-summary-card" key={summary.artifact_id}><time>{fmtLongDate(summary.event_time)}</time><div><h2>Care instruction</h2><p>{summary.instruction}</p>{summary.follow_up && <div className="patient-followup-note"><strong>Follow-up</strong><span>{summary.follow_up}</span></div>}</div></article>
+                <article className="patient-surface patient-summary-card" key={summary.artifact_id}><time>{fmtLongDate(summary.event_time)}</time><div><h2>Care instruction</h2><p>{RECEIPT_LABELS[summary.receipt.status]}</p><button className="patient-instruction-open" disabled={receiptPending} onClick={() => void openInstruction(summary)}>Open instruction</button></div></article>
               ))}</div>
             )}
           </>
         )}
       </main>
     </div>
+  );
+}
+
+function InstructionReader({ instruction, pending, onClose, onAcknowledge }: {
+  instruction: PatientViewInstruction;
+  pending: boolean;
+  onClose: () => void;
+  onAcknowledge: (instruction: PatientViewInstruction) => void;
+}) {
+  return (
+    <section className="patient-surface patient-instruction-reader" aria-live="polite">
+      <header><div><p>Care instruction · {fmtLongDate(instruction.event_time)}</p><h2>From your care team</h2></div><button className="link-btn" onClick={onClose}>Close</button></header>
+      <p className="patient-instruction-body">{instruction.instruction}</p>
+      {instruction.follow_up && <div className="patient-followup-note"><strong>Follow-up</strong><span>{instruction.follow_up}</span></div>}
+      <div className="patient-instruction-receipt">
+        <strong>{RECEIPT_LABELS[instruction.receipt.status]}</strong>
+        {instruction.receipt.acknowledged_at && <span>Acknowledged {fmtLongDate(instruction.receipt.acknowledged_at)}</span>}
+        <span>Acknowledging only tells the clinic you have read this instruction. It is not consent and does not complete a care task.</span>
+        {instruction.receipt.status !== 'acknowledged' && <button disabled={pending} onClick={() => onAcknowledge(instruction)}>{pending ? 'Updating…' : 'I have read this'}</button>}
+      </div>
+    </section>
   );
 }
 

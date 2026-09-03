@@ -2,7 +2,7 @@
 
 > Official scenario: 8
 > Priority: A
-> Status: DESIGN_GATE — implementation is not authorized until owner approval
+> Status: `IMPLEMENTED_WITH_LIMITS` — owner-approved policy (2026-09-02): 30 s total wall-clock deadline, connect/pool 5 s, write 10 s, read 30 s, `max_retries=0`, async cancellation, distinct `ProviderTimeoutError`. Evidence: `docs/fa5_provider_total_timeout_evidence_2026-09-02.md`.
 
 ## Outcome
 

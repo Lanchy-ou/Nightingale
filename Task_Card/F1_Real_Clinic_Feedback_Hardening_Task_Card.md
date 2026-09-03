@@ -1,6 +1,6 @@
 # F1 Task Card — Real-Clinic Feedback Hardening
 
-> Status: ACTIVE — discussion and design only until the owner approves each A workstream
+> Status: `F1_A_COMPLETE_WITH_LIMITS` — A1–A5 and final D/reason-code/browser/regression closeout completed 2026-09-02. Evidence: `docs/f1_a_closeout_2026-09-02.md`.
 > Revision window: 48-hour improvement period
 
 ## Outcome
@@ -23,7 +23,7 @@ Canonical A-level task cards, each requiring separate owner approval:
 
 F_A1 is the highest optimization priority, but F_A2 is the first implementation item because it defines the ranking, role-workflow and evidence contract that F_A1 must learn from. The summaries below do not override the individual task cards.
 
-Current status: F_A2 deterministic scope plus itemized review/action-closure hardening, F_A1 auditable Shadow foundation, F_A3 clinic-isolation defense in depth, and F_A4 log/operational privacy boundary (allowlisted stderr logging, edge access/error-log discard, fixed ASR failure codes) are implemented and verified with stated limits. Formal Glance remains A2 base-only; no model has been trained or authorized for serving. F_A3 is application query isolation plus SQLite/SQLCipher ownership enforcement, not database RLS or production multi-tenant certification. F_A4 classifies crash monitoring and Provider retention as `NOT_ESTABLISHED` and leaves clinical `AuditLog` retention to owner policy. The final reason-code stability matrix remains deliberately deferred until the complete F task set is finished.
+Current status: F_A2 deterministic scope plus itemized review/action-closure hardening, F_A1 auditable Shadow foundation, F_A3 clinic-isolation defense in depth, F_A4 log/operational privacy boundary (allowlisted stderr logging, edge access/error-log discard, fixed ASR failure codes), and F_A5 explicit Provider total timeout (30 s wall-clock deadline, async cancellation, distinct `provider_timeout`) are implemented and verified with stated limits. Formal Glance remains A2 base-only; no model has been trained or authorized for serving. F_A3 is application query isolation plus SQLite/SQLCipher ownership enforcement, not database RLS or production multi-tenant certification. F_A4 classifies crash monitoring and Provider retention as `NOT_ESTABLISHED` and leaves clinical `AuditLog` retention to owner policy. F_A5 is an MVP interaction policy, not a Provider SLA, and no live Provider timeout was observed. The final reason-code matrix is complete for mock, deterministic fallback and exact source mismatch; live Provider remains separately `NOT_RUN`.
 
 1. **Self-Learning trust and blind-spot control (scenario 15; highest optimization focus)**
    - Address the fact that interaction feedback exists only for surfaced candidates.
@@ -56,8 +56,8 @@ Current status: F_A2 deterministic scope plus itemized review/action-closure har
 - **Scenario 5:** clinic onboarding, first-admin bootstrap, patient import, and device-level versus clinic-level AI/Voice settings.
 - **Scenario 6:** synthetic Malay-English-Hokkien transcript and downstream evaluation; no real-world accuracy claim without matching evidence.
 - **Scenario 7:** real-time in-consult alerting as a separate streaming product, not a relabeling of post-consult processing.
-- **Scenario 11:** appointment/instruction delivery lifecycle, including send status, failure, retry, receipt, and escalation without pretending an external message was delivered.
-- **Scenario 12:** clinician publication gate plus correct/withdraw/notify/acknowledge behavior for patient-facing instructions.
+- **Scenario 11 (owner-narrowed B11):** authenticated Patient portal instruction visibility, deliberate open and acknowledgement receipts; external Email/SMS/WhatsApp delivery remains `NOT_IMPLEMENTED`.
+- **Scenario 12 (B12 implemented):** clinician publication gate plus correction, withdrawal and in-product new/unread behavior; acknowledgement remains the separate exact-version B11 receipt.
 
 ### C — after A and B
 
@@ -111,3 +111,14 @@ F1 is complete only when:
 - D safeguards pass regression review after all A changes;
 - the 16-scenario readiness ledger identifies exact implementation/absence, first visible break, remaining risk, and the improvement made;
 - repository status and external delivery status are reported separately.
+
+### Exit result — 2026-09-02
+
+All gates above are satisfied within the approved synthetic prototype scope.
+A/D targeted regression passed (`124` tests); full backend passed (`609`, with
+`2` existing local-ASR-input skips); frontend production build passed (`62`
+modules); Patient/Nurse/Clinician/Admin server-session browser acceptance passed
+with zero warning/error. The final 16-scenario ledger, reason-code matrix and
+repository/external-delivery status are recorded in
+`docs/f1_a_closeout_2026-09-02.md`. Live Provider and other named production
+evidence remain explicitly `NOT_RUN`, not silently counted as passes.

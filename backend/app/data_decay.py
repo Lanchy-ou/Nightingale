@@ -318,6 +318,15 @@ def run_storage_policy(
             tasks_by_artifact.setdefault(task.source_artifact_id, []).append(task)
 
     users_by_id = {user.user_id: user for user in db.scalars(select(User)).all()}
+    from .models import PatientInstructionPublication
+
+    published_instruction_ids = set(
+        db.scalars(
+            select(PatientInstructionPublication.instruction_artifact_id).where(
+                PatientInstructionPublication.state == "published"
+            )
+        ).all()
+    )
     current_instruction_ids: set[str] = set()
     instructions_by_patient: dict[str, list[tuple[Artifact, Event]]] = {}
     for artifact, event in rows:
@@ -331,6 +340,7 @@ def run_storage_policy(
             and author.clinic_id == event.clinic_id
             and isinstance(instruction, str)
             and instruction.strip()
+            and artifact.artifact_id in published_instruction_ids
         ):
             instructions_by_patient.setdefault(event.patient_id, []).append((artifact, event))
     for candidates in instructions_by_patient.values():

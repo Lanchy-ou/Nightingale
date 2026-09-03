@@ -25,6 +25,7 @@ from .llm_client import (
     InvalidOutputError,
     LLMClient,
     ProviderProtocolError,
+    ProviderTimeoutError,
     ProviderUnavailableError,
 )
 from .models import Artifact, Event, Highlight, Patient, User
@@ -139,6 +140,9 @@ def run_pipeline(
         result = client.summarize(redacted, flow_type)
     except ProviderUnavailableError:
         fallback_reason = "provider_missing"
+    except ProviderTimeoutError:
+        emit_log("provider_error", error_code="provider_timeout", level="warning")
+        fallback_reason = "provider_timeout"
     except ProviderProtocolError:
         fallback_reason = "provider_error"
     except InvalidOutputError:

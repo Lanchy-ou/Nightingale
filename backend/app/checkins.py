@@ -24,6 +24,7 @@ from .ids import stable_id
 from .llm_client import (
     InvalidOutputError,
     ProviderProtocolError,
+    ProviderTimeoutError,
     ProviderUnavailableError,
     build_client,
 )
@@ -37,6 +38,7 @@ from .models import (
     Task,
     User,
 )
+from .priority_routing import validated_priority_reason_codes
 from .redaction import redact_content, restore_placeholders, unresolved_placeholders
 from .schemas import (
     CheckInMessageOut,
@@ -143,6 +145,7 @@ def _message_payload(message: PatientCheckInMessage) -> dict:
         "created_at": message.created_at.isoformat(),
         "generation_method": generation.get("method"),
         "degraded": bool(generation.get("degraded", False)),
+        "fallback_reason": generation.get("fallback_reason"),
     }
 
 
@@ -205,6 +208,7 @@ def _message_out(message: PatientCheckInMessage) -> CheckInMessageOut:
         processing_status=message.processing_status,
         generation_method=metadata.get("method"),
         degraded=bool(metadata.get("degraded", False)),
+        fallback_reason=metadata.get("fallback_reason"),
         created_at=message.created_at,
     )
 
@@ -476,7 +480,7 @@ def _bounded_turn(
         ],
     }
     redaction = redact_content(context, _known_names(db, patient))
-    config = effective_ai_config(db)
+    config = effective_ai_config(db, patient.clinic_id)
     provider_name = config.provider
     client = (
         build_client(provider_name)
@@ -520,6 +524,8 @@ def _bounded_turn(
                 raise InvalidOutputError("provider returned medical advice language")
         except ProviderUnavailableError:
             fallback_reason = "provider_missing"
+        except ProviderTimeoutError:
+            fallback_reason = "provider_timeout"
         except ProviderProtocolError:
             fallback_reason = "provider_error"
         except InvalidOutputError:
@@ -901,7 +907,7 @@ def _summary_output(
         ]
     }
     redaction = redact_content(patient_content, _known_names(db, patient))
-    config = effective_ai_config(db)
+    config = effective_ai_config(db, patient.clinic_id)
     provider_name = config.provider
     client = (
         build_client(provider_name)
@@ -937,6 +943,8 @@ def _summary_output(
                 )
     except ProviderUnavailableError:
         fallback_reason = "provider_missing"
+    except ProviderTimeoutError:
+        fallback_reason = "provider_timeout"
     except ProviderProtocolError:
         fallback_reason = "provider_error"
     except InvalidOutputError:
@@ -975,6 +983,11 @@ def _summary_output(
         # Final resolver check is against the actual longitudinal raw Artifact.
         if extract_text(raw.content, span) != candidate.quote:
             continue
+        priority_codes = validated_priority_reason_codes(
+            source_message.text,
+            candidate.quote,
+            candidate.priority_review_reason_codes,
+        )
         entity_key = normalize_entity_key(candidate.entity_type, candidate.text)
         existing = db.scalars(
             select(Highlight).where(
@@ -1021,7 +1034,7 @@ def _summary_output(
                 score=compute_score(flags),
                 review_status=review_status,
                 conflict_with_artifact_id=conflict_with,
-                priority_review_reason_codes=list(candidate.priority_review_reason_codes),
+                priority_review_reason_codes=priority_codes,
             )
         )
         source_facts.append(
@@ -1029,7 +1042,7 @@ def _summary_output(
                 "patient_message_id": candidate.patient_message_id,
                 "quote": candidate.quote,
                 "text": candidate.text,
-                "priority_review_reason_codes": list(candidate.priority_review_reason_codes),
+                "priority_review_reason_codes": priority_codes,
             }
         )
         recompute.extend(item.highlight_id for item in existing)

@@ -332,6 +332,7 @@ class CheckInMessageOut(BaseModel):
     processing_status: str | None
     generation_method: str | None = None
     degraded: bool = False
+    fallback_reason: str | None = None
     created_at: datetime
 
 
@@ -709,10 +710,64 @@ class PatientViewInstruction(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     artifact_id: str
+    artifact_version: int
     event_id: str
     event_time: datetime
     instruction: str
     follow_up: str | None = None
+    receipt: "PatientInstructionReceiptOut"
+
+
+class PatientInstructionReceiptOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["not_viewed", "viewed", "acknowledged"]
+    opened_at: datetime | None
+    acknowledged_at: datetime | None
+
+
+class PatientInstructionReceiptHistoryOut(PatientInstructionReceiptOut):
+    artifact_id: str
+    artifact_version: int
+
+
+class PatientInstructionPublishRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    expected_state: Literal["draft"]
+
+
+class PatientInstructionCorrectionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    expected_state: Literal["published"]
+    correction_id: str = Field(min_length=1, max_length=128)
+    content: dict
+
+
+class PatientInstructionWithdrawRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    expected_state: Literal["published"]
+    reason_code: Literal[
+        "entered_in_error", "no_longer_applicable", "replaced_elsewhere"
+    ]
+
+
+class PatientInstructionPublicationOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_id: str
+    artifact_version: int
+    lineage_id: str
+    lineage_revision: int
+    state: Literal["draft", "published", "superseded", "withdrawn"]
+    created_at: datetime
+    published_at: datetime | None
+    superseded_at: datetime | None
+    superseded_by_artifact_id: str | None
+    withdrawn_at: datetime | None
+    withdrawal_reason_code: str | None
 
 
 class PatientViewUpcoming(BaseModel):
@@ -1090,3 +1145,113 @@ class LogoutOut(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     status: Literal["logged_out"]
+
+
+# --- F_B5 Clinic onboarding ------------------------------------------------
+class OnboardingPreviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    token: str = Field(min_length=1, max_length=512)
+
+
+class OnboardingPreviewOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["valid", "used", "expired"]
+    expires_at: datetime
+
+
+class OnboardingCompleteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    token: str = Field(min_length=1, max_length=512)
+    clinic_name: str = Field(min_length=1, max_length=255)
+    admin_name: str = Field(min_length=1, max_length=255)
+    email: str = Field(min_length=3, max_length=255)
+    password: str = Field(min_length=8, max_length=128)
+
+
+class OnboardingCompleteOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    clinic_id: str
+    user_id: str
+    email: str
+    login_required: Literal[True] = True
+
+
+# --- F_B5 Patient import ---------------------------------------------------
+class PatientImportRowOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    row_number: int
+    external_patient_id: str
+    name: str
+    status: Literal["ready", "imported", "unchanged", "invalid", "conflict"]
+    error_code: str | None
+    patient_id: str | None
+
+
+class PatientImportBatchOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    batch_id: str
+    source_system: str
+    content_sha256: str
+    status: Literal["previewed", "committed"]
+    counts: dict[str, int]
+    rows: list[PatientImportRowOut]
+    created_at: datetime
+    committed_at: datetime | None
+
+
+# --- F_B5 Clinic settings --------------------------------------------------
+class ClinicAISettingsOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    selected_mode: Literal["inherit", "local", "deepseek"]
+    effective_mode: Literal["local", "deepseek"]
+    inherited: bool
+    provider_available: bool
+    online_text_egress: bool
+
+
+class ClinicVoiceSettingsOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    selected_mode: Literal["inherit", "enabled", "disabled"]
+    effective_enabled: bool
+    inherited: bool
+    provider: str
+    model_status: Literal["missing", "downloading", "ready", "failed"]
+    model: str
+    revision: str
+    download_bytes_approx: int
+    storage_mode: Literal["sqlite", "sqlcipher"]
+    warning: str | None
+    error_code: str | None
+
+
+class ClinicSettingsOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scope: Literal["clinic"] = "clinic"
+    clinic_id: str
+    version: int
+    ai: ClinicAISettingsOut
+    voice: ClinicVoiceSettingsOut
+    updated_at: datetime
+
+
+class ClinicSettingsUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    expected_version: int = Field(ge=1)
+    ai_mode: Literal["inherit", "local", "deepseek"] | None = None
+    voice_mode: Literal["inherit", "enabled", "disabled"] | None = None
+
+    @model_validator(mode="after")
+    def requires_change(self):
+        if self.ai_mode is None and self.voice_mode is None:
+            raise ValueError("at least one setting is required")
+        return self

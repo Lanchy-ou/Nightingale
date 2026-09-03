@@ -61,7 +61,7 @@ Replay reports content-free counts and comparison metrics, including candidate/e
 ## Remaining gates before any model training or serving promotion
 
 - Define numeric evidence-volume, coverage and inter-rater thresholds from real-clinic evidence.
-- Complete the deferred F-task reason-code stability matrix with mock, fallback and live Provider reported separately.
+- Reason-code stability matrix is complete for mock, deterministic fallback and exact source mismatch; live Provider remains separately `NOT_RUN` (`docs/f1_a_closeout_2026-09-02.md`).
 - Obtain external clinical review of medical trigger definitions and protected categories.
 - Approve a separate model-training card, frozen dataset, evaluation protocol, rollback trigger and promotion decision.
 

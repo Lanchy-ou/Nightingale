@@ -36,6 +36,8 @@ def test_patient_and_ai_bubbles_confirmation_and_safety_are_explicit():
         "current.safety_message",
     ):
         assert label in source
+    assert "message.fallback_reason === 'provider_timeout'" in source
+    assert "The AI provider timed out, so this reply uses the safe fallback." in source
 
 
 def test_clinical_reader_separates_patient_ai_summary_and_exact_sources():

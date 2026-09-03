@@ -71,12 +71,12 @@ _MODE_SPEAKERS = {
 ACCEPTED_AUDIO_MIME_TYPES = ["audio/webm", "audio/ogg", "audio/wav"]
 
 
-def _voice_enabled(db: Session) -> bool:
-    return effective_voice_enabled(db)
+def _voice_enabled(db: Session, clinic_id: str) -> bool:
+    return effective_voice_enabled(db, clinic_id)
 
 
-def _require_voice_enabled(db: Session) -> None:
-    if not _voice_enabled(db):
+def _require_voice_enabled(db: Session, clinic_id: str) -> None:
+    if not _voice_enabled(db, clinic_id):
         raise resource_not_found()
     provider = _asr_provider(db)
     if provider not in {"mock", "faster_whisper"}:
@@ -94,7 +94,7 @@ def voice_capabilities(
     db: Session = Depends(get_db), ctx: RoleContext = Depends(require_auth)
 ):
     provider = _asr_provider(db)
-    enabled = _voice_enabled(db)
+    enabled = _voice_enabled(db, ctx.clinic_id)
     eligible_modes = [
         mode for mode, role in _MODE_ROLE.items() if role == ctx.role
     ]
@@ -252,7 +252,7 @@ def create_capture(
     db: Session = Depends(get_db),
     ctx: RoleContext = Depends(require_auth),
 ):
-    _require_voice_enabled(db)
+    _require_voice_enabled(db, ctx.clinic_id)
     patient = load_patient(db, ctx, body.patient_id)
     if patient is None:
         raise resource_not_found()
@@ -364,7 +364,7 @@ async def upload_capture_audio(
     db: Session = Depends(get_db),
     ctx: RoleContext = Depends(require_auth),
 ):
-    _require_voice_enabled(db)
+    _require_voice_enabled(db, ctx.clinic_id)
     capture = _get_capture(db, ctx, capture_id)
     _authorize_capture(capture, ctx, "upload_voice_audio")
     upload_key = _operation_key(idempotency_key, "upload")
@@ -480,7 +480,7 @@ def transcribe_capture(
     db: Session = Depends(get_db),
     ctx: RoleContext = Depends(require_auth),
 ):
-    _require_voice_enabled(db)
+    _require_voice_enabled(db, ctx.clinic_id)
     capture = _get_capture(db, ctx, capture_id)
     _authorize_capture(capture, ctx, "transcribe_voice_capture")
     if capture.transcribe_key == body.idempotency_key:
@@ -681,7 +681,7 @@ def review_capture_segments(
     db: Session = Depends(get_db),
     ctx: RoleContext = Depends(require_auth),
 ):
-    _require_voice_enabled(db)
+    _require_voice_enabled(db, ctx.clinic_id)
     capture = _get_capture(db, ctx, capture_id)
     _authorize_capture(capture, ctx, "review_voice_transcript")
     if capture.revision != body.expected_revision:
@@ -725,7 +725,7 @@ def confirm_capture(
     db: Session = Depends(get_db),
     ctx: RoleContext = Depends(require_auth),
 ):
-    _require_voice_enabled(db)
+    _require_voice_enabled(db, ctx.clinic_id)
     capture = _get_capture(db, ctx, capture_id)
     _authorize_capture(capture, ctx, "confirm_voice_transcript")
     if capture.confirm_key == body.idempotency_key and capture.status == CaptureStatus.PROCESSED.value:

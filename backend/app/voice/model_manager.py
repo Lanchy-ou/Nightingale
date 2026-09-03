@@ -89,3 +89,20 @@ def start_model_download(on_finished: Callable[[str], None] | None = None) -> di
 
     threading.Thread(target=run, name="nantingale-voice-model", daemon=True).start()
     return model_status()
+
+
+def prepare_model_blocking() -> None:
+    """Deployment CLI entry: prepare and validate the pinned model synchronously."""
+    with _lock:
+        if asr_runtime_ready("faster_whisper"):
+            _state.update(status="ready", error_code=None)
+            return
+        _state.update(status="downloading", error_code=None)
+    try:
+        _prepare()
+    except Exception:
+        with _lock:
+            _state.update(status="failed", error_code="model_download_failed")
+        raise
+    with _lock:
+        _state.update(status="ready", error_code=None)

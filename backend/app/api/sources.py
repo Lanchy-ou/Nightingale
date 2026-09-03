@@ -88,7 +88,7 @@ def _ingest_common(
     ctx: RoleContext,
     patient_visible: bool,
 ):
-    config = effective_ai_config(db)
+    config = effective_ai_config(db, event.clinic_id)
     provider_name = config.provider
     client = (
         build_client(provider_name)

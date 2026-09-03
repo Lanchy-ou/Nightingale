@@ -17,7 +17,7 @@ from ..credential_store import (
     store_secret,
 )
 from ..db import DATABASE_MODE, SessionLocal, get_db
-from ..llm_client import DeepSeekAdapter
+from ..llm_client import DeepSeekAdapter, ProviderTimeoutError
 from ..models import SystemSettings
 from ..role_context import RoleContext
 from ..schemas import (
@@ -161,6 +161,9 @@ def verify_and_store_deepseek_key(
     key = body.api_key.get_secret_value().strip()
     try:
         DeepSeekAdapter(api_key=key).verify_connection()
+    except ProviderTimeoutError:
+        # A timed-out probe never saves the key.
+        raise HTTPException(status_code=503, detail="DeepSeek connection verification timed out")
     except Exception:
         raise HTTPException(status_code=503, detail="DeepSeek connection verification failed")
     row = db.get(SystemSettings, SETTINGS_ID)

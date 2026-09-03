@@ -30,7 +30,7 @@ def query_copilot(
     # Scope precedes the clinician-only permission, preserving uniform 404 for
     # absent/cross-clinic records and refusing patient/staff/admin use.
     authorize(ctx, "query_copilot", patient.clinic_id, patient.patient_id)
-    config = effective_ai_config(db)
+    config = effective_ai_config(db, patient.clinic_id)
     client = (
         build_client(config.provider)
         if config.api_key is None

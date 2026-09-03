@@ -290,7 +290,11 @@ export default function PatientCheckIn({
                 >
                   <small>{message.role === 'patient' ? 'Patient' : aiLabel(message.generation_method, message.degraded)}</small>
                   <p>{message.text}</p>
-                  {message.role === 'ai' && message.degraded && <em>Prepared with the safe fallback</em>}
+                  {message.role === 'ai' && message.degraded && (
+                    <em>{message.fallback_reason === 'provider_timeout'
+                      ? 'Your words were saved. The AI provider timed out, so this reply uses the safe fallback.'
+                      : 'Prepared with the safe fallback'}</em>
+                  )}
                 </div>
               ))}
               {machine.status === 'saving' && <div className="patient-checkin-progress">Saving your original words safely…</div>}

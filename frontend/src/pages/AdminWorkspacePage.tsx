@@ -4,8 +4,9 @@ import type { AdminAccessAudit, AdminUser, CurrentIdentity } from '../types';
 import AdminInvitesPage from './AdminInvitesPage';
 import AdminSettingsPage from './AdminSettingsPage';
 import AdminLearningPage from './AdminLearningPage';
+import AdminPatientImportsPage from './AdminPatientImportsPage';
 
-type AdminTab = 'overview' | 'invites' | 'audit' | 'settings' | 'learning';
+type AdminTab = 'overview' | 'invites' | 'imports' | 'audit' | 'settings' | 'learning';
 
 function formatDate(value: string | null): string {
   if (!value) return '—';
@@ -123,6 +124,7 @@ export default function AdminWorkspacePage({
         <nav className="admin-nav">
           <button className={tab === 'overview' ? 'active' : ''} onClick={() => selectTab('overview')}>Overview</button>
           <button className={tab === 'invites' ? 'active' : ''} onClick={() => selectTab('invites')}>Invites</button>
+          <button className={tab === 'imports' ? 'active' : ''} onClick={() => selectTab('imports')}>Patient import</button>
           <button className={tab === 'audit' ? 'active' : ''} onClick={() => selectTab('audit')}>Access &amp; security audit</button>
           <button className={tab === 'settings' ? 'active' : ''} onClick={() => selectTab('settings')}>AI &amp; Voice settings</button>
           <button className={tab === 'learning' ? 'active' : ''} onClick={() => selectTab('learning')}>Shadow Learning</button>
@@ -135,7 +137,7 @@ export default function AdminWorkspacePage({
         <header className="admin-workspace-head">
           <div>
             <p className="eyebrow">Identity and access oversight</p>
-            <h1>{tab === 'overview' ? 'Admin Overview' : tab === 'invites' ? 'Clinic Invites' : tab === 'audit' ? 'Access & Security Audit' : tab === 'learning' ? 'Shadow Learning' : 'AI & Voice Settings'}</h1>
+            <h1>{tab === 'overview' ? 'Admin Overview' : tab === 'invites' ? 'Clinic Invites' : tab === 'imports' ? 'Patient Import' : tab === 'audit' ? 'Access & Security Audit' : tab === 'learning' ? 'Shadow Learning' : 'AI & Voice Settings'}</h1>
             <p>{identity.clinic_name} · Administrative controls never grant clinical authoring authority.</p>
           </div>
           <span className="admin-role-badge">Admin</span>
@@ -186,6 +188,7 @@ export default function AdminWorkspacePage({
         {!loading && tab === 'invites' && (
           <AdminInvitesPage clinicName={identity.clinic_name} onLogout={onLogout} embedded />
         )}
+        {!loading && tab === 'imports' && <AdminPatientImportsPage />}
 
         {!loading && tab === 'audit' && (
           <section className="admin-surface">

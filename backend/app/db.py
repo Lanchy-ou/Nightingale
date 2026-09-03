@@ -339,7 +339,79 @@ def migrate_phase_e_schema(target_engine: Engine = engine) -> None:
     migrate_fa2_schema(target_engine)
     migrate_sl1_schema(target_engine)
     migrate_fa1_schema(target_engine)
+    migrate_b12_schema(target_engine)
+    migrate_b11_schema(target_engine)
+    migrate_fb5_schema(target_engine)
     install_clinic_isolation_schema(target_engine)
+
+
+def migrate_b11_schema(target_engine: Engine = engine) -> None:
+    """Create and backfill exact-version portal receipts for existing instructions."""
+    from .instruction_receipts import ensure_available_receipt, is_patient_instruction_available
+    from .instruction_publications import is_instruction_published
+    from .models import Artifact, Event, PatientInstructionReceipt
+
+    PatientInstructionReceipt.__table__.create(bind=target_engine, checkfirst=True)
+    schema = inspect(target_engine)
+    tables = set(schema.get_table_names())
+    if not {"artifacts", "events", "users"} <= tables:
+        return
+    artifact_columns = {column["name"] for column in schema.get_columns("artifacts")}
+    event_columns = {column["name"] for column in schema.get_columns("events")}
+    if not {
+        "artifact_id", "event_id", "artifact_type", "author_role", "author_id",
+        "content", "version",
+    } <= artifact_columns or not {"event_id", "clinic_id", "patient_id"} <= event_columns:
+        return
+    migration_session = sessionmaker(
+        bind=target_engine, autoflush=False, autocommit=False, future=True
+    )
+    with migration_session() as db:
+        rows = db.execute(
+            select(Artifact, Event)
+            .join(Event, Event.event_id == Artifact.event_id)
+            .where(Artifact.artifact_type == "patient_instruction")
+        ).all()
+        for artifact, event in rows:
+            if (
+                is_patient_instruction_available(db, artifact, event)
+                and is_instruction_published(db, artifact, event)
+            ):
+                ensure_available_receipt(db, artifact, event)
+        db.commit()
+
+
+def migrate_b12_schema(target_engine: Engine = engine) -> None:
+    """Create publication authority rows and treat legacy visible instructions as published."""
+    from .instruction_publications import ensure_legacy_published
+    from .instruction_receipts import is_patient_instruction_available
+    from .models import Artifact, Event, PatientInstructionPublication
+
+    PatientInstructionPublication.__table__.create(bind=target_engine, checkfirst=True)
+    schema = inspect(target_engine)
+    tables = set(schema.get_table_names())
+    if not {"artifacts", "events", "users"} <= tables:
+        return
+    artifact_columns = {column["name"] for column in schema.get_columns("artifacts")}
+    event_columns = {column["name"] for column in schema.get_columns("events")}
+    if not {
+        "artifact_id", "event_id", "artifact_type", "author_role", "author_id",
+        "content", "version", "created_at",
+    } <= artifact_columns or not {"event_id", "clinic_id", "patient_id"} <= event_columns:
+        return
+    migration_session = sessionmaker(
+        bind=target_engine, autoflush=False, autocommit=False, future=True
+    )
+    with migration_session() as db:
+        rows = db.execute(
+            select(Artifact, Event)
+            .join(Event, Event.event_id == Artifact.event_id)
+            .where(Artifact.artifact_type == "patient_instruction")
+        ).all()
+        for artifact, event in rows:
+            if is_patient_instruction_available(db, artifact, event):
+                ensure_legacy_published(db, artifact, event)
+        db.commit()
 
 
 def migrate_fa2_schema(target_engine: Engine = engine) -> None:
@@ -501,6 +573,41 @@ def migrate_system_settings_schema(target_engine: Engine = engine) -> None:
     SystemSettings.__table__.create(bind=target_engine, checkfirst=True)
 
 
+def migrate_fb5_schema(target_engine: Engine = engine) -> None:
+    """Add clinic onboarding, scoped settings, and patient-import tables."""
+    from . import models as _core_models  # noqa: F401
+    from .models import (
+        ClinicOnboardingToken,
+        ClinicSettings,
+        PatientExternalIdentity,
+        PatientImportBatch,
+        PatientImportRow,
+    )
+
+    existing = set(inspect(target_engine).get_table_names())
+    if not {"clinics", "users", "patients"} <= existing:
+        # Historical migration tests may use intentionally skeletal tables.
+        # A real clean install calls Base.metadata.create_all first; an existing
+        # operational database has all three ownership roots.
+        return
+    for table in (
+        ClinicOnboardingToken,
+        ClinicSettings,
+        PatientExternalIdentity,
+        PatientImportBatch,
+        PatientImportRow,
+    ):
+        table.__table__.create(bind=target_engine, checkfirst=True)
+    with target_engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT OR IGNORE INTO clinic_settings "
+                "(clinic_id, ai_mode_override, voice_enabled_override, version, updated_by, updated_at) "
+                "SELECT clinic_id, NULL, NULL, 1, NULL, CURRENT_TIMESTAMP FROM clinics"
+            )
+        )
+
+
 _A3_INDEX_DDL = (
     "CREATE INDEX IF NOT EXISTS ix_events_scope_timeline ON events (clinic_id, patient_id, started_at, event_id)",
     "CREATE INDEX IF NOT EXISTS ix_highlights_patient_event ON highlights (patient_id, event_id, highlight_id)",
@@ -510,6 +617,9 @@ _A3_INDEX_DDL = (
     "CREATE INDEX IF NOT EXISTS ix_learning_signals_scope_decision ON learning_signals (clinic_id, decision_id, created_at)",
     "CREATE INDEX IF NOT EXISTS ix_checkins_scope_direct ON patient_checkin_sessions (clinic_id, patient_id, session_id)",
     "CREATE INDEX IF NOT EXISTS ix_voice_scope_direct ON voice_captures (clinic_id, patient_id, capture_id)",
+    "CREATE INDEX IF NOT EXISTS ix_clinic_settings_scope ON clinic_settings (clinic_id, version)",
+    "CREATE INDEX IF NOT EXISTS ix_patient_external_scope ON patient_external_identities (clinic_id, patient_id)",
+    "CREATE INDEX IF NOT EXISTS ix_patient_import_scope ON patient_import_batches (clinic_id, created_at, batch_id)",
     "CREATE INDEX IF NOT EXISTS ix_care_workflows_scope ON care_workflows (clinic_id, patient_id, status, workflow_id)",
     "CREATE INDEX IF NOT EXISTS ix_workflow_links_scope ON workflow_links (clinic_id, patient_id, workflow_id, to_id)",
 )
@@ -880,6 +990,80 @@ _A3_TRIGGER_DDL = (
     ))
     BEGIN SELECT RAISE(ABORT, 'ownership:voice_scope'); END
     """,
+    """
+    CREATE TRIGGER IF NOT EXISTS a3_clinic_settings_scope_insert
+    BEFORE INSERT ON clinic_settings
+    WHEN NEW.updated_by IS NOT NULL AND NOT EXISTS (
+        SELECT 1 FROM users u
+        WHERE u.user_id = NEW.updated_by AND u.clinic_id = NEW.clinic_id
+    )
+    BEGIN SELECT RAISE(ABORT, 'ownership:clinic_settings_scope'); END
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS a3_clinic_settings_scope_update
+    BEFORE UPDATE OF clinic_id, updated_by ON clinic_settings
+    WHEN NEW.updated_by IS NOT NULL AND NOT EXISTS (
+        SELECT 1 FROM users u
+        WHERE u.user_id = NEW.updated_by AND u.clinic_id = NEW.clinic_id
+    )
+    BEGIN SELECT RAISE(ABORT, 'ownership:clinic_settings_scope'); END
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS a3_patient_external_scope_insert
+    BEFORE INSERT ON patient_external_identities
+    WHEN NOT EXISTS (
+        SELECT 1 FROM patients p
+        WHERE p.patient_id = NEW.patient_id AND p.clinic_id = NEW.clinic_id
+    )
+    BEGIN SELECT RAISE(ABORT, 'ownership:patient_external_scope'); END
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS a3_patient_external_scope_update
+    BEFORE UPDATE OF clinic_id, patient_id ON patient_external_identities
+    WHEN NOT EXISTS (
+        SELECT 1 FROM patients p
+        WHERE p.patient_id = NEW.patient_id AND p.clinic_id = NEW.clinic_id
+    )
+    BEGIN SELECT RAISE(ABORT, 'ownership:patient_external_scope'); END
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS a3_patient_import_batch_scope_insert
+    BEFORE INSERT ON patient_import_batches
+    WHEN NOT EXISTS (
+        SELECT 1 FROM users u
+        WHERE u.user_id = NEW.created_by AND u.clinic_id = NEW.clinic_id
+    )
+    BEGIN SELECT RAISE(ABORT, 'ownership:patient_import_batch_scope'); END
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS a3_patient_import_batch_scope_update
+    BEFORE UPDATE OF clinic_id, created_by ON patient_import_batches
+    WHEN NOT EXISTS (
+        SELECT 1 FROM users u
+        WHERE u.user_id = NEW.created_by AND u.clinic_id = NEW.clinic_id
+    )
+    BEGIN SELECT RAISE(ABORT, 'ownership:patient_import_batch_scope'); END
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS a3_patient_import_row_scope_insert
+    BEFORE INSERT ON patient_import_rows
+    WHEN NEW.patient_id IS NOT NULL AND NOT EXISTS (
+        SELECT 1 FROM patient_import_batches b JOIN patients p
+          ON p.patient_id = NEW.patient_id AND p.clinic_id = b.clinic_id
+        WHERE b.batch_id = NEW.batch_id
+    )
+    BEGIN SELECT RAISE(ABORT, 'ownership:patient_import_row_scope'); END
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS a3_patient_import_row_scope_update
+    BEFORE UPDATE OF batch_id, patient_id ON patient_import_rows
+    WHEN NEW.patient_id IS NOT NULL AND NOT EXISTS (
+        SELECT 1 FROM patient_import_batches b JOIN patients p
+          ON p.patient_id = NEW.patient_id AND p.clinic_id = b.clinic_id
+        WHERE b.batch_id = NEW.batch_id
+    )
+    BEGIN SELECT RAISE(ABORT, 'ownership:patient_import_row_scope'); END
+    """,
 )
 
 
@@ -897,6 +1081,10 @@ _A3_PREFLIGHT = {
     "glance_projection_scope": "SELECT COUNT(*) FROM glance_projections g LEFT JOIN highlights h ON h.highlight_id=g.highlight_id AND h.patient_id=g.patient_id LEFT JOIN events e ON e.event_id=h.event_id AND e.patient_id=g.patient_id AND e.clinic_id=g.clinic_id WHERE h.highlight_id IS NULL OR e.event_id IS NULL",
     "checkin_scope": "SELECT COUNT(*) FROM patient_checkin_sessions s LEFT JOIN patients p ON p.patient_id=s.patient_id AND p.clinic_id=s.clinic_id LEFT JOIN events e ON e.event_id=s.event_id AND e.patient_id=s.patient_id AND e.clinic_id=s.clinic_id LEFT JOIN artifacts a ON a.artifact_id=s.raw_artifact_id AND a.event_id=s.event_id LEFT JOIN users u ON u.user_id=s.patient_user_id AND u.patient_id=s.patient_id AND u.clinic_id=s.clinic_id WHERE p.patient_id IS NULL OR e.event_id IS NULL OR a.artifact_id IS NULL OR u.user_id IS NULL",
     "voice_scope": "SELECT COUNT(*) FROM voice_captures v LEFT JOIN patients p ON p.patient_id=v.patient_id AND p.clinic_id=v.clinic_id LEFT JOIN users u ON u.user_id=v.created_by AND u.clinic_id=v.clinic_id LEFT JOIN events e ON e.event_id=v.event_id AND e.patient_id=v.patient_id AND e.clinic_id=v.clinic_id LEFT JOIN artifacts a ON a.artifact_id=v.transcript_artifact_id LEFT JOIN events ae ON ae.event_id=a.event_id AND ae.patient_id=v.patient_id AND ae.clinic_id=v.clinic_id WHERE p.patient_id IS NULL OR u.user_id IS NULL OR (v.event_id IS NOT NULL AND e.event_id IS NULL) OR (v.transcript_artifact_id IS NOT NULL AND (a.artifact_id IS NULL OR ae.event_id IS NULL))",
+    "clinic_settings_scope": "SELECT COUNT(*) FROM clinic_settings s LEFT JOIN users u ON u.user_id=s.updated_by AND u.clinic_id=s.clinic_id WHERE s.updated_by IS NOT NULL AND u.user_id IS NULL",
+    "patient_external_scope": "SELECT COUNT(*) FROM patient_external_identities x LEFT JOIN patients p ON p.patient_id=x.patient_id AND p.clinic_id=x.clinic_id WHERE p.patient_id IS NULL",
+    "patient_import_batch_scope": "SELECT COUNT(*) FROM patient_import_batches b LEFT JOIN users u ON u.user_id=b.created_by AND u.clinic_id=b.clinic_id WHERE u.user_id IS NULL",
+    "patient_import_row_scope": "SELECT COUNT(*) FROM patient_import_rows r JOIN patient_import_batches b ON b.batch_id=r.batch_id LEFT JOIN patients p ON p.patient_id=r.patient_id AND p.clinic_id=b.clinic_id WHERE r.patient_id IS NOT NULL AND p.patient_id IS NULL",
     "care_workflow_scope": "SELECT COUNT(*) FROM care_workflows w LEFT JOIN patients p ON p.patient_id=w.patient_id AND p.clinic_id=w.clinic_id LEFT JOIN events e ON e.event_id=w.root_event_id AND e.patient_id=w.patient_id AND e.clinic_id=w.clinic_id LEFT JOIN users u ON u.user_id=w.created_by_user_id AND u.clinic_id=w.clinic_id AND u.role=w.created_by_role WHERE p.patient_id IS NULL OR e.event_id IS NULL OR (w.created_by_user_id IS NOT NULL AND u.user_id IS NULL)",
     "workflow_link_scope": "SELECT COUNT(*) FROM workflow_links l LEFT JOIN care_workflows w ON w.workflow_id=l.workflow_id AND w.clinic_id=l.clinic_id AND w.patient_id=l.patient_id LEFT JOIN tasks t ON t.task_id=l.to_id AND t.workflow_id=l.workflow_id AND t.clinic_id=l.clinic_id AND t.patient_id=l.patient_id LEFT JOIN tasks f ON l.from_type='task' AND f.task_id=l.from_id AND f.workflow_id=l.workflow_id AND f.clinic_id=l.clinic_id AND f.patient_id=l.patient_id WHERE w.workflow_id IS NULL OR t.task_id IS NULL OR (l.from_type='event' AND (w.root_event_id!=l.from_id OR l.relation_type NOT IN ('triggered_review','triggered_action'))) OR (l.from_type='task' AND (f.task_id IS NULL OR l.relation_type IN ('triggered_review','triggered_action') OR l.from_id=l.to_id))",
 }
@@ -911,12 +1099,23 @@ def install_clinic_isolation_schema(target_engine: Engine = engine) -> None:
     """
     if target_engine.dialect.name != "sqlite":
         raise RuntimeError("A3 clinic-isolation schema currently supports SQLite/SQLCipher only")
+    initial_tables = set(inspect(target_engine).get_table_names())
+    fb5_tables = {
+        "clinic_settings",
+        "patient_external_identities",
+        "patient_import_batches",
+        "patient_import_rows",
+    }
+    if {"clinics", "users", "patients"} <= initial_tables and not fb5_tables <= initial_tables:
+        migrate_fb5_schema(target_engine)
     with target_engine.begin() as connection:
         tables = set(inspect(connection).get_table_names())
         required = {
             "patients", "users", "events", "artifacts", "highlights", "tasks",
             "glance_projections", "ranking_runs", "ranking_decisions",
             "learning_signals", "patient_checkin_sessions", "voice_captures",
+            "clinic_settings", "patient_external_identities",
+            "patient_import_batches", "patient_import_rows",
             "care_workflows", "workflow_links",
         }
         if not required <= tables:

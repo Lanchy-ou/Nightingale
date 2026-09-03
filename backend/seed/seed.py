@@ -20,6 +20,8 @@ from app.models import (
     AuditLog,
     AuthSession,
     Clinic,
+    ClinicOnboardingToken,
+    ClinicSettings,
     Comment,
     CareWorkflow,
     Event,
@@ -31,8 +33,13 @@ from app.models import (
     LearningPolicyVersion,
     LearningSignal,
     Patient,
+    PatientExternalIdentity,
+    PatientImportBatch,
+    PatientImportRow,
     PatientCheckInMessage,
     PatientCheckInSession,
+    PatientInstructionReceipt,
+    PatientInstructionPublication,
     PatientReviewItem,
     RankingDecision,
     RankingRun,
@@ -75,13 +82,53 @@ def _backfill_versions(db: Session) -> None:
     db.commit()
 
 
+def _backfill_instruction_receipts(db: Session) -> None:
+    from app.instruction_receipts import ensure_available_receipt, is_patient_instruction_available
+    from app.instruction_publications import is_instruction_published
+
+    rows = db.execute(
+        select(Artifact, Event)
+        .join(Event, Event.event_id == Artifact.event_id)
+        .where(Artifact.artifact_type == "patient_instruction")
+    ).all()
+    for artifact, event in rows:
+        if (
+            is_patient_instruction_available(db, artifact, event)
+            and is_instruction_published(db, artifact, event)
+        ):
+            ensure_available_receipt(db, artifact, event)
+    db.commit()
+
+
+def _backfill_instruction_publications(db: Session) -> None:
+    from app.instruction_publications import ensure_legacy_published
+    from app.instruction_receipts import is_patient_instruction_available
+
+    rows = db.execute(
+        select(Artifact, Event)
+        .join(Event, Event.event_id == Artifact.event_id)
+        .where(Artifact.artifact_type == "patient_instruction")
+    ).all()
+    for artifact, event in rows:
+        if is_patient_instruction_available(db, artifact, event):
+            ensure_legacy_published(db, artifact, event)
+    db.commit()
+
+
 def seed(db: Session) -> None:
     # Clear in FK-safe order (children first). D1 identity tables reference
     # users/patients/clinics and are cleared before them.
     db.execute(delete(VoiceCaptureRecord))
+    db.execute(delete(ClinicSettings))
+    db.execute(delete(ClinicOnboardingToken))
+    db.execute(delete(PatientImportRow))
+    db.execute(delete(PatientImportBatch))
+    db.execute(delete(PatientExternalIdentity))
     db.execute(delete(SystemSettings))
     db.execute(delete(PatientCheckInMessage))
     db.execute(delete(PatientCheckInSession))
+    db.execute(delete(PatientInstructionReceipt))
+    db.execute(delete(PatientInstructionPublication))
     db.execute(delete(AuditLog))
     db.execute(delete(LearningEvaluation))
     db.execute(delete(LearningSignal))
@@ -119,6 +166,8 @@ def seed(db: Session) -> None:
     db.commit()
     db.add_all(fixture.build_artifacts())
     db.commit()
+    _backfill_instruction_publications(db)
+    _backfill_instruction_receipts(db)
     db.add_all(fixture.build_tasks())
     db.add_all(fixture.build_task_audits())
     db.add_all(fixture.build_comments())

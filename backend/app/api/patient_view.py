@@ -27,7 +27,8 @@ from sqlalchemy.orm import Session
 from ..authz import authorize, require_auth, resource_not_found
 from ..db import get_db
 from ..clinic_scope import load_patient
-from ..models import Artifact, Event, Patient, Task, User
+from ..models import Artifact, Event, Patient, PatientInstructionPublication, Task, User
+from ..instruction_receipts import get_receipt, public_status
 from ..role_context import RoleContext
 from ..schemas import (
     PatientViewInstruction,
@@ -62,6 +63,15 @@ def _project(content: dict) -> tuple[str | None, str | None]:
     return instruction, follow_up
 
 
+def _receipt_projection(db: Session, artifact: Artifact) -> dict:
+    receipt = get_receipt(db, artifact.artifact_id, artifact.version)
+    return {
+        "status": public_status(receipt),
+        "opened_at": receipt.opened_at if receipt else None,
+        "acknowledged_at": receipt.acknowledged_at if receipt else None,
+    }
+
+
 @router.get("/patients/{patient_id}/patient-view", response_model=PatientViewOut)
 def get_patient_view(
     patient_id: str,
@@ -81,6 +91,11 @@ def get_patient_view(
         select(Artifact, Event)
         .join(Event, Artifact.event_id == Event.event_id)
         .join(User, Artifact.author_id == User.user_id)
+        .join(
+            PatientInstructionPublication,
+            (PatientInstructionPublication.instruction_artifact_id == Artifact.artifact_id)
+            & (PatientInstructionPublication.artifact_version == Artifact.version),
+        )
         .where(
             Event.patient_id == patient_id,
             Event.clinic_id == patient.clinic_id,
@@ -88,6 +103,9 @@ def get_patient_view(
             Artifact.author_role == "clinician",
             User.role == "clinician",
             User.clinic_id == patient.clinic_id,
+            PatientInstructionPublication.state == "published",
+            PatientInstructionPublication.clinic_id == Event.clinic_id,
+            PatientInstructionPublication.patient_id == Event.patient_id,
         )
     ).all()
 
@@ -107,10 +125,12 @@ def get_patient_view(
     instructions = [
         PatientViewInstruction(
             artifact_id=a.artifact_id,
+            artifact_version=a.version,
             event_id=e.event_id,
             event_time=e.started_at,
             instruction=instruction,
             follow_up=follow_up,
+            receipt=_receipt_projection(db, a),
         )
         for a, e, instruction, follow_up in projected
     ]
@@ -120,10 +140,12 @@ def get_patient_view(
         a, e, instruction, follow_up = projected[0]
         current_instruction = PatientViewInstruction(
             artifact_id=a.artifact_id,
+            artifact_version=a.version,
             event_id=e.event_id,
             event_time=e.started_at,
             instruction=instruction,
             follow_up=follow_up,
+            receipt=_receipt_projection(db, a),
         )
 
     # --- sessions (own AI sessions only) ----------------------------------

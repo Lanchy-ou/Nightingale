@@ -9,18 +9,29 @@
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
 from typing import Protocol
 
 from .extraction import AISummaryResult, Candidate
+from .priority_routing import validated_priority_reason_codes
 from .schemas import CheckInSummaryCandidate, CheckInSummaryResult, CheckInTurnResult
 from .redaction import RedactedContent
 from .operational_logging import emit_log
 from .copilot_models import CopilotProviderClaim, CopilotProviderResult
 
 DEEPSEEK_BASE_URL = "https://api.deepseek.com/anthropic"
+
+# F_A5: application-owned Provider wait bounds. These are an MVP interaction
+# policy (never a Provider SLA). Total wall-clock deadline covers the whole
+# interaction; the phase timeouts bound connect/pool/write/read individually.
+PROVIDER_TOTAL_DEADLINE_SECONDS = 30.0
+PROVIDER_CONNECT_TIMEOUT_SECONDS = 5.0
+PROVIDER_POOL_TIMEOUT_SECONDS = 5.0
+PROVIDER_WRITE_TIMEOUT_SECONDS = 10.0
+PROVIDER_READ_TIMEOUT_SECONDS = 30.0
 
 
 class LLMError(Exception):
@@ -33,6 +44,10 @@ class ProviderUnavailableError(LLMError):
 
 class ProviderProtocolError(LLMError):
     """Provider reachable but returned an error / protocol is incompatible."""
+
+
+class ProviderTimeoutError(LLMError):
+    """The Provider exceeded the application-owned total wait deadline."""
 
 
 class InvalidOutputError(LLMError):
@@ -53,6 +68,24 @@ class LLMClient(Protocol):
 
     def checkin_summary(self, redacted: RedactedContent) -> CheckInSummaryResult:
         ...
+
+
+def _run_async_with_total_deadline(coro_factory, deadline_seconds: float):
+    """Run an async Provider call under a total wall-clock deadline.
+
+    ``asyncio.wait_for`` CANCELS the coroutine on timeout, which aborts the
+    underlying async HTTP request (the socket is closed by the async transport),
+    so no blocking sync thread is left running. Timeout maps to the distinct
+    ``ProviderTimeoutError``.
+    """
+
+    async def _guarded():
+        return await asyncio.wait_for(coro_factory(), timeout=deadline_seconds)
+
+    try:
+        return asyncio.run(_guarded())
+    except asyncio.TimeoutError as exc:
+        raise ProviderTimeoutError("provider total deadline exceeded") from exc
 
 
 def _text_leaves(redacted: RedactedContent) -> list[str]:
@@ -233,6 +266,9 @@ class MockLLMClient:
                 priority_codes.append("patient_requests_urgent_contact")
             if re.search(r"\b(medicine|medication|drug|allergy|allergic)\b", lowered):
                 priority_codes.append("patient_reports_medication_or_allergy_concern")
+            priority_codes = validated_priority_reason_codes(
+                message["text"], message["text"], priority_codes
+            )
             if re.search(r"\b(done|completed|finished|appointment|blood test|follow-up|task)\b", lowered):
                 entity_type = "task"
                 label = "Patient-reported care action progress"
@@ -340,6 +376,10 @@ class DeepSeekAdapter:
     Reads the key from env only (DEEPSEEK_API_KEY, then Natingale_API_KEY). No key
     => ProviderUnavailableError -> deterministic fallback. Schema-invalid output
     => InvalidOutputError -> fallback.
+
+    Every call runs through an async client under an application-owned total
+    wall-clock deadline (``ProviderTimeoutError``) with bounded
+    connect/pool/write/read phase timeouts and no SDK retries.
     """
 
     def __init__(self, model: str = "deepseek-v4-flash", api_key: str | None = None):
@@ -349,40 +389,69 @@ class DeepSeekAdapter:
     def _key(self) -> str | None:
         return self.api_key or os.environ.get("DEEPSEEK_API_KEY") or os.environ.get("Natingale_API_KEY")
 
-    def verify_connection(self) -> None:
-        """Validate one candidate key with a no-PHI, schema-free probe."""
+    async def _messages_create_async(self, *, system: str, messages: list[dict], max_tokens: int):
+        from anthropic import APITimeoutError, AsyncAnthropic, Timeout
+
+        client = AsyncAnthropic(
+            api_key=self._key(),
+            base_url=DEEPSEEK_BASE_URL,
+            timeout=Timeout(
+                connect=PROVIDER_CONNECT_TIMEOUT_SECONDS,
+                pool=PROVIDER_POOL_TIMEOUT_SECONDS,
+                write=PROVIDER_WRITE_TIMEOUT_SECONDS,
+                read=PROVIDER_READ_TIMEOUT_SECONDS,
+            ),
+            max_retries=0,
+        )
+        try:
+            return await client.messages.create(
+                model=self.model,
+                max_tokens=max_tokens,
+                system=system,
+                messages=messages,
+            )
+        except APITimeoutError as exc:
+            raise ProviderTimeoutError("provider phase timeout exceeded") from exc
+        finally:
+            try:
+                await client.close()
+            except Exception:
+                pass
+
+    def _run_messages_create(self, *, system: str, messages: list[dict], max_tokens: int):
         key = self._key()
         if not key:
             raise ProviderUnavailableError("no DeepSeek API key configured")
-        try:
-            from anthropic import Anthropic
+        return _run_async_with_total_deadline(
+            lambda: self._messages_create_async(
+                system=system, messages=messages, max_tokens=max_tokens
+            ),
+            PROVIDER_TOTAL_DEADLINE_SECONDS,
+        )
 
-            client = Anthropic(api_key=key, base_url=DEEPSEEK_BASE_URL)
-            client.messages.create(
-                model=self.model,
-                max_tokens=8,
+    def verify_connection(self) -> None:
+        """Validate one candidate key with a no-PHI, schema-free probe."""
+        try:
+            self._run_messages_create(
                 system="Return exactly OK.",
                 messages=[{"role": "user", "content": "Connection check. No patient data."}],
+                max_tokens=8,
             )
+        except (ProviderTimeoutError, ProviderUnavailableError):
+            raise
         except Exception as e:
             raise ProviderProtocolError(f"DeepSeek connection check failed: {type(e).__name__}")
 
     def summarize(self, redacted: RedactedContent, flow_type: str) -> AISummaryResult:
-        key = self._key()
-        if not key:
-            raise ProviderUnavailableError("no DeepSeek API key configured")
-
         try:
-            from anthropic import Anthropic
-
-            client = Anthropic(api_key=key, base_url=DEEPSEEK_BASE_URL)
-            resp = client.messages.create(
-                model=self.model,
-                max_tokens=2000,
+            resp = self._run_messages_create(
                 system=_SYSTEM_PROMPT,
                 messages=[{"role": "user", "content": _user_prompt(redacted, flow_type)}],
+                max_tokens=2000,
             )
-        except Exception as e:  # auth / network / timeout / protocol
+        except (ProviderTimeoutError, ProviderUnavailableError):
+            raise
+        except Exception as e:  # auth / network / protocol
             raise ProviderProtocolError(f"DeepSeek call failed: {type(e).__name__}")
 
         usage = getattr(resp, "usage", None)
@@ -407,19 +476,14 @@ class DeepSeekAdapter:
             raise InvalidOutputError(f"DeepSeek output failed schema: {e}")
 
     def copilot(self, redacted: RedactedContent, category: str) -> CopilotProviderResult:
-        key = self._key()
-        if not key:
-            raise ProviderUnavailableError("no DeepSeek API key configured")
         try:
-            from anthropic import Anthropic
-
-            client = Anthropic(api_key=key, base_url=DEEPSEEK_BASE_URL)
-            resp = client.messages.create(
-                model=self.model,
-                max_tokens=1200,
+            resp = self._run_messages_create(
                 system=_COPILOT_SYSTEM_PROMPT,
                 messages=[{"role": "user", "content": "Category: " + category + "\nBounded de-identified record JSON:\n" + json.dumps(redacted.content, ensure_ascii=False)}],
+                max_tokens=1200,
             )
+        except (ProviderTimeoutError, ProviderUnavailableError):
+            raise
         except Exception as e:
             raise ProviderProtocolError(f"DeepSeek call failed: {type(e).__name__}")
         text = "".join(block.text for block in resp.content if hasattr(block, "text")).strip()
@@ -430,22 +494,17 @@ class DeepSeekAdapter:
             raise InvalidOutputError(f"DeepSeek output failed Copilot schema: {e}")
 
     def _bounded_json(self, redacted: RedactedContent, system: str, label: str, max_tokens: int) -> dict:
-        key = self._key()
-        if not key:
-            raise ProviderUnavailableError("no DeepSeek API key configured")
         try:
-            from anthropic import Anthropic
-
-            client = Anthropic(api_key=key, base_url=DEEPSEEK_BASE_URL)
-            resp = client.messages.create(
-                model=self.model,
-                max_tokens=max_tokens,
+            resp = self._run_messages_create(
                 system=system,
                 messages=[{
                     "role": "user",
                     "content": label + "\nBounded de-identified JSON:\n" + json.dumps(redacted.content, ensure_ascii=False),
                 }],
+                max_tokens=max_tokens,
             )
+        except (ProviderTimeoutError, ProviderUnavailableError):
+            raise
         except Exception as e:
             raise ProviderProtocolError(f"DeepSeek call failed: {type(e).__name__}")
         text = "".join(block.text for block in resp.content if hasattr(block, "text")).strip()

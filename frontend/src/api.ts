@@ -3,6 +3,7 @@ import type {
   AdminAccessAudit,
   AdminUser,
   AdminSystemSettings,
+  ClinicSettings,
   ArtifactVersion,
   AuditLog,
   Comment,
@@ -19,6 +20,7 @@ import type {
   InviteInfo,
   InvitePreview,
   Patient,
+  PatientImportBatch,
   ClinicalTask,
   CopilotCategory,
   CopilotResponse,
@@ -29,11 +31,16 @@ import type {
   PatientCheckInList,
   PatientCheckInSession,
   PatientView,
+  PatientInstructionReceipt,
+  PatientInstructionReceiptHistory,
+  PatientInstructionPublication,
   LearningEvaluation,
   LearningSignal,
   LearningStatus,
   ProvenanceResult,
   RegisterResult,
+  OnboardingComplete,
+  OnboardingPreview,
   Span,
   TaskProvenance,
   TranscriptNormalizeResult,
@@ -153,6 +160,14 @@ function post<T>(path: string, body: unknown, signal?: AbortSignal, options?: Re
   );
 }
 
+function postCsv<T>(path: string, body: Blob): Promise<T> {
+  return request<T>(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/csv', ...headers() },
+    body,
+  });
+}
+
 function patch<T>(path: string, body: unknown): Promise<T> {
   return request<T>(path, {
     method: 'PATCH',
@@ -202,6 +217,10 @@ export const api = {
     }),
   register: (payload: { token: string; password: string; name?: string }) =>
     post<RegisterResult>('/api/auth/register', payload, undefined, { skipUnauthorized: true }),
+  getOnboardingPreview: (token: string) =>
+    post<OnboardingPreview>('/api/onboarding/preview', { token }, undefined, { skipUnauthorized: true }),
+  completeOnboarding: (payload: { token: string; clinic_name: string; admin_name: string; email: string; password: string }) =>
+    post<OnboardingComplete>('/api/onboarding/complete', payload, undefined, { skipUnauthorized: true }),
   createInvite: (payload: { email: string; role: string; patient_id?: string | null }) =>
     post<InviteCreated>('/api/auth/invites', payload),
   listInvites: (signal?: AbortSignal) => get<InviteInfo[]>('/api/auth/invites', signal),
@@ -223,6 +242,19 @@ export const api = {
     get<AdminAccessAudit[]>('/api/admin/access-audit', signal),
   getAdminSystemSettings: (signal?: AbortSignal) =>
     get<AdminSystemSettings>('/api/admin/system-settings', signal),
+  getClinicSettings: (signal?: AbortSignal) =>
+    get<ClinicSettings>('/api/admin/clinic-settings', signal),
+  updateClinicSettings: (
+    expectedVersion: number,
+    updates: { ai_mode?: 'inherit' | 'local' | 'deepseek'; voice_mode?: 'inherit' | 'enabled' | 'disabled' },
+  ) => patch<ClinicSettings>('/api/admin/clinic-settings', {
+    expected_version: expectedVersion,
+    ...updates,
+  }),
+  previewPatientImport: (sourceSystem: string, file: File) =>
+    postCsv<PatientImportBatch>(`/api/admin/patient-imports/preview?source_system=${encodeURIComponent(sourceSystem)}`, file),
+  commitPatientImport: (batchId: string) =>
+    post<PatientImportBatch>(`/api/admin/patient-imports/${batchId}/commit`, {}),
   updateAdminSystemSettings: (
     expectedVersion: number,
     updates: { ai_mode?: 'local' | 'deepseek'; voice_enabled?: boolean },
@@ -248,6 +280,34 @@ export const api = {
   getClinicPatients: (signal?: AbortSignal) => get<Patient[]>(`/api/patients`, signal),
   getPatient: (id: string, signal?: AbortSignal) => get<Patient>(`/api/patients/${id}`, signal),
   getPatientView: (id: string, signal?: AbortSignal) => get<PatientView>(`/api/patients/${id}/patient-view`, signal),
+  openPatientInstruction: (artifactId: string, version: number) =>
+    post<PatientInstructionReceipt>(`/api/patient-instructions/${artifactId}/versions/${version}/open`, {}),
+  acknowledgePatientInstruction: (artifactId: string, version: number) =>
+    post<PatientInstructionReceipt>(`/api/patient-instructions/${artifactId}/versions/${version}/acknowledge`, {}),
+  getPatientInstructionReceipts: (artifactId: string, signal?: AbortSignal) =>
+    get<PatientInstructionReceiptHistory[]>(`/api/patient-instructions/${artifactId}/receipts`, signal),
+  getPatientInstructionPublication: (artifactId: string, signal?: AbortSignal) =>
+    get<PatientInstructionPublication>(`/api/patient-instructions/${artifactId}/publication`, signal),
+  getPatientInstructionPublicationHistory: (artifactId: string, signal?: AbortSignal) =>
+    get<PatientInstructionPublication[]>(`/api/patient-instructions/${artifactId}/publication-history`, signal),
+  publishPatientInstruction: (artifactId: string) =>
+    post<PatientInstructionPublication>(`/api/patient-instructions/${artifactId}/publish`, { expected_state: 'draft' }),
+  correctPatientInstruction: (
+    artifactId: string,
+    correctionId: string,
+    content: { instruction: string; follow_up: string | null },
+  ) => post<PatientInstructionPublication>(`/api/patient-instructions/${artifactId}/correct`, {
+    expected_state: 'published',
+    correction_id: correctionId,
+    content,
+  }),
+  withdrawPatientInstruction: (
+    artifactId: string,
+    reasonCode: 'entered_in_error' | 'no_longer_applicable' | 'replaced_elsewhere',
+  ) => post<PatientInstructionPublication>(`/api/patient-instructions/${artifactId}/withdraw`, {
+    expected_state: 'published',
+    reason_code: reasonCode,
+  }),
   listPatientCheckIns: (id: string, signal?: AbortSignal) =>
     get<PatientCheckInList>(`/api/patients/${id}/check-ins`, signal),
   getPatientCheckIn: (sessionId: string, signal?: AbortSignal) =>

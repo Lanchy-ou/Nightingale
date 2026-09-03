@@ -13,6 +13,7 @@ from datetime import datetime
 from fastapi.testclient import TestClient
 
 from app.ids import new_id
+from app.instruction_publications import ensure_legacy_published
 from app.main import app
 from app.models import Artifact, Comment, Event, Highlight
 from seed import fixture
@@ -20,7 +21,15 @@ from seed import fixture
 PV_URL = f"/api/patients/{fixture.PATIENT_ID}/patient-view"
 
 TOP_KEYS = {"patient_id", "display_name", "today", "care_plan", "check_in", "visit_summaries"}
-INSTRUCTION_KEYS = {"artifact_id", "event_id", "event_time", "instruction", "follow_up"}
+INSTRUCTION_KEYS = {
+    "artifact_id",
+    "artifact_version",
+    "event_id",
+    "event_time",
+    "instruction",
+    "follow_up",
+    "receipt",
+}
 SESSION_KEYS = {"event_id", "event_type", "started_at", "ended_at"}
 
 
@@ -49,6 +58,13 @@ def _add_artifact(
     )
     db.add(a)
     db.commit()
+    if (
+        artifact_type == "patient_instruction"
+        and author_role == "clinician"
+        and author_id is not None
+    ):
+        ensure_legacy_published(db, a, db.get(Event, event_id))
+        db.commit()
     return a
 
 

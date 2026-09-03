@@ -47,6 +47,10 @@ def test_phase_e_migration_upgrades_legacy_columns_and_tables_idempotently(tmp_p
         "patient_checkin_messages",
         "system_settings",
         "glance_projections",
+        "patient_instruction_receipts",
+        "patient_instruction_publications",
+        "care_workflows",
+        "workflow_links",
     }.issubset(
         set(schema.get_table_names())
     )

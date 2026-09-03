@@ -8,7 +8,14 @@ from sqlalchemy.orm import Session
 from ..authz import PATIENT_VISIBLE_ARTIFACT_TYPES, authorize, require_auth, resource_not_found
 from ..db import get_db
 from ..clinic_scope import load_patient
-from ..models import Artifact, Clinic, Event, Patient, PatientCheckInSession
+from ..models import (
+    Artifact,
+    Clinic,
+    Event,
+    Patient,
+    PatientCheckInSession,
+    PatientInstructionPublication,
+)
 from ..role_context import RoleContext
 from ..schemas import EventOut, PatientOut
 
@@ -95,9 +102,17 @@ def list_events(
             count = db.scalar(
                 select(func.count())
                 .select_from(Artifact)
+                .join(
+                    PatientInstructionPublication,
+                    (PatientInstructionPublication.instruction_artifact_id == Artifact.artifact_id)
+                    & (PatientInstructionPublication.artifact_version == Artifact.version),
+                )
                 .where(
                     Artifact.event_id == event.event_id,
                     Artifact.artifact_type.in_(PATIENT_VISIBLE_ARTIFACT_TYPES),
+                    PatientInstructionPublication.state == "published",
+                    PatientInstructionPublication.clinic_id == event.clinic_id,
+                    PatientInstructionPublication.patient_id == event.patient_id,
                 )
             ) or 0
         else:

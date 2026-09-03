@@ -27,6 +27,7 @@ from .copilot_models import (
     CopilotResponse,
 )
 from .highlights import extract_text, locate_span
+from .llm_client import ProviderTimeoutError
 from .models import Artifact, Event, Highlight, Patient, Task, User
 from .provenance_binding import resolve_highlight_source
 from .redaction import redact_content
@@ -433,6 +434,11 @@ def answer_query(
         result = client.copilot(_bounded_payload(query, evidence_list, patient, db), query.category)
         claims = _validated_claims(result, evidence, query.category)
         draft = _draft_preview(query=query, evidence=evidence_list, patient=patient, actor_id=actor_id)
+    except ProviderTimeoutError:
+        status = "unavailable"
+        claims = []
+        draft = None
+        limitations.append("Copilot timed out and is unavailable; no source-based answer or draft was generated.")
     except Exception:
         status = "unavailable"
         claims = []

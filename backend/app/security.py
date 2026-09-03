@@ -99,6 +99,8 @@ def _rate_limit_category(path: str) -> str | None:
         return "register"
     if path.startswith("/api/auth/invites"):
         return "invite"
+    if path.startswith("/api/onboarding"):
+        return "onboarding"
     return None
 
 

@@ -6,12 +6,14 @@ import ClinicianWorkspacePage from './pages/ClinicianWorkspacePage';
 import LoginPage from './pages/LoginPage';
 import PatientViewPage from './pages/PatientViewPage';
 import RegisterPage from './pages/RegisterPage';
+import SetupPage from './pages/SetupPage';
 
 const PATIENT_ID = 'pat_001'; // staff/admin pre-C2 minimal demo path
 
-function adminTabFromPath(path: string): 'overview' | 'invites' | 'audit' | 'settings' | 'learning' {
+function adminTabFromPath(path: string): 'overview' | 'invites' | 'imports' | 'audit' | 'settings' | 'learning' {
   if (path.startsWith('/admin/invites')) return 'invites';
   if (path.startsWith('/admin/audit')) return 'audit';
+  if (path.startsWith('/admin/imports')) return 'imports';
   if (path.startsWith('/admin/settings')) return 'settings';
   if (path.startsWith('/admin/learning')) return 'learning';
   return 'overview';
@@ -134,7 +136,7 @@ function SessionApp() {
         setIdentity(null);
         setSessionIdentity(null);
         const currentPath = window.location.pathname;
-        const nextPath = currentPath.startsWith('/register') ? currentPath : '/login';
+        const nextPath = currentPath.startsWith('/register') || currentPath.startsWith('/setup') ? currentPath : '/login';
         if (currentPath !== nextPath) {
           window.history.replaceState({}, '', nextPath);
         }
@@ -182,6 +184,7 @@ function SessionApp() {
 
   if (!identity) {
     if (path.startsWith('/register')) return <RegisterPage />;
+    if (path.startsWith('/setup')) return <SetupPage />;
     return <LoginPage onAuthenticated={(next) => activateIdentity(next, true)} />;
   }
 

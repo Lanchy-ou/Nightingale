@@ -145,4 +145,12 @@ def test_patient_instruction_requires_edit_then_uses_clinician_authority(clinici
     patient_view = patient_client.get(f"/api/patients/{fixture.PATIENT_ID}/patient-view")
     assert patient_view.status_code == 200
     assert "EDIT REQUIRED" not in str(patient_view.json())
-    assert edited["instruction"] in str(patient_view.json())
+    assert edited["instruction"] not in str(patient_view.json())
+    published = clinician_client.post(
+        f"/api/patient-instructions/{saved.json()['artifact_id']}/publish",
+        json={"expected_state": "draft"},
+    )
+    assert published.status_code == 200
+    assert edited["instruction"] in str(
+        patient_client.get(f"/api/patients/{fixture.PATIENT_ID}/patient-view").json()
+    )
