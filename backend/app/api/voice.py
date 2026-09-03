@@ -22,6 +22,7 @@ from ..voice.api_schemas import (
     VoiceCaptureCreate,
     VoiceCaptureOut,
     VoiceCommand,
+    VoiceConfirmCommand,
     VoiceProcessingOut,
     VoiceReviewPatch,
 )
@@ -721,13 +722,25 @@ def review_capture_segments(
 @router.post("/captures/{capture_id}/confirm", response_model=VoiceCaptureOut)
 def confirm_capture(
     capture_id: str,
-    body: VoiceCommand,
+    body: VoiceConfirmCommand,
     db: Session = Depends(get_db),
     ctx: RoleContext = Depends(require_auth),
 ):
     _require_voice_enabled(db, ctx.clinic_id)
     capture = _get_capture(db, ctx, capture_id)
     _authorize_capture(capture, ctx, "confirm_voice_transcript")
+    doctor_attestation = {
+        "speaker_labels_reviewed": body.speaker_labels_reviewed,
+        "mixed_language_content_reviewed": body.mixed_language_content_reviewed,
+        "medication_dosage_mentions_reviewed": body.medication_dosage_mentions_reviewed,
+    }
+    if capture.capture_mode == CaptureMode.DOCTOR_CONSULT.value and not all(
+        value is True for value in doctor_attestation.values()
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="Doctor Consult review attestation is incomplete",
+        )
     if capture.confirm_key == body.idempotency_key and capture.status == CaptureStatus.PROCESSED.value:
         return _capture_out(capture)
 
@@ -779,7 +792,11 @@ def confirm_capture(
             target_id=capture.capture_id,
             clinic_id=capture.clinic_id,
             patient_id=capture.patient_id,
-            details={"segment_count": len(confirmed.content.segments)},
+            details=(
+                doctor_attestation
+                if capture.capture_mode == CaptureMode.DOCTOR_CONSULT.value
+                else {"segment_count": len(confirmed.content.segments)}
+            ),
         )
         db.commit()
         db.expire_all()

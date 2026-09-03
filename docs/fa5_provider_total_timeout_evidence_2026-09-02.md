@@ -2,6 +2,14 @@
 
 Status: `IMPLEMENTED_WITH_LIMITS`. Owner-approved policy (30 s total wall-clock deadline; connect/pool 5 s, write 10 s, read 30 s; `max_retries=0`; async cancellation).
 
+Current protocol revision (2026-09-03): the timeout behavior below is preserved,
+but `DeepSeekAdapter` now uses the OpenAI-compatible Chat Completions endpoint
+through `httpx`. `_chat_create_async` / `_run_chat_create` replace the historical
+Anthropic methods; the request sends no generated-token limit, keeps thinking
+enabled, and parses only final `message.content`. The renamed real HTTP
+cancellation test still proves socket disconnect against a local
+never-responding server.
+
 ## Boundary
 
 A5 bounds the complete time a clinician/patient waits for a Provider that never returns. It is an MVP interaction policy, NOT a Provider SLA, background-job rewrite, or a claim that a real DeepSeek request was observed timing out in this environment (no live key was used).

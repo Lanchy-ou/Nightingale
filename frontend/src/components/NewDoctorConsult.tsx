@@ -3,6 +3,7 @@ import { ApiError, api } from '../api';
 import { codePointLength, splitSegmentAtCodePoint } from '../transcriptRange.js';
 import type {
   DoctorConsultResult,
+  DoctorConsultReviewAttestation,
   DoctorTranscriptSegment,
   NurseTranscriptSegment,
   Patient,
@@ -19,6 +20,12 @@ DOCTOR: Please continue propranolol 20 mg daily while we chase the result.`;
 const NURSE_DEMO_TRANSCRIPT = `NURSE: Your blood pressure is elevated at 158 over 96.
 PATIENT: My headache has been happening almost every day.
 NURSE: I will document this for the doctor and help coordinate the next step.`;
+
+const EMPTY_DOCTOR_ATTESTATION: DoctorConsultReviewAttestation = {
+  speaker_labels_reviewed: false,
+  mixed_language_content_reviewed: false,
+  medication_dosage_mentions_reviewed: false,
+};
 
 function localDateTimeValue(): string {
   const now = new Date();
@@ -88,6 +95,9 @@ export default function NewDoctorConsult({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<'normalizing' | 'submitting' | null>(null);
   const [submissionAttempted, setSubmissionAttempted] = useState(false);
+  const [reviewAttestation, setReviewAttestation] = useState<DoctorConsultReviewAttestation>(
+    () => ({ ...EMPTY_DOCTOR_ATTESTATION }),
+  );
 
   useEffect(() => {
     mountedRef.current = true;
@@ -111,6 +121,7 @@ export default function NewDoctorConsult({
     setError(null);
     setBusy(null);
     setSubmissionAttempted(false);
+    setReviewAttestation({ ...EMPTY_DOCTOR_ATTESTATION });
     cursorByIndex.current = {};
   }, [consultKind, patient.patient_id]);
 
@@ -137,6 +148,7 @@ export default function NewDoctorConsult({
     && normalization?.outcome !== 'REJECT'
     && blockingIssues.length === 0
     && Boolean(startedAt)
+    && (isNurse || Object.values(reviewAttestation).every(Boolean))
     && busy === null;
 
   function resetOperationAfterEdit() {
@@ -144,6 +156,7 @@ export default function NewDoctorConsult({
       operation.current = newOperation();
       setSubmissionAttempted(false);
     }
+    if (!isNurse) setReviewAttestation({ ...EMPTY_DOCTOR_ATTESTATION });
     setError(null);
   }
 
@@ -305,6 +318,7 @@ export default function NewDoctorConsult({
             speaker: segment.speaker_candidate as 'doctor' | 'patient',
             text: segment.text.trim(),
           })),
+          reviewAttestation,
           controller.signal,
         );
       if (mountedRef.current) onCompleted(result);
@@ -482,6 +496,39 @@ export default function NewDoctorConsult({
             <div className="processing-step">
               <span>2</span><div><strong>Generate independent AI artifacts</strong><small>Redaction → existing provider/fallback path → exact spans</small></div>
             </div>
+            {!isNurse && (
+              <fieldset className="consult-review-attestation">
+                <legend>Clinician review attestation</legend>
+                <p>These checks confirm review against the source. They do not claim translation or medical-reference validation.</p>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={reviewAttestation.speaker_labels_reviewed}
+                    onChange={(event) => setReviewAttestation((current) => ({ ...current, speaker_labels_reviewed: event.target.checked }))}
+                    disabled={busy !== null}
+                  />
+                  I reviewed every speaker label.
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={reviewAttestation.mixed_language_content_reviewed}
+                    onChange={(event) => setReviewAttestation((current) => ({ ...current, mixed_language_content_reviewed: event.target.checked }))}
+                    disabled={busy !== null}
+                  />
+                  I reviewed mixed-language content, including deciding that none is present.
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={reviewAttestation.medication_dosage_mentions_reviewed}
+                    onChange={(event) => setReviewAttestation((current) => ({ ...current, medication_dosage_mentions_reviewed: event.target.checked }))}
+                    disabled={busy !== null}
+                  />
+                  I checked medication and dosage mentions against this transcript.
+                </label>
+              </fieldset>
+            )}
             <button className="secondary-button" onClick={() => { setStage('paste'); setError(null); }} disabled={busy !== null}>
               Back to raw text
             </button>

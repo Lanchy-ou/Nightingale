@@ -44,7 +44,7 @@ class _TimeoutClient:
 
 
 def _never_completing(observer: dict):
-    async def _run(self, *, system, messages, max_tokens):
+    async def _run(self, *, system, messages, json_output):
         try:
             await asyncio.Event().wait()  # never completes
         except asyncio.CancelledError:
@@ -108,7 +108,7 @@ class _NeverRespondingHTTPServer:
 
 def test_total_deadline_raises_provider_timeout_and_cancels(monkeypatch):
     observer = {}
-    monkeypatch.setattr(DeepSeekAdapter, "_messages_create_async", _never_completing(observer))
+    monkeypatch.setattr(DeepSeekAdapter, "_chat_create_async", _never_completing(observer))
     monkeypatch.setattr(llm_client, "PROVIDER_TOTAL_DEADLINE_SECONDS", 0.2)
 
     adapter = DeepSeekAdapter(api_key="dummy-key")
@@ -126,7 +126,7 @@ def test_total_deadline_raises_provider_timeout_and_cancels(monkeypatch):
     assert observer.get("cancelled") is True
 
 
-def test_real_async_anthropic_request_uses_phase_timeouts_and_is_cancelled(monkeypatch):
+def test_real_async_http_request_uses_phase_timeouts_and_is_cancelled(monkeypatch):
     server = _NeverRespondingHTTPServer()
     try:
         monkeypatch.setattr(llm_client, "DEEPSEEK_BASE_URL", server.base_url)
@@ -282,6 +282,7 @@ def test_doctor_consult_timeout_retry_does_not_duplicate_raw(
         "ingestion_key": "ingest-fa5-timeout-001",
         "started_at": "2026-08-26T10:00:00",
         "ended_at": "2026-08-26T10:30:00",
+        **fixture.DOCTOR_CONSULT_REVIEW_ATTESTATION,
         "content": {
             "segments": [
                 {"index": 0, "speaker": "doctor", "text": "How has the headache changed?"},

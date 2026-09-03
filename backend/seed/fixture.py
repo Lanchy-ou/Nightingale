@@ -212,6 +212,37 @@ C1_DEMO_DOCTOR_TRANSCRIPT = {
     ]
 }
 
+# Hand-written synthetic F Final evaluation case. The patient statement keeps
+# Malay, English, and a Hokkien expression verbatim; it adds no clinical fact
+# beyond FACTS. It is transport/review/provenance evidence, not evidence that
+# any extractor clinically understands or translates the three languages.
+F_FINAL_MIXED_LANGUAGE_DOCTOR_TRANSCRIPT = {
+    "segments": [
+        {"index": 0, "speaker": "doctor", "text": "How has your headache changed?"},
+        {
+            "index": 1,
+            "speaker": "patient",
+            "text": (
+                "Sakit kepala is better, about 3 out of 10, but nausea masih ada "
+                "in the morning, bo pian."
+            ),
+        },
+        {"index": 2, "speaker": "doctor", "text": "Have you completed the blood test?"},
+        {"index": 3, "speaker": "patient", "text": "Not yet."},
+        {
+            "index": 4,
+            "speaker": "doctor",
+            "text": "Please continue propranolol 20 mg daily while we chase the result.",
+        },
+    ]
+}
+
+DOCTOR_CONSULT_REVIEW_ATTESTATION = {
+    "speaker_labels_reviewed": True,
+    "mixed_language_content_reviewed": True,
+    "medication_dosage_mentions_reviewed": True,
+}
+
 # ---------------------------------------------------------------------------
 # Deterministic highlight candidates (M2 stub).
 #

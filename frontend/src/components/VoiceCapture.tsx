@@ -1,6 +1,7 @@
 import { useEffect, useReducer, useRef, useState } from 'react';
 import { api } from '../api';
 import type {
+  DoctorConsultReviewAttestation,
   VoiceCapabilities,
   VoiceCaptureMode,
   VoiceCaptureRecord,
@@ -24,6 +25,12 @@ interface VoiceCaptureProps {
   patientEventType?: 'patient_ai_preconsult' | 'patient_followup';
   onProcessed: (capture: VoiceCaptureRecord) => void;
 }
+
+const EMPTY_DOCTOR_ATTESTATION: DoctorConsultReviewAttestation = {
+  speaker_labels_reviewed: false,
+  mixed_language_content_reviewed: false,
+  medication_dosage_mentions_reviewed: false,
+};
 
 function operationKey(prefix: string): string {
   const id = typeof crypto.randomUUID === 'function'
@@ -87,6 +94,9 @@ export default function VoiceCapture({
   const [drafts, setDrafts] = useState<ReviewDraft[]>([]);
   const [reviewBusy, setReviewBusy] = useState(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
+  const [reviewAttestation, setReviewAttestation] = useState<DoctorConsultReviewAttestation>(
+    () => ({ ...EMPTY_DOCTOR_ATTESTATION }),
+  );
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -155,6 +165,7 @@ export default function VoiceCapture({
     setCapture(null);
     setDrafts([]);
     setReviewError(null);
+    setReviewAttestation({ ...EMPTY_DOCTOR_ATTESTATION });
     dispatch({ type: 'RESET' });
     return releaseAll;
     // boundaryKey contains patient, role and session identity.
@@ -190,6 +201,7 @@ export default function VoiceCapture({
     setCapture(null);
     setDrafts([]);
     setReviewError(null);
+    setReviewAttestation({ ...EMPTY_DOCTOR_ATTESTATION });
     setElapsedMs(0);
     keysRef.current = {
       create: operationKey('capture'),
@@ -332,12 +344,18 @@ export default function VoiceCapture({
   }
 
   function updateDraft(index: number, update: Partial<ReviewDraft>) {
+    if (captureMode === 'doctor_consult') {
+      setReviewAttestation({ ...EMPTY_DOCTOR_ATTESTATION });
+    }
     setDrafts((current) => current.map((draft, draftIndex) => (
       draftIndex === index ? { ...draft, ...update } : draft
     )));
   }
 
   function splitDraft(index: number) {
+    if (captureMode === 'doctor_consult') {
+      setReviewAttestation({ ...EMPTY_DOCTOR_ATTESTATION });
+    }
     setDrafts((current) => {
       const target = current[index];
       const midpoint = Math.floor(target.text.length / 2);
@@ -351,6 +369,9 @@ export default function VoiceCapture({
   }
 
   function mergeWithNext(index: number) {
+    if (captureMode === 'doctor_consult') {
+      setReviewAttestation({ ...EMPTY_DOCTOR_ATTESTATION });
+    }
     setDrafts((current) => {
       if (index >= current.length - 1) return current;
       const left = current[index];
@@ -397,6 +418,7 @@ export default function VoiceCapture({
         reviewed.capture_id,
         reviewed.revision,
         keysRef.current.confirm,
+        captureMode === 'doctor_consult' ? reviewAttestation : undefined,
       );
       setCapture(processed);
       dispatch({ type: 'CONFIRM' });
@@ -418,6 +440,7 @@ export default function VoiceCapture({
     setCapture(null);
     setDrafts([]);
     setReviewError(null);
+    setReviewAttestation({ ...EMPTY_DOCTOR_ATTESTATION });
     dispatch({ type: 'RESET' });
   }
 
@@ -460,8 +483,17 @@ export default function VoiceCapture({
               <div className="voice-segment-actions"><button type="button" onClick={() => splitDraft(index)}>Split</button>{index < drafts.length - 1 && <button type="button" onClick={() => mergeWithNext(index)}>Merge with next</button>}</div>
             </article>
           ))}
+          {captureMode === 'doctor_consult' && (
+            <fieldset className="consult-review-attestation">
+              <legend>Clinician review attestation</legend>
+              <p>Confirm review against the source; this does not claim translation or medical-reference validation.</p>
+              <label><input type="checkbox" checked={reviewAttestation.speaker_labels_reviewed} onChange={(event) => setReviewAttestation((current) => ({ ...current, speaker_labels_reviewed: event.target.checked }))} />I reviewed every speaker label.</label>
+              <label><input type="checkbox" checked={reviewAttestation.mixed_language_content_reviewed} onChange={(event) => setReviewAttestation((current) => ({ ...current, mixed_language_content_reviewed: event.target.checked }))} />I reviewed mixed-language content, including deciding that none is present.</label>
+              <label><input type="checkbox" checked={reviewAttestation.medication_dosage_mentions_reviewed} onChange={(event) => setReviewAttestation((current) => ({ ...current, medication_dosage_mentions_reviewed: event.target.checked }))} />I checked medication and dosage mentions against this transcript.</label>
+            </fieldset>
+          )}
           {reviewError && <p className="form-error" role="alert">Review failed: {reviewError}</p>}
-          <button type="button" className="primary-button" disabled={reviewBusy || drafts.length === 0} onClick={() => void confirmAndProcess()}>{reviewBusy ? 'Confirming…' : 'Confirm transcript and process'}</button>
+          <button type="button" className="primary-button" disabled={reviewBusy || drafts.length === 0 || (captureMode === 'doctor_consult' && !Object.values(reviewAttestation).every(Boolean))} onClick={() => void confirmAndProcess()}>{reviewBusy ? 'Confirming…' : 'Confirm transcript and process'}</button>
         </div>
       )}
     </section>

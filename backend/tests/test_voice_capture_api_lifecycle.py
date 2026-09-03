@@ -50,7 +50,11 @@ def test_clinician_voice_capture_reaches_existing_ai_and_exact_provenance(
 
     confirmed = clinician_client.post(
         f"/api/voice/captures/{capture_id}/confirm",
-        json={"expected_revision": 4, "idempotency_key": "confirm-voice-1"},
+        json={
+            "expected_revision": 4,
+            "idempotency_key": "confirm-voice-1",
+            **fixture.DOCTOR_CONSULT_REVIEW_ATTESTATION,
+        },
     )
     assert confirmed.status_code == 200
     body = confirmed.json()
@@ -126,11 +130,19 @@ def test_upload_and_confirm_replays_are_idempotent(
 
     first_confirm = clinician_client.post(
         f"/api/voice/captures/{capture_id}/confirm",
-        json={"expected_revision": 4, "idempotency_key": "confirm-voice-1"},
+        json={
+            "expected_revision": 4,
+            "idempotency_key": "confirm-voice-1",
+            **fixture.DOCTOR_CONSULT_REVIEW_ATTESTATION,
+        },
     )
     replay_confirm = clinician_client.post(
         f"/api/voice/captures/{capture_id}/confirm",
-        json={"expected_revision": 4, "idempotency_key": "confirm-voice-1"},
+        json={
+            "expected_revision": 4,
+            "idempotency_key": "confirm-voice-1",
+            **fixture.DOCTOR_CONSULT_REVIEW_ATTESTATION,
+        },
     )
     assert replay_confirm.status_code == 200
     assert replay_confirm.json() == first_confirm.json()
@@ -370,7 +382,11 @@ def test_confirmed_transcript_and_event_survive_derived_pipeline_failure(
     with pytest.raises(RuntimeError, match="synthetic derived failure"):
         clinician_client.post(
             f"/api/voice/captures/{capture_id}/confirm",
-            json={"expected_revision": 4, "idempotency_key": "raw-first-confirm"},
+            json={
+                "expected_revision": 4,
+                "idempotency_key": "raw-first-confirm",
+                **fixture.DOCTOR_CONSULT_REVIEW_ATTESTATION,
+            },
         )
 
     db_session.expire_all()

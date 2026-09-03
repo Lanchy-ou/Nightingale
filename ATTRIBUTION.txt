@@ -14,7 +14,6 @@ Declared in `backend/requirements.txt`:
 | Pydantic | MIT |
 | pytest | MIT |
 | httpx | BSD-3-Clause |
-| anthropic | MIT |
 | argon2-cffi (password hashing, Argon2id) | MIT |
 | sqlcipher3 (Python DB-API driver for SQLCipher 4.x) | MIT |
 | faster-whisper 1.2.1 (local ASR adapter) | MIT |
@@ -65,8 +64,9 @@ Declared in `frontend/package.json`:
   directory and are not bundled. Runtime loading is local-only
   (`local_files_only=True`, CPU int8).
 
-- Provider: DeepSeek (https://www.deepseek.com) via its anthropic-compatible endpoint
-  (`https://api.deepseek.com/anthropic`), models `deepseek-v4-flash` / `deepseek-v4-pro`.
+- Provider: DeepSeek (https://www.deepseek.com) via its OpenAI-compatible Chat
+  Completions endpoint (`https://api.deepseek.com/chat/completions`), models
+  `deepseek-v4-flash` / `deepseek-v4-pro`.
 - A dated key-free/live-adapter smoke record exists at
   `backend/docs/gate0_provider_status.md`; it is not a current provider uptime
   or production-readiness claim. D3/D4 frozen evaluations use mock/local paths
@@ -77,7 +77,8 @@ Declared in `frontend/package.json`:
 
 ## Notes
 
-- The `anthropic` Python SDK is a declared backend dependency (see above).
+- The Provider adapter uses the declared `httpx` dependency and sends no
+  generated-token limit; thinking remains enabled and only final content is parsed.
 - Synthetic demo data is authored in-repo (`backend/seed/fixture.py`); no external
   dataset is used.
 - The requirements source `2026 72 Hour Build_ Nightingale Candidate Brief 2.pdf`

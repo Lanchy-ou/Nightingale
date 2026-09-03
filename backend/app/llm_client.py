@@ -22,7 +22,7 @@ from .redaction import RedactedContent
 from .operational_logging import emit_log
 from .copilot_models import CopilotProviderClaim, CopilotProviderResult
 
-DEEPSEEK_BASE_URL = "https://api.deepseek.com/anthropic"
+DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 
 # F_A5: application-owned Provider wait bounds. These are an MVP interaction
 # policy (never a Provider SLA). Total wall-clock deadline covers the whole
@@ -371,15 +371,20 @@ def _user_prompt(redacted: RedactedContent, flow_type: str) -> str:
 
 
 class DeepSeekAdapter:
-    """DeepSeek via its anthropic-compatible endpoint (live, Gate 0 LIVE_VERIFIED).
+    """DeepSeek via its OpenAI-compatible Chat Completions endpoint.
 
     Reads the key from env only (DEEPSEEK_API_KEY, then Natingale_API_KEY). No key
     => ProviderUnavailableError -> deterministic fallback. Schema-invalid output
     => InvalidOutputError -> fallback.
 
+    The request contains the system requirements plus de-identified text and
+    waits for the Provider's final ``message.content``. Thinking remains
+    enabled, but ``reasoning_content`` is never treated as the answer. No
+    generated-token limit is sent to the Provider.
+
     Every call runs through an async client under an application-owned total
     wall-clock deadline (``ProviderTimeoutError``) with bounded
-    connect/pool/write/read phase timeouts and no SDK retries.
+    connect/pool/write/read phase timeouts and no retries.
     """
 
     def __init__(self, model: str = "deepseek-v4-flash", api_key: str | None = None):
@@ -389,54 +394,79 @@ class DeepSeekAdapter:
     def _key(self) -> str | None:
         return self.api_key or os.environ.get("DEEPSEEK_API_KEY") or os.environ.get("Natingale_API_KEY")
 
-    async def _messages_create_async(self, *, system: str, messages: list[dict], max_tokens: int):
-        from anthropic import APITimeoutError, AsyncAnthropic, Timeout
+    def _request_payload(
+        self, *, system: str, messages: list[dict], json_output: bool
+    ) -> dict:
+        payload = {
+            "model": self.model,
+            "messages": [{"role": "system", "content": system}, *messages],
+            "thinking": {"type": "enabled"},
+        }
+        if json_output:
+            payload["response_format"] = {"type": "json_object"}
+        return payload
 
-        client = AsyncAnthropic(
-            api_key=self._key(),
-            base_url=DEEPSEEK_BASE_URL,
-            timeout=Timeout(
-                connect=PROVIDER_CONNECT_TIMEOUT_SECONDS,
-                pool=PROVIDER_POOL_TIMEOUT_SECONDS,
-                write=PROVIDER_WRITE_TIMEOUT_SECONDS,
-                read=PROVIDER_READ_TIMEOUT_SECONDS,
-            ),
-            max_retries=0,
+    async def _chat_create_async(
+        self, *, system: str, messages: list[dict], json_output: bool
+    ) -> dict:
+        import httpx
+
+        timeout = httpx.Timeout(
+            connect=PROVIDER_CONNECT_TIMEOUT_SECONDS,
+            pool=PROVIDER_POOL_TIMEOUT_SECONDS,
+            write=PROVIDER_WRITE_TIMEOUT_SECONDS,
+            read=PROVIDER_READ_TIMEOUT_SECONDS,
         )
         try:
-            return await client.messages.create(
-                model=self.model,
-                max_tokens=max_tokens,
-                system=system,
-                messages=messages,
-            )
-        except APITimeoutError as exc:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                response = await client.post(
+                    f"{DEEPSEEK_BASE_URL.rstrip('/')}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {self._key()}",
+                        "Content-Type": "application/json",
+                    },
+                    json=self._request_payload(
+                        system=system, messages=messages, json_output=json_output
+                    ),
+                )
+                response.raise_for_status()
+                return response.json()
+        except httpx.TimeoutException as exc:
             raise ProviderTimeoutError("provider phase timeout exceeded") from exc
-        finally:
-            try:
-                await client.close()
-            except Exception:
-                pass
 
-    def _run_messages_create(self, *, system: str, messages: list[dict], max_tokens: int):
+    def _run_chat_create(
+        self, *, system: str, messages: list[dict], json_output: bool
+    ) -> dict:
         key = self._key()
         if not key:
             raise ProviderUnavailableError("no DeepSeek API key configured")
         return _run_async_with_total_deadline(
-            lambda: self._messages_create_async(
-                system=system, messages=messages, max_tokens=max_tokens
+            lambda: self._chat_create_async(
+                system=system, messages=messages, json_output=json_output
             ),
             PROVIDER_TOTAL_DEADLINE_SECONDS,
         )
 
+    @staticmethod
+    def _final_text(response: dict) -> str:
+        try:
+            content = response["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError) as exc:
+            raise InvalidOutputError("DeepSeek response has no final content") from exc
+        if not isinstance(content, str) or not content.strip():
+            raise InvalidOutputError("DeepSeek response has empty final content")
+        return content.strip()
+
     def verify_connection(self) -> None:
         """Validate one candidate key with a no-PHI, schema-free probe."""
         try:
-            self._run_messages_create(
+            response = self._run_chat_create(
                 system="Return exactly OK.",
                 messages=[{"role": "user", "content": "Connection check. No patient data."}],
-                max_tokens=8,
+                json_output=False,
             )
+            if self._final_text(response) != "OK":
+                raise InvalidOutputError("DeepSeek connection check returned unexpected content")
         except (ProviderTimeoutError, ProviderUnavailableError):
             raise
         except Exception as e:
@@ -444,29 +474,27 @@ class DeepSeekAdapter:
 
     def summarize(self, redacted: RedactedContent, flow_type: str) -> AISummaryResult:
         try:
-            resp = self._run_messages_create(
+            resp = self._run_chat_create(
                 system=_SYSTEM_PROMPT,
                 messages=[{"role": "user", "content": _user_prompt(redacted, flow_type)}],
-                max_tokens=2000,
+                json_output=True,
             )
         except (ProviderTimeoutError, ProviderUnavailableError):
             raise
         except Exception as e:  # auth / network / protocol
             raise ProviderProtocolError(f"DeepSeek call failed: {type(e).__name__}")
 
-        usage = getattr(resp, "usage", None)
-        if usage is not None:
+        usage = resp.get("usage")
+        if isinstance(usage, dict):
             emit_log(
                 "provider_usage",
                 model=self.model,
-                input_tokens=getattr(usage, "input_tokens", None),
-                output_tokens=getattr(usage, "output_tokens", None),
+                input_tokens=usage.get("prompt_tokens"),
+                output_tokens=usage.get("completion_tokens"),
                 level="info",
             )
 
-        text = "".join(
-            block.text for block in resp.content if hasattr(block, "text")
-        ).strip()
+        text = self._final_text(resp)
         text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text, flags=re.MULTILINE).strip()
 
         try:
@@ -477,37 +505,37 @@ class DeepSeekAdapter:
 
     def copilot(self, redacted: RedactedContent, category: str) -> CopilotProviderResult:
         try:
-            resp = self._run_messages_create(
+            resp = self._run_chat_create(
                 system=_COPILOT_SYSTEM_PROMPT,
                 messages=[{"role": "user", "content": "Category: " + category + "\nBounded de-identified record JSON:\n" + json.dumps(redacted.content, ensure_ascii=False)}],
-                max_tokens=1200,
+                json_output=True,
             )
         except (ProviderTimeoutError, ProviderUnavailableError):
             raise
         except Exception as e:
             raise ProviderProtocolError(f"DeepSeek call failed: {type(e).__name__}")
-        text = "".join(block.text for block in resp.content if hasattr(block, "text")).strip()
+        text = self._final_text(resp)
         text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text, flags=re.MULTILINE).strip()
         try:
             return CopilotProviderResult.model_validate(json.loads(text))
         except Exception as e:
             raise InvalidOutputError(f"DeepSeek output failed Copilot schema: {e}")
 
-    def _bounded_json(self, redacted: RedactedContent, system: str, label: str, max_tokens: int) -> dict:
+    def _bounded_json(self, redacted: RedactedContent, system: str, label: str) -> dict:
         try:
-            resp = self._run_messages_create(
+            resp = self._run_chat_create(
                 system=system,
                 messages=[{
                     "role": "user",
                     "content": label + "\nBounded de-identified JSON:\n" + json.dumps(redacted.content, ensure_ascii=False),
                 }],
-                max_tokens=max_tokens,
+                json_output=True,
             )
         except (ProviderTimeoutError, ProviderUnavailableError):
             raise
         except Exception as e:
             raise ProviderProtocolError(f"DeepSeek call failed: {type(e).__name__}")
-        text = "".join(block.text for block in resp.content if hasattr(block, "text")).strip()
+        text = self._final_text(resp)
         text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text, flags=re.MULTILINE).strip()
         try:
             return json.loads(text)
@@ -521,7 +549,6 @@ class DeepSeekAdapter:
             redacted,
             _CHECKIN_TURN_SYSTEM_PROMPT,
             f"Stored clarification question count: {clarification_count}",
-            800,
         )
         try:
             return CheckInTurnResult.model_validate(data)
@@ -533,7 +560,6 @@ class DeepSeekAdapter:
             redacted,
             _CHECKIN_SUMMARY_SYSTEM_PROMPT,
             "Confirmed Patient Check-in messages",
-            1600,
         )
         try:
             return CheckInSummaryResult.model_validate(data)

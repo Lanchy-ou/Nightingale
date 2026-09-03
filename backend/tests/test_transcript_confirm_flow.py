@@ -19,6 +19,7 @@ def _payload(consult_id: str, segments: list[dict]) -> dict:
         "started_at": "2026-08-27T10:00:00",
         "ended_at": None,
         "content": {"segments": segments},
+        **fixture.DOCTOR_CONSULT_REVIEW_ATTESTATION,
     }
 
 

@@ -358,6 +358,13 @@ passed / the same 2 explicit local-ASR-input skips), preserves Alice's canonical
 story, and adds sparse, task-heavy, dense-history, and cross-clinic browser
 journeys. This is synthetic UI/authorization coverage, not clinical validation.
 
+Current F Final evidence (2026-09-03): backend 714 collected / 712 passed / the
+same 2 explicit local-ASR-input skips; the 9-test Doctor Consult review slice,
+75-test provenance/RBAC/publication/concurrency group, 62-test SL1/SL2/SL3
+isolation group, and 112-module frontend production build passed. The three
+Doctor review attestations and frozen Malay-English-Hokkien transport case are
+engineering evidence only, not multilingual clinical validation.
+
 ## Known limits
 
 - Synthetic-data prototype only; no real PHI or production medical use.
@@ -383,7 +390,9 @@ journeys. This is synthetic UI/authorization coverage, not clinical validation.
 - Final evidence: `docs/final_submission_evidence_2026-08-28.md`
 - Current real-clinic readiness ledger: `docs/real_clinic_readiness_status_2026-08-31.md`
 - F1/A real-clinic hardening closeout: `docs/f1_a_closeout_2026-09-02.md` and `Task_Card/F1_Real_Clinic_Feedback_Hardening_Task_Card.md`. A1–A5 are complete with documented limits; D safeguards survived final regression; the final reason-code matrix and 16-scenario ledger are recorded. Formal Glance remains base-only and live Provider evidence remains separate. Synthetic SL2 Shadow training is complete; the SL3 observed-feedback bridge exists, but real-feedback training and serving promotion remain blocked.
-- Self-Learning evidence: `docs/sl2_shadow_pairwise_evidence_2026-09-03.md` and `docs/sl3_observed_feedback_training_bridge_evidence_2026-09-03.md`.
+- F Final consult review evidence: `docs/final_feedback_consult_review_evidence_2026-09-03.md`.
+- Self-Learning design and release boundary: `docs/self_learning_design_and_release_boundary_2026-09-03.md`.
+- Self-Learning evidence: `docs/sl1_attention_ranking_evidence_2026-09-02.md`, `docs/sl2_shadow_pairwise_evidence_2026-09-03.md`, and `docs/sl3_observed_feedback_training_bridge_evidence_2026-09-03.md`.
 - Frontend pre-visual repair evidence: `docs/frontend_previsual_repair_evidence_2026-08-28.md`
 - Demo runbook: `docs/demo_video_runbook_2026-08-28.md`
 - Submission email draft: `docs/submission_email_draft_2026-08-28.md`

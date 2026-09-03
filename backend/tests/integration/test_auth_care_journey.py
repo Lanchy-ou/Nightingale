@@ -85,6 +85,7 @@ def test_new_clinician_account_completes_full_journey_in_one_cookie_session(monk
                 "ingestion_key": "d5-new-clinician-journey-submit",
                 "started_at": "2026-08-27T14:00:00",
                 "ended_at": None,
+                **fixture.DOCTOR_CONSULT_REVIEW_ATTESTATION,
                 "content": {
                     "segments": [
                         {"index": 0, "speaker": "doctor", "text": "What changed?"},

@@ -1,7 +1,7 @@
 # Nightingale Real-Clinic Readiness Status
 
 > Snapshot date: 2026-09-03
-> Scope: current repository after F1/A, B5/B11/B12, SL1/SL2 and the SL3 observed-feedback training bridge.
+> Scope: current repository after F1/A, B5/B11/B12, SL1/SL2/SL3 and the F Final Doctor Consult review-attestation slice.
 > Product boundary: synthetic-data prototype; not a production medical system, clinical-safety certification, compliance assessment, or public-host readiness claim.
 
 ## Purpose
@@ -24,7 +24,7 @@ Status meanings:
 | 3 | `IMPLEMENTED_WITH_LIMITS` | Host/crash/Provider retention not established | Allowlisted scrubbed logs and edge/failure-code boundaries |
 | 4 | `IMPLEMENTED_AND_VERIFIED` | No production PHI certification | Raw-first redaction before the single Provider egress |
 | 5 | `IMPLEMENTED_WITH_LIMITS` | Deployment-issued setup and synthetic CSV only; no public organization verification/RLS | 24-hour bootstrap, first Admin, idempotent import and clinic AI/Voice overrides |
-| 6 | `IMPLEMENTED_WITH_LIMITS` | Clinical code-switching evaluation `NOT_RUN` | Unicode transcript and multilingual local adapter boundaries |
+| 6 | `IMPLEMENTED_WITH_LIMITS` | Multilingual clinical understanding/accuracy remains `NOT_RUN` | Frozen Malay-English-Hokkien transport, clinician review and exact-provenance case passed without translation claims |
 | 7 | `NOT_IMPLEMENTED` | No streaming ASR/in-consult alert | Post-consult processing remains clearly labelled |
 | 8 | `IMPLEMENTED_WITH_LIMITS` | External Provider timeout `NOT_RUN` | Total deadline, async cancellation, raw preservation and distinct fallback |
 | 9 | `IMPLEMENTED_AND_VERIFIED` | Live error rate not measured | Returning errors enter labelled deterministic fallback |
@@ -100,9 +100,12 @@ This verifies the current application logic. It is not a claim of database row-l
 
 ### Current regression evidence
 
-- Backend collection: 702 tests.
-- Result: 700 passed; 2 existing real-local-ASR input-dependent tests skipped.
-- Frontend TypeScript/Vite production build: passed, 65 modules transformed.
+- Backend collection after the Provider revision: 714 tests.
+- Result: 712 passed; 2 existing real-local-ASR input-dependent tests skipped.
+- F Final consult-review module: 9 passed.
+- Focused provenance/RBAC/publication/concurrency regression: 75 passed.
+- Focused SL1/SL2/SL3/Shadow isolation regression: 62 passed.
+- Frontend TypeScript/Vite production build: passed, 112 modules transformed.
 - `git diff --check`: passed.
 - Secret scan: `SECRET_SCAN_PASS`.
 
@@ -144,10 +147,16 @@ The two skips mean the ignored local ASR model/audio inputs were unavailable; th
 ### Explicit model-call total timeout (F_A5 implemented, 2026-09-02)
 
 - All four DeepSeek entries (`verify_connection`, `summarize`, `copilot`, Check-in turn/summary) share a 30-second total wall-clock deadline (MVP interaction policy, not a Provider SLA) with bounded connect/pool 5 s, write 10 s, read 30 s phase timeouts and `max_retries=0`.
-- Provider calls use the SDK-compatible `anthropic.Timeout` and run through an async client under `asyncio.wait_for`, so a timeout CANCELS the underlying network request rather than leaving a blocking sync thread running.
+- Provider calls use `httpx.AsyncClient` phase timeouts and run through
+  `asyncio.wait_for`, so a timeout CANCELS the underlying network request rather
+  than leaving a blocking sync thread running. DeepSeek requests use Chat
+  Completions, keep thinking enabled, omit generated-token limits, and parse
+  only final `message.content`.
 - A distinct `ProviderTimeoutError` is explicitly caught in all four flows: Consult/Check-in → `fallback_reason="provider_timeout"` + deterministic fallback (raw preserved); Copilot → `unavailable` with no substitute answer; key verification → 503 with no key saved.
 - Timeout is logged as the fixed `provider_timeout` reason (not a Python class name) and carries no clinical content.
-- A real `AsyncAnthropic` request to a local never-responding HTTP server verifies deadline return and socket disconnect. Check-in also displays patient-safe saved-source + timeout + fallback copy.
+- A real async HTTP request to a local never-responding server verifies deadline
+  return and socket disconnect. Check-in also displays patient-safe saved-source
+  + timeout + fallback copy.
 - A real server-session patient login opened the independent Check-in page with zero browser warning/error; the timeout-specific state remains API/frontend-contract tested rather than live-Provider browser tested.
 - Remaining limit: no live DeepSeek key or external service was used, so a real external Provider timeout was not observed.
 
@@ -155,20 +164,22 @@ The two skips mean the ignored local ASR model/audio inputs were unavailable; th
 
 - Manual speaker-labelled Unicode transcripts preserve mixed-language text as entered.
 - The local Faster Whisper adapter is multilingual and fail-closed on unknown speaker/low-confidence review issues.
-- There is no diarization and no validated Malay-English-Hokkien code-switching accuracy.
+- Clinician-owned Doctor Consult confirmation now requires server-validated acknowledgement that speaker labels, mixed-language content, and medication/dosage mentions were reviewed against the source. False or missing acknowledgement is rejected before downstream AI processing; Nurse and patient confirmation authority is unchanged.
+- One hand-written synthetic Malay-English-Hokkien statement passed exact UTF-8 round-trip, continuous-index/speaker preservation, Mock exact-quote provenance, changed-quote drop and deterministic fail-closed tests. The review attestation records only reviewer/time/role and three booleans in Audit metadata.
+- There is no diarization, automatic speaker attribution, translation, external medication reference check, or validated Malay-English-Hokkien clinical understanding/code-switching accuracy.
 - Physical-microphone, noisy-clinic, clinical-entity accuracy, and production-throughput evidence remain `NOT_RUN` in the current environment.
 - Deterministic fallback extraction is primarily English keyword based.
 
 ### Importance and Self-Learning
 
 - Importance is a transparent retrieval-order heuristic, not a clinical-risk probability.
-- Bounded clinic-scoped feedback from real review actions adjusts future candidates by type.
+- Bounded clinic-scoped feedback from review actions is retained for Shadow evaluation; the formal serving adjustment is forced to zero.
 - Caps and hard protections limit negative learning.
 - F_A2 now records versioned score factors, role-specific inclusion/exclusion reasons, deterministic priority bands and two-axis clinician review labels.
 - F_A1/SL1 records immutable content-free decisions for surfaced, unsurfaced and excluded candidates. Serving is base-only; Hide/Confirm/Pin do not train. Coverage Review and Admin Shadow controls support explicit role-bounded signals, replay, freeze and rollback without serving promotion.
 - SL2 trains byte-reproducible staff and clinician pairwise linear models from a frozen 30-scenario synthetic dataset. They run only in Shadow and do not change eligibility, priority bands, protection or formal Glance.
 - SL3 automatically compiles eligible explicit outcome labels into a content-free, scope-bound pairwise dataset and exposes an explicit offline training command. It does not infer labels from clicks or missing feedback, does not train on page load and does not serve a model.
-- Selection bias remains: only surfaced candidates receive review feedback.
+- Exposure bias remains: routine feedback is concentrated on surfaced items. Coverage Review exposes eligible-unsurfaced and excluded decisions, but no sampling policy ensures that reviewers inspect or label them.
 - No real-feedback model has been trained or validated. The current seeded database has zero eligible observed pairs, so SL3 correctly blocks artifact creation. Bayesian adaptation, Bandits, automatic retraining and serving promotion remain unimplemented.
 - There is no unsurfaced-candidate sampling, shadow-ranking gate, fatigue/bulk-dismiss detection, clinical-outcome calibration, or clinician usability study.
 
@@ -178,7 +189,10 @@ The two skips mean the ignored local ASR model/audio inputs were unavailable; th
 - Mock plus the server validator: `32/32` expected outcomes.
 - Deterministic fallback: `28/28` language cases carried no clinician-priority reason code.
 - Exact source mismatch: `4/4` dropped.
-- Live Provider: `NOT_RUN`; no live pass rate is inferred.
+- Live Provider: one synthetic multilingual Consult rerun passed after the
+  2026-09-03 protocol revision (summary present, 4/4 candidates exactly
+  anchored). This is connectivity/contract evidence, not a clinical-accuracy
+  pass rate.
 - The first run exposed 19 false-positive mock routes. The final fail-closed validator sends uncertain cases to routine Nurse review while preserving the patient report. This is rule conformance, not medical validity.
 
 ### Patient-facing publication

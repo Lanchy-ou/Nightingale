@@ -116,6 +116,7 @@ def test_canonical_confirm_rejects_preview_metadata_and_source_ranges(clinician_
             "consult_id": "d3-range-reject",
             "ingestion_key": "d3-range-reject-key",
             "started_at": "2026-08-27T09:00:00",
+            **fixture.DOCTOR_CONSULT_REVIEW_ATTESTATION,
             "content": {
                 "segments": [
                     {
@@ -140,6 +141,7 @@ def test_confirmed_transcript_segments_have_only_canonical_fields(clinician_clie
             "consult_id": "d3-canonical-fields",
             "ingestion_key": "d3-canonical-fields-key",
             "started_at": "2026-08-27T09:05:00",
+            **fixture.DOCTOR_CONSULT_REVIEW_ATTESTATION,
             "content": {
                 "segments": [
                     {"index": 0, "speaker": "doctor", "text": "Any nausea?"},

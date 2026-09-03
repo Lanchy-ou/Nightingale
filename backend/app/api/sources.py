@@ -298,6 +298,7 @@ def _create_consult(
     summary_type: str,
     ids: tuple[str, str, str],
     requested_encounter_id: str | None = None,
+    audit_details: dict | None = None,
 ) -> dict:
     """Shared raw-first orchestration; role semantics stay in each endpoint."""
     authorize(ctx, action, patient.clinic_id, patient.patient_id)
@@ -356,6 +357,7 @@ def _create_consult(
             clinic_id=patient.clinic_id,
             patient_id=patient.patient_id,
             event_id=event_id,
+            details=audit_details,
         )
         add_audit(
             db,
@@ -413,6 +415,11 @@ def create_doctor_consult(
         audit_action="doctor_consult_create",
         summary_type="ai_doctor_consult_summary",
         ids=_doctor_consult_ids(patient.clinic_id, patient.patient_id, body.consult_id),
+        audit_details={
+            "speaker_labels_reviewed": body.speaker_labels_reviewed,
+            "mixed_language_content_reviewed": body.mixed_language_content_reviewed,
+            "medication_dosage_mentions_reviewed": body.medication_dosage_mentions_reviewed,
+        },
     )
     return DoctorConsultOut(
         event=result["event"],

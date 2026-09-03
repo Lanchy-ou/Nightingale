@@ -1139,3 +1139,56 @@ The official 16-scenario real-clinic feedback is a common challenge-wide stress 
 - **Permanent workflow**: inspect the real journey -> explain/challenge the design -> owner approval -> failing regression -> minimum implementation -> targeted/full tests -> production build -> relevant product-session browser acceptance -> update the readiness ledger.
 - **Current local repair state at F1 entry**: scenario 13 allergy-conflict handling and scenario 16 source-version/hash provenance are implemented and verified in the working tree; they must be committed before being described as repository-delivered capability.
 - **No implicit authorization**: the task card organizes future work but does not authorize implementation, future merge/push, Provider spend, external delivery, or third-party service/account changes.
+
+---
+
+## 36. F Final Consult Review Status（2026-09-03）
+
+The bounded F Final feedback slice is `IMPLEMENTED_WITH_LIMITS`.
+
+- Manual and Voice Doctor Consult confirmation require server-enforced
+  `speaker_labels_reviewed`, `mixed_language_content_reviewed`, and
+  `medication_dosage_mentions_reviewed` attestations. Nurse and patient
+  confirmation contracts remain unchanged.
+- Attestation means clinician comparison with the source only. It adds no
+  automatic speaker attribution, translation, multilingual clinical
+  understanding or external medication-reference validation.
+- The immutable Transcript remains raw authority; rejected confirmation creates
+  no derived record, and stable operation identities preserve retry idempotency.
+  Audit details contain only the three booleans alongside existing reviewer,
+  role and time metadata columns.
+- The synthetic Malay-English-Hokkien fixture passed exact UTF-8 round-trip,
+  reviewed-speaker, exact-span and changed-quote fail-closed tests. Real local
+  ASR input tests passed on an ignored synthetic WAV, with observed
+  code-switching transcription errors retained as a limitation.
+- Self-Learning remains `base_only`: SL1 captures complete decisions, SL2 uses
+  frozen synthetic role-specific Shadow artifacts, and SL3 exposes a
+  content-free observed-feedback bridge without a validated/promoted model.
+- Verification after the Provider protocol revision: new module 9 passed;
+  focused provenance/RBAC/publication/concurrency 75 passed; focused
+  SL1/SL2/SL3 62 passed; full backend 714 collected / 712 passed / 2 explicit
+  local-ASR-input skips; frontend production build 112 modules; diff and secret
+  checks passed.
+
+Evidence: `docs/final_feedback_consult_review_evidence_2026-09-03.md` and
+`docs/self_learning_design_and_release_boundary_2026-09-03.md`.
+
+---
+
+## 37. DeepSeek Final-Content Protocol Revision（2026-09-03）
+
+- Owner direction is text + requirements in, wait for completion, final content
+  out. Thinking remains enabled; no generated-token limit is sent.
+- `DeepSeekAdapter` uses the OpenAI-compatible Chat Completions endpoint through
+  the existing `httpx` dependency. Requests ask for JSON output on structured
+  flows and the application parses only final `message.content`, never
+  `reasoning_content`.
+- Existing redaction-before-egress, 30-second total deadline, phase timeouts,
+  strict Pydantic schemas, exact quote anchoring and deterministic fallback are
+  unchanged.
+- A previous Anthropic-format reproduction ended with
+  `stop_reason=max_tokens`, all 2,000 output tokens in `ThinkingBlock`, and no
+  final text. The revised live synthetic multilingual rerun returned a complete
+  summary and 4/4 exactly anchored candidates.
+- Provider contract/timeout tests pass, and the complete backend result is 714
+  collected / 712 passed / 2 existing optional local-ASR skips.

@@ -7,6 +7,7 @@ from app.data_decay import restore_shadow_archive, run_storage_policy
 from app.highlights import extract_text
 from app.models import Artifact, ArtifactStorageState, Highlight
 from app.voice.models import VoiceCaptureRecord
+from seed import fixture
 from tests.voice_api_helpers import create_payload, mock_asr_for, synthetic_wav, upload
 
 
@@ -26,7 +27,11 @@ def test_confirmed_voice_uses_e2_score_and_e3_shadow_archive_without_touching_au
     ).status_code == 200
     processed = clinician_client.post(
         f"/api/voice/captures/{capture_id}/confirm",
-        json={"expected_revision": 4, "idempotency_key": "phase-e-confirm"},
+        json={
+            "expected_revision": 4,
+            "idempotency_key": "phase-e-confirm",
+            **fixture.DOCTOR_CONSULT_REVIEW_ATTESTATION,
+        },
     )
     assert processed.status_code == 200
 

@@ -74,6 +74,19 @@ class VoiceCommand(BaseModel):
         return value
 
 
+class VoiceConfirmCommand(VoiceCommand):
+    """Mode-aware confirmation body.
+
+    Doctor Consult captures require all three values at the endpoint. They are
+    optional in the wire schema so Nurse and patient confirmation paths are not
+    forced to make clinician-only attestations.
+    """
+
+    speaker_labels_reviewed: Literal[True] | None = None
+    mixed_language_content_reviewed: Literal[True] | None = None
+    medication_dosage_mentions_reviewed: Literal[True] | None = None
+
+
 class VoiceReviewEdit(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 

@@ -10,6 +10,7 @@ import type {
   CurrentIdentity,
   CoverageReview,
   DiffResult,
+  DoctorConsultReviewAttestation,
   DoctorConsultResult,
   DoctorTranscriptSegment,
   NurseConsultResult,
@@ -515,6 +516,7 @@ export const api = {
     startedAt: string,
     endedAt: string | null,
     segments: DoctorTranscriptSegment[],
+    reviewAttestation: DoctorConsultReviewAttestation,
     signal?: AbortSignal,
   ) =>
     post<DoctorConsultResult>(`/api/patients/${patientId}/doctor-consults`, {
@@ -523,6 +525,7 @@ export const api = {
       started_at: startedAt,
       ended_at: endedAt,
       content: { segments },
+      ...reviewAttestation,
     }, signal),
   createNurseConsult: (
     patientId: string,
@@ -603,8 +606,10 @@ export const api = {
     captureId: string,
     expectedRevision: number,
     idempotencyKey: string,
+    reviewAttestation?: DoctorConsultReviewAttestation,
   ) => post<VoiceCaptureRecord>(`/api/voice/captures/${captureId}/confirm`, {
     expected_revision: expectedRevision,
     idempotency_key: idempotencyKey,
+    ...(reviewAttestation ?? {}),
   }),
 };

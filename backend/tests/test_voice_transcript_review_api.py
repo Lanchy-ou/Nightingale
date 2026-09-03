@@ -2,6 +2,7 @@
 
 from app.api import voice as voice_api
 from app.voice.models import VoiceCaptureRecord
+from seed import fixture
 from tests.voice_api_helpers import create_payload, mock_asr_for, synthetic_wav, upload
 
 
@@ -33,7 +34,11 @@ def test_unknown_and_low_confidence_block_then_explicit_review_resolves(
     capture_id, transcript = _prepare_unknown(clinician_client, monkeypatch)
     blocked = clinician_client.post(
         f"/api/voice/captures/{capture_id}/confirm",
-        json={"expected_revision": 4, "idempotency_key": "confirm-blocked"},
+        json={
+            "expected_revision": 4,
+            "idempotency_key": "confirm-blocked",
+            **fixture.DOCTOR_CONSULT_REVIEW_ATTESTATION,
+        },
     )
     assert blocked.status_code == 422
 
@@ -57,7 +62,11 @@ def test_unknown_and_low_confidence_block_then_explicit_review_resolves(
 
     confirmed = clinician_client.post(
         f"/api/voice/captures/{capture_id}/confirm",
-        json={"expected_revision": 5, "idempotency_key": "confirm-reviewed"},
+        json={
+            "expected_revision": 5,
+            "idempotency_key": "confirm-reviewed",
+            **fixture.DOCTOR_CONSULT_REVIEW_ATTESTATION,
+        },
     )
     assert confirmed.status_code == 200
 

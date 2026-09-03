@@ -182,6 +182,7 @@ def test_same_consult_id_does_not_implicitly_group_doctor_and_nurse_events(
             "consult_id": shared_consult_id,
             "ingestion_key": "doctor-shared-label-key",
             "started_at": "2026-08-27T10:00:00",
+            **fixture.DOCTOR_CONSULT_REVIEW_ATTESTATION,
             "content": {
                 "segments": [
                     {"index": 0, "speaker": "doctor", "text": "Any change?"},

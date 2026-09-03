@@ -21,6 +21,7 @@ def _payload(consult_id: str = "consult-c1-001", ingestion_key: str = "submit-c1
         "started_at": "2026-08-26T10:00:00",
         "ended_at": "2026-08-26T10:20:00",
         "content": deepcopy(fixture.C1_DEMO_DOCTOR_TRANSCRIPT),
+        **fixture.DOCTOR_CONSULT_REVIEW_ATTESTATION,
     }
 
 

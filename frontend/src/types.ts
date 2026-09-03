@@ -310,6 +310,12 @@ export interface DoctorTranscriptSegment {
   text: string;
 }
 
+export interface DoctorConsultReviewAttestation {
+  speaker_labels_reviewed: boolean;
+  mixed_language_content_reviewed: boolean;
+  medication_dosage_mentions_reviewed: boolean;
+}
+
 export interface NurseTranscriptSegment {
   index: number;
   speaker: 'nurse' | 'patient';

@@ -7,6 +7,7 @@ import pytest
 from app.voice.asr import FasterWhisperASRClient
 from app.voice.audio import AudioPolicy, inspect_audio
 from app.voice.contracts import AuthorizedRecording, CaptureMode
+from seed import fixture
 from tests.voice_api_helpers import create_payload, upload
 
 
@@ -96,6 +97,7 @@ def test_real_local_asr_endpoint_requires_review_then_processes(
         json={
             "expected_revision": reviewed.json()["revision"],
             "idempotency_key": "real-local-confirm",
+            **fixture.DOCTOR_CONSULT_REVIEW_ATTESTATION,
         },
     )
     assert processed.status_code == 200

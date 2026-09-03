@@ -397,6 +397,11 @@ class DoctorConsultCreate(BaseModel):
 
     consult_id: str = Field(min_length=1, max_length=64)
     ingestion_key: str = Field(min_length=1, max_length=64)
+    # Clinician attestation is a confirmation gate, not a statement that the
+    # system understood, translated, or medically validated the source.
+    speaker_labels_reviewed: Literal[True]
+    mixed_language_content_reviewed: Literal[True]
+    medication_dosage_mentions_reviewed: Literal[True]
     # JSON transports datetimes as ISO-8601 strings; keep all other request
     # fields strict while allowing Pydantic's datetime parser at this boundary.
     started_at: datetime = Field(strict=False)
