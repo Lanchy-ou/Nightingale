@@ -36,6 +36,12 @@ def test_glance_review_controls_explain_their_effect():
     assert "These controls do not teach future ranking" in source
     assert "remain Shadow-only" in source
     assert ">Glance</h2>" in source
+    assert "function nextStepText" in source
+    assert "function evidenceText" in source
+    assert "Recommended action" in source
+    assert "An exact ${kind} is preserved in the source record" in source
+    assert "create a follow-up Task with an owner and due date" in source
+    assert "Inspect the exact supporting span before recording a review decision" not in source
 
 
 def test_clinical_sidebars_are_bounded_and_user_controllable():
@@ -60,6 +66,7 @@ def test_tasks_and_event_creation_forms_use_progressive_disclosure():
     assert "const [composerMode, setComposerMode]" in event
     assert "{composerMode === 'note'" in event
     assert "{composerMode === 'task'" in event
+    assert "{composerMode === 'instruction'" in event
 
 
 def test_staff_workspace_has_explicit_support_identity_and_no_copilot_default():
@@ -92,14 +99,24 @@ def test_event_comments_are_visible_and_last_task_menu_opens_upward():
     assert "bottom: calc(100% + 5px)" in styles
 
 
-def test_workspace_tabs_and_copilot_composer_use_stable_responsive_layouts():
+def test_workspace_tabs_and_copilot_use_one_read_only_chat_composer():
     workspace = _read("frontend/src/pages/ClinicianWorkspacePage.tsx")
     copilot = _read("frontend/src/components/CopilotPanel.tsx")
     styles = _read("frontend/src/index.css")
     assert "workspace-tabs ${route.mode === 'event' ? 'with-event-detail' : ''}" in workspace
     assert "min-width: 72px; flex: 1 1 0" in styles
-    assert "copilot-composer-head" in copilot
-    assert "copilot-chip-group" in copilot
+    assert "Copilot only reads the record" in copilot
+    assert "Use Notes, Tasks, or Comments to record clinical work" in copilot
     assert "copilot-input-shell" in copilot
-    assert ".copilot-quick-actions { display: flex; flex-wrap: wrap" in styles
+    assert "Draft patient instruction" not in copilot
+    assert "copilot-chip-group" not in copilot
     assert ".copilot-input-toolbar { display: flex" in styles
+
+
+def test_clinician_priority_review_defaults_to_an_owned_follow_up_task():
+    tasks = _read("frontend/src/components/ClinicalTasksView.tsx")
+    assert "Choose the next action" in tasks
+    assert "Create Task and complete review" in tasks
+    assert "Close review without follow-up" in tasks
+    assert "Monitor / record · routine" not in tasks
+    assert "setExpandedTaskId(followUp.task_id)" in tasks

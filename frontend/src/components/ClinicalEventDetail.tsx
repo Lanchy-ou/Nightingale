@@ -5,6 +5,7 @@ import type { Artifact, AuditLog, Comment, Event } from '../types';
 import ArtifactContent from './ArtifactContent';
 import ArtifactEdit from './ArtifactEdit';
 import NoteComposer from './NoteComposer';
+import PatientInstructionComposer from './PatientInstructionComposer';
 import { TaskCreateForm } from './ClinicalTasksView';
 import InstructionPublicationControl from './InstructionPublicationControl';
 
@@ -61,7 +62,7 @@ export default function ClinicalEventDetail({
   const [comments, setComments] = useState<Comment[]>([]);
   const [audit, setAudit] = useState<AuditLog[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(initialArtifactId);
-  const [composerMode, setComposerMode] = useState<'note' | 'task' | null>(null);
+  const [composerMode, setComposerMode] = useState<'note' | 'task' | 'instruction' | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -163,6 +164,7 @@ export default function ClinicalEventDetail({
           <button className="secondary-button" onClick={onOpenComments}>Comments</button>
           <button className="secondary-button" onClick={() => setComposerMode((current) => current === 'note' ? null : 'note')}>{role === 'clinician' ? 'Add clinician note' : 'Add staff note'}</button>
           <button className="secondary-button" onClick={() => setComposerMode((current) => current === 'task' ? null : 'task')}>Create task</button>
+          {role === 'clinician' && <button className="secondary-button" onClick={() => setComposerMode((current) => current === 'instruction' ? null : 'instruction')}>Add patient instruction</button>}
         </div>
       </div>
 
@@ -254,6 +256,10 @@ export default function ClinicalEventDetail({
               <header><div><p className="eyebrow">New follow-up action</p><h3>Create care task</h3></div><button className="link-btn" onClick={() => setComposerMode(null)}>Close</button></header>
               <p className="panel-help">The current Event is the origin. An exact quote is optional and must be explicitly confirmed.</p>
               <TaskCreateForm event={event} sourceArtifact={selectedArtifact} onCreated={() => { onChanged(); setComposerMode(null); }} />
+            </section>}
+            {composerMode === 'instruction' && <section className="event-action-panel">
+              <header><div><p className="eyebrow">Patient communication</p><h3>Create patient instruction</h3></div><button className="link-btn" onClick={() => setComposerMode(null)}>Close</button></header>
+              <PatientInstructionComposer eventId={event.event_id} onSaved={(artifact) => { setSelectedId(artifact.artifact_id); onChanged(); setComposerMode(null); }} />
             </section>}
           </div>
         </div>

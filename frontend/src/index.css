@@ -487,10 +487,8 @@ body.resizing-clinical-panel { cursor: col-resize; user-select: none; }
 .glance-safety-context { margin: 12px 0; padding: 12px 14px; display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; border: 1px solid #efc3c3; border-radius: 10px; background: #fff7f7; }
 .glance-safety-context strong { color: #9b1c1c; font-size: 12px; letter-spacing: .04em; text-transform: uppercase; }
 .glance-safety-context span { color: #5c2929; font-size: 14px; }
-.glance-detail-evidence dl { margin: 10px 0 0; display: grid; gap: 7px; }
-.glance-detail-evidence dl div { display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 10px; }
-.glance-detail-evidence dt { color: var(--clinical-brand); font-size: 12px; font-weight: 750; }
-.glance-detail-evidence dd { margin: 0; color: #40564e; font-size: 13px; overflow-wrap: anywhere; }
+.glance-detail-evidence p { margin: 8px 0 0; color: var(--text-secondary); font-size: 13px; line-height: 1.55; }
+.glance-detail-evidence small { display: block; margin-top: 8px; color: var(--text-muted); font-size: 10px; overflow-wrap: anywhere; }
 .glance-evidence-link { margin-top: 10px; padding: 0; border: 0; color: var(--primary); background: transparent; cursor: pointer; font-size: 12px; font-weight: 750; }
 .glance-evidence-link:hover { text-decoration: underline; }
 .glance-detail-authority { padding-left: 20px; border-left: 1px solid var(--border-subtle); }
@@ -631,6 +629,7 @@ body.resizing-clinical-panel { cursor: col-resize; user-select: none; }
 .notes-boundary-note strong, .task-authority-note strong { color: var(--clinical-brand); font-size: 12px; letter-spacing: .04em; text-transform: uppercase; }
 .task-authority-note { border-color: #ead7ae; color: #654d24; background: #fffaf0; }
 .task-authority-note strong { color: #8b5a00; }
+.workflow-success { margin: 10px 0 14px; padding: 10px 12px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid #bbf7d0; border-radius: var(--radius-md); color: #166534; background: #f0fdf4; font-size: 12px; }
 .notes-authority-legend { display: flex; align-items: center; gap: 5px; }
 .notes-authority-legend .badge { font-size: 12px; }
 .notes-section { padding: 15px; border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--bg-surface); box-shadow: var(--shadow-card); }
@@ -647,15 +646,11 @@ body.resizing-clinical-panel { cursor: col-resize; user-select: none; }
 .discussion-list button { padding: 13px; }
 .discussion-list button > span:nth-child(2), .discussion-list small { font-size: 12px; line-height: 1.45; }
 
-.copilot-authority-strip { padding: 10px 11px; display: grid; gap: 3px; border: 1px solid #d8e5e0; border-radius: 9px; color: #50645e; background: #f3f8f6; }
-.copilot-authority-strip strong { color: var(--clinical-brand); font-size: 12px; letter-spacing: .04em; text-transform: uppercase; }
-.copilot-authority-strip span { font-size: 13px; line-height: 1.45; }
 .copilot-panel small { font-size: 12px; }
 .copilot-welcome h3, .copilot-answer-head h3 { font-size: 16px; }
 .copilot-welcome p:last-child, .copilot-claim p, .copilot-limitations p, .copilot-source-card p { font-size: 14px; line-height: 1.55; }
 .copilot-claim strong { font-size: 12px; }
 .copilot-claim .link-btn, .copilot-evidence summary, .copilot-limitations summary { font-size: 12px; }
-.copilot-draft-fields input, .copilot-draft-fields textarea { font-size: 14px; }
 
 .consult-authority-note { margin: -3px 0 15px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--clinical-border); border-radius: 11px; background: #fff; overflow: hidden; }
 .consult-authority-note span { min-width: 0; padding: 11px 13px; display: flex; flex-direction: column; gap: 4px; color: #4c625a; font-size: 13px; line-height: 1.45; }
@@ -743,10 +738,10 @@ body.resizing-clinical-panel { cursor: col-resize; user-select: none; }
 .review-blockers { font-size: 13px; line-height: 1.5; }
 .primary-button:disabled, .secondary-button:disabled,
 .patient-task-actions button:disabled, .task-actions-menu button:disabled,
-.copilot-quick-actions button:disabled { opacity: .52; filter: saturate(.7); }
+.copilot-send:disabled { opacity: .52; filter: saturate(.7); }
 .clinical-view, .patient-surface, .admin-surface, .auth-card,
 .artifact-content, .copilot-result, .comment, .task-provenance { overflow-wrap: anywhere; }
-.reader-scroll pre, .raw-transcript-panel pre, .copilot-draft pre, code { white-space: pre-wrap; overflow-wrap: anywhere; }
+.reader-scroll pre, .raw-transcript-panel pre, code { white-space: pre-wrap; overflow-wrap: anywhere; }
 .success-message, .patient-success-message { color: #166534; background: #f0fdf4; border-color: #bbf7d0; }
 .verification-callout { font-size: 12px; line-height: 1.5; }
 .needs-review-tag, .unresolved-tag, .confirmed-tag, .staff-reviewed-tag { white-space: normal; line-height: 1.35; }
@@ -767,16 +762,8 @@ body.resizing-clinical-panel { cursor: col-resize; user-select: none; }
 .copilot-error-state .form-error { flex: 1; margin: 0; }
 .copilot-error-state .secondary-button { flex: 0 0 auto; min-height: 38px; }
 .copilot-composer { position: sticky; bottom: -26px; margin: auto -16px -26px; padding: 12px 16px 14px; background: #fff; border-top: 1px solid var(--clinical-border); box-shadow: 0 -8px 20px rgba(30,74,61,.05); }
-.copilot-composer-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 10px; }
-.copilot-composer-head strong { color: var(--text-secondary); font-size: 12px; }
-.copilot-composer-head span { color: var(--text-muted); font-size: 10px; text-align: right; }
-.copilot-chip-group + .copilot-chip-group { margin-top: 9px; }
-.copilot-chip-group > span { display: block; margin-bottom: 6px; color: var(--text-muted); font-size: 9px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
-.copilot-quick-actions { display: flex; flex-wrap: wrap; gap: 6px; }
-.copilot-quick-actions button { min-height: 32px; padding: 7px 10px; border: 1px solid var(--border-strong); border-radius: 999px; color: var(--text-secondary); background: var(--bg-surface); cursor: pointer; font-size: 10px; text-align: center; transition: color .16s ease, border-color .16s ease, background-color .16s ease; }
-.copilot-quick-actions button:hover:not(:disabled) { color: var(--primary-strong); border-color: #8db4a7; background: var(--primary-subtle); }
-.copilot-quick-actions button.active { color: var(--primary-strong); border-color: #679987; background: var(--primary-subtle); font-weight: 700; }
-.copilot-input-shell { margin-top: 11px; padding: 10px 10px 8px 12px; border: 1px solid var(--border-strong); border-radius: 15px; background: var(--bg-surface); box-shadow: var(--shadow-card); transition: border-color .16s ease, box-shadow .16s ease; }
+.copilot-record-boundary { margin-bottom: 8px; color: var(--text-muted); font-size: 11px; line-height: 1.45; }
+.copilot-input-shell { padding: 10px 10px 8px 12px; border: 1px solid var(--border-strong); border-radius: 15px; background: var(--bg-surface); box-shadow: var(--shadow-card); transition: border-color .16s ease, box-shadow .16s ease; }
 .copilot-input-shell:focus-within { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-subtle); }
 .copilot-input-shell textarea { width: 100%; min-height: 24px; max-height: 120px; padding: 2px 0 5px; box-sizing: border-box; border: 0; outline: 0; resize: none; field-sizing: content; color: var(--text-primary); background: transparent; font: inherit; font-size: 13px; line-height: 1.5; }
 .copilot-input-shell textarea::placeholder { color: #94a3b8; }
@@ -787,7 +774,7 @@ body.resizing-clinical-panel { cursor: col-resize; user-select: none; }
 .copilot-send:hover:not(:disabled) { border-color: var(--primary-strong); background: var(--primary-strong); }
 .copilot-send:disabled { border-color: var(--border-strong); color: #94a3b8; background: var(--bg-hover); cursor: default; }
 .copilot-result { display: grid; gap: 10px; }
-.copilot-claim, .copilot-evidence, .copilot-draft, .copilot-limitations, .copilot-source-card { border: 1px solid #d7e3df; border-radius: 10px; padding: 10px; background: #fff; }
+.copilot-claim, .copilot-evidence, .copilot-limitations, .copilot-source-card { border: 1px solid #d7e3df; border-radius: 10px; padding: 10px; background: #fff; }
 .copilot-claim p, .copilot-limitations p, .copilot-source-card p { margin: 5px 0; }
 .copilot-claim strong { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
 .copilot-claim.supported { border-left: 4px solid #41866f; }
@@ -799,10 +786,6 @@ body.resizing-clinical-panel { cursor: col-resize; user-select: none; }
 .copilot-evidence article:first-of-type { margin-top: 8px; }
 .copilot-evidence blockquote, .copilot-source-card blockquote { margin: 3px 0; padding-left: 8px; border-left: 2px solid #9bbeb1; color: #344943; font-size: 13px; }
 .copilot-evidence em { color: #9b6420; font-size: 12px; }
-.copilot-draft pre { overflow: auto; white-space: pre-wrap; background: #f5f8f7; padding: 8px; border-radius: 6px; font-size: 11px; }
-.copilot-draft-fields { display: grid; gap: 9px; margin: 10px 0; }
-.copilot-draft-fields label { display: grid; gap: 4px; color: #50645e; font-size: 12px; font-weight: 700; }
-.copilot-draft-fields textarea { resize: vertical; }
 .copilot-limitations { background: #f7faf8; }
 .copilot-limitations p { font-size: 11px; }
 .context-panel-head { flex: 0 0 auto; padding: 12px 16px 10px; background: var(--bg-surface); border-bottom: 1px solid var(--border-subtle); }
@@ -847,6 +830,13 @@ body.resizing-clinical-panel { cursor: col-resize; user-select: none; }
 .event-reading-column { min-width: 0; display: grid; gap: 12px; }
 .event-action-panel > header { display: flex; justify-content: space-between; gap: 10px; }
 .panel-help { margin: 5px 0 12px; color: #52645e; font-size: 11px; line-height: 1.5; }
+.patient-instruction-composer { display: grid; gap: 11px; }
+.patient-instruction-composer header strong, .patient-instruction-composer header span { display: block; }
+.patient-instruction-composer header span { margin-top: 4px; color: var(--text-muted); font-size: 11px; line-height: 1.5; }
+.patient-instruction-composer label { display: grid; gap: 5px; color: var(--text-secondary); font-size: 12px; font-weight: 650; }
+.patient-instruction-composer textarea { box-sizing: border-box; width: 100%; padding: 9px 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-md); color: var(--text-primary); background: var(--bg-surface); font: inherit; resize: vertical; }
+.patient-instruction-composer .inline-actions { align-items: center; }
+.patient-instruction-composer .inline-actions span { color: var(--text-muted); font-size: 10px; }
 .lifecycle-list { position: relative; display: flex; flex-direction: column; }
 .lifecycle-list::before { content: ''; position: absolute; left: 6px; top: 10px; bottom: 10px; width: 1px; background: #bfd0ca; }
 .lifecycle-item { position: relative; padding: 7px 5px 7px 20px; border: 0; background: transparent; text-align: left; }
@@ -1731,11 +1721,16 @@ button.lifecycle-item.active { background: #eaf5f1; border-radius: 8px; }
 .patient-review-completion { margin-top: 14px; padding-top: 12px; border-top: 1px solid #e4ece8; }
 .patient-review-completion > span { margin-right: auto; color: #52645e; font-size: 12px; }
 .clinician-review-decision { margin-top: 14px; padding-top: 13px; border-top: 1px solid #e4ece8; }
+.clinician-review-decision > header { display: grid; gap: 3px; }
+.clinician-review-decision > header strong { color: var(--text-primary); font-size: 14px; }
+.clinician-review-decision > header span { color: var(--text-muted); font-size: 11px; line-height: 1.45; }
 .clinician-follow-up-form { margin-top: 12px; display: grid; grid-template-columns: minmax(220px, 1.4fr) repeat(3, minmax(140px, .8fr)); gap: 9px; align-items: end; }
 .clinician-follow-up-form > div { align-self: center; }
 .clinician-follow-up-form > div strong, .clinician-follow-up-form > div span { display: block; }
 .clinician-follow-up-form > div span { margin-top: 3px; color: #71827c; font-size: 11px; }
 .clinician-follow-up-form .primary-button { grid-column: 1 / -1; width: fit-content; }
+.clinician-review-no-action { margin-top: 13px; padding-top: 11px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid var(--border-subtle); }
+.clinician-review-no-action > span { color: var(--text-muted); font-size: 11px; }
 .shadow-only-banner { margin: 12px 0; padding: 11px 13px; display: flex; gap: 8px 12px; align-items: baseline; flex-wrap: wrap; border: 1px solid #c8d8ef; border-radius: 10px; color: #314f76; background: #f3f7fd; }
 .shadow-only-banner strong { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
 .shadow-only-banner span { font-size: 12px; }

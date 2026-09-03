@@ -39,6 +39,35 @@ function patientReviewState(h: Highlight): string | null {
   return 'Patient-reported · Unverified priority review';
 }
 
+function nextStepText(h: Highlight, reviewRole: string): string {
+  const task = h.task_context;
+  if (task?.task_kind === 'patient_report_review') {
+    return 'Nurse: open the linked review and verify each patient-reported item against its exact source.';
+  }
+  if (task?.task_kind === 'clinician_priority_review') {
+    return 'Clinician: open the linked review and either close it with no follow-up or create an owned follow-up Task.';
+  }
+  if (task?.status === 'reported_done') {
+    return 'Clinic: verify the patient-reported completion before marking the linked Task complete.';
+  }
+  if (h.task_id) return 'Open the linked Task to see its owner, due date, source, and current workflow state.';
+  if (h.review_status === 'needs_review') return 'Compare the conflicting source statements before recording a clinical decision.';
+  if (h.feature_flags.clinician_confirmed) return 'No new action is implied. Open the source only if you need to verify the confirmed context.';
+  if (/blood test|result.*not returned|pending/i.test(`${h.text} ${h.risk_reason}`)) return 'Check whether the result is available; if it is still missing, create a follow-up Task with an owner and due date.';
+  if (h.feature_flags.explicit_risk) return 'Open the exact source, then decide whether this concern needs a follow-up Task.';
+  if (h.feature_flags.symptom_change) {
+    const reportedChange = h.assertion_value?.trim() || h.text;
+    return `${reviewRole === 'staff' ? 'Review' : 'Compare'} “${reportedChange}” with the latest clinical record, then acknowledge it or open follow-up work.`;
+  }
+  return 'Open the exact source before deciding whether to confirm, keep visible, or hide this item.';
+}
+
+function evidenceText(h: Highlight): string {
+  if (!h.source_span) return 'No exact source span is claimed for this item.';
+  const kind = h.source_span.kind.replace(/_/g, ' ');
+  return `An exact ${kind} is preserved in the source record. Open it to check the original wording, author, and date.`;
+}
+
 function learnedPriority(h: Highlight) {
   if (h.adaptive_adjustment === 0) return null;
   const sign = h.adaptive_adjustment > 0 ? '+' : '';
@@ -217,7 +246,7 @@ export default function GlancePanel({
             </section>
 
             <section className="glance-detail-next-step">
-              <div><span>Next step</span><p>{selectedHighlight.task_id ? 'Open the linked Task and review its current workflow state.' : 'Inspect the exact supporting span before recording a review decision.'}</p></div>
+              <div><span>Recommended action</span><p>{nextStepText(selectedHighlight, reviewRole)}</p></div>
               <div className="glance-detail-actions">
                 {sourceAction(selectedHighlight, true)}
                 {reviewMenu(selectedHighlight)}
@@ -229,15 +258,12 @@ export default function GlancePanel({
 
             <section className="glance-detail-provenance">
               <div className="glance-detail-evidence">
-                <span>Source and provenance</span>
-                <dl>
-                  <div><dt>Event</dt><dd>Linked medical Event</dd></div>
-                  <div><dt>Artifact</dt><dd>{selectedHighlight.artifact_id ? 'Derived Artifact linked' : 'No derived Artifact'}</dd></div>
-                  <div><dt>Exact span</dt><dd>{selectedHighlight.source_span ? `${selectedHighlight.source_span.kind} source available` : 'No exact span claimed'}</dd></div>
-                </dl>
+                <span>Evidence</span>
+                <p>{evidenceText(selectedHighlight)}</p>
+                <small>Event {selectedHighlight.event_id} · Source {selectedHighlight.source_artifact_id ?? selectedHighlight.artifact_id ?? 'unavailable'}</small>
                 {selectedHighlight.task_id && <button className="glance-evidence-link" onClick={() => viewSource(selectedHighlight.highlight_id)}>View exact source</button>}
               </div>
-              <div className="glance-detail-authority"><span>Authority</span><p>{selectedHighlight.feature_flags.clinician_confirmed ? 'Clinician-reviewed. Raw, AI and human-authored Artifacts remain separate.' : 'Suggested for review, not clinician confirmation. Opening the source does not change authority.'}</p></div>
+              <div className="glance-detail-authority"><span>Review status</span><p>{selectedHighlight.feature_flags.clinician_confirmed ? 'Confirmed by a clinician. The original source and generated summary remain separate.' : 'Not clinician-confirmed. Reading the source does not accept or change this item.'}</p></div>
             </section>
 
             <div className="glance-detail-explainability">

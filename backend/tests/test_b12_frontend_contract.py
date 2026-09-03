@@ -26,8 +26,12 @@ def test_clinical_publication_controls_are_explicit_and_versioned():
         assert route in api
 
 
-def test_copilot_patient_instruction_saves_draft_not_fake_publication():
+def test_patient_instruction_is_created_from_event_workflow_not_copilot():
     copilot = _read("frontend/src/components/CopilotPanel.tsx")
-    assert "saved as a clinic draft; publish separately" in copilot
-    assert "Confirm and create draft" in copilot
-    assert "patient visible if confirmed" not in copilot
+    composer = _read("frontend/src/components/PatientInstructionComposer.tsx")
+    detail = _read("frontend/src/components/ClinicalEventDetail.tsx")
+    assert "Copilot only reads the record" in copilot
+    assert "Draft patient instruction" not in copilot
+    assert "Add patient instruction" in detail
+    assert "Save clinic draft" in composer
+    assert "Nothing is patient-visible until a clinician publishes it" in composer

@@ -254,6 +254,7 @@ export default function ClinicalTasksView({
   const [followUpOwner, setFollowUpOwner] = useState<'clinician' | 'staff'>('clinician');
   const [followUpDue, setFollowUpDue] = useState('');
   const [followUpSensitivity, setFollowUpSensitivity] = useState<'routine' | 'time_sensitive'>('routine');
+  const [workflowMessage, setWorkflowMessage] = useState<string | null>(null);
   const focusTimerRef = useRef<number | null>(null);
 
   const load = useCallback(async (signal?: AbortSignal) => {
@@ -492,6 +493,9 @@ export default function ClinicalTasksView({
       );
       setReviewContext(null);
       await load();
+      setExpandedTaskId(followUp.task_id);
+      focusTaskCard(followUp.task_id, false);
+      setWorkflowMessage(`Review completed. Follow-up Task “${followUp.title}” was created and opened below.`);
       onChanged();
     } catch (reviewError: any) {
       setError(String(reviewError.message ?? reviewError));
@@ -602,6 +606,7 @@ export default function ClinicalTasksView({
     <section className="clinical-view tasks-view" aria-labelledby="tasks-heading">
       <div className="view-title-row"><div><p className="eyebrow">Who must do what next</p><h2 id="tasks-heading">Care Tasks</h2><p className="view-subtitle">Review active work first; create a new task only when needed.</p></div><div className="view-title-actions"><span className="record-count">{tasks.length} tasks</span><button className="primary-button" onClick={() => setShowCreate((current) => !current)}>{showCreate ? 'Close form' : 'New task'}</button></div></div>
       <div className="task-authority-note"><strong>Task authority</strong><span>Patient “Report done” means reported_done and still requires explicit clinic verification before completion.</span></div>
+      {workflowMessage && <div className="workflow-success" role="status"><span>{workflowMessage}</span><button className="link-btn" onClick={() => setWorkflowMessage(null)}>Dismiss</button></div>}
       {error && <div className="form-error">{error}</div>}
       {showCreate && <div className="task-create-card">
         <div className="task-create-head"><div><p className="eyebrow">New follow-up action</p><h3>New task</h3><p>Choose the clinical Event this task belongs to.</p></div><button className="link-btn" onClick={() => setShowCreate(false)}>Close</button></div>
@@ -640,19 +645,16 @@ export default function ClinicalTasksView({
           <button disabled={pendingReviewCount > 0 || pendingId === reviewContext.task.task_id} onClick={() => verifyPatientReport(reviewContext.task, aggregateReviewOutcome ?? 'verified', 'clinician_review')}>Complete + clinician review</button>
         </footer>}
         {identity.role === 'clinician' && reviewContext.task.task_kind === 'clinician_priority_review' && ['open', 'in_progress'].includes(reviewContext.task.status) && <section className="clinician-review-decision">
-          <div className="inline-actions">
-            <button disabled={pendingId === reviewContext.task.task_id} onClick={() => completeClinicianReview(reviewContext.task, 'no_action', 'routine')}>No action · routine</button>
-            <button disabled={pendingId === reviewContext.task.task_id} onClick={() => completeClinicianReview(reviewContext.task, 'monitor_or_record', 'routine')}>Monitor / record · routine</button>
-            <button disabled={pendingId === reviewContext.task.task_id} onClick={() => completeClinicianReview(reviewContext.task, 'monitor_or_record', 'time_sensitive')}>Monitor / record · time-sensitive</button>
-          </div>
+          <header><strong>Choose the next action</strong><span>Create a follow-up Task whenever someone must act. Close without a Task only when no follow-up is needed.</span></header>
           <div className="clinician-follow-up-form">
-            <div><strong>Action required</strong><span>Create the executable follow-up before closing this review.</span></div>
+            <div><strong>Create follow-up Task</strong><span>The new Task keeps the patient report, owner, due time, and completion state in one workflow.</span></div>
             <label>Task title<input value={followUpTitle} onChange={(event) => setFollowUpTitle(event.target.value)} /></label>
             <label>Owner<select value={followUpOwner} onChange={(event) => setFollowUpOwner(event.target.value as typeof followUpOwner)}><option value="clinician">Assign to me (clinician)</option><option value="staff">Nurse queue</option></select></label>
             <label>Time sensitivity<select value={followUpSensitivity} onChange={(event) => setFollowUpSensitivity(event.target.value as typeof followUpSensitivity)}><option value="routine">Routine</option><option value="time_sensitive">Time-sensitive</option></select></label>
             <label>Due time<input type="datetime-local" value={followUpDue} onChange={(event) => setFollowUpDue(event.target.value)} required={followUpSensitivity === 'time_sensitive'} /></label>
-            <button className="primary-button" disabled={pendingId === reviewContext.task.task_id || !followUpTitle.trim() || (followUpSensitivity === 'time_sensitive' && !followUpDue)} onClick={() => createFollowUpAndComplete(reviewContext.task)}>Create follow-up + complete review</button>
+            <button className="primary-button" disabled={pendingId === reviewContext.task.task_id || !followUpTitle.trim() || (followUpSensitivity === 'time_sensitive' && !followUpDue)} onClick={() => createFollowUpAndComplete(reviewContext.task)}>Create Task and complete review</button>
           </div>
+          <div className="clinician-review-no-action"><span>No one needs to act on this update?</span><button className="secondary-button" disabled={pendingId === reviewContext.task.task_id} onClick={() => completeClinicianReview(reviewContext.task, 'no_action', 'routine')}>Close review without follow-up</button></div>
         </section>}
       </section>}
       {loading && <div className="loading-card">Loading care tasks…</div>}
