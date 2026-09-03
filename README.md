@@ -88,7 +88,7 @@ Current evidence distinguishes the layers:
 
 - mock: full journeys verified;
 - deterministic fallback: full bounded journeys verified;
-- DeepSeek: a current synthetic Check-in turn completed live, but the strict final Summary failed validation and fell back; therefore a complete live Check-in journey is not claimed;
+- DeepSeek: a current synthetic mixed-language Provider run returned a strict complete summary and four candidates, and all four quotes resolved to exact source spans; this is one contract/provenance evaluation, not multilingual clinical validation or a complete live UI journey;
 - D3 frozen Provider layer: `NOT_RUN` by design.
 
 ## Provenance and authority
@@ -136,7 +136,7 @@ The same page reports the pinned Voice model revision and can start one backgrou
 
 The adapter does not perform diarization and does not invent confidence. Machine segments begin with unknown speaker and require role-bounded human review, explicit issue resolution, and continuous canonical indexes before confirmation. Physical-microphone capture, noisy/code-switching accuracy, clinical accuracy, and production throughput are not claimed.
 
-The current final regression environment does not contain the ignored local model/audio inputs, so two real-local-ASR tests are explicitly skipped. Historical dated evidence records one observed synthetic local slice; current E4 status is therefore implemented with limits, not a fresh end-to-end ASR rerun.
+The ignored local `Systran/faster-whisper-base` model and generated synthetic WAV were explicitly supplied to the two real-local-ASR tests in the current final environment; both passed. The ordinary full-suite command deliberately omits those private input paths, so the same two tests remain explicit skips there. The observed slice proves local transcription mechanics only: key English clinical phrases were preserved, while two Malay phrases were misrecognized. Physical-microphone, noisy-clinic, diarization, and multilingual clinical accuracy remain unverified.
 
 ## Security and deployment
 
@@ -174,7 +174,6 @@ backend/tests/      unit, regression, security and integration tests
 backend/evals/      frozen D3/D4 synthetic evaluation assets
 frontend/src/       React/TypeScript patient and clinical journeys
 deploy/             Caddy configuration and environment template (no secrets)
-Task_Card/          frozen vertical scope and Exit Gates
 docs/               decisions and dated evidence
 output/pdf/         final Technical Brief PDF
 ```
@@ -365,11 +364,36 @@ isolation group, and 112-module frontend production build passed. The three
 Doctor review attestations and frozen Malay-English-Hokkien transport case are
 engineering evidence only, not multilingual clinical validation.
 
+### Automated coverage of the official feedback scenarios
+
+The full backend collection includes every completed or implemented-with-limits behavior below, including negative, scope, timeout, concurrency, and fail-closed paths. `NOT_IMPLEMENTED` rows are stated as product boundaries and are not represented by false-positive feature tests.
+
+| # | Current status | Primary automated evidence |
+|---:|---|---|
+| 1 | `NOT_IMPLEMENTED` | Email/password identity boundary: `test_auth_sessions.py`, `test_auth_invites.py` |
+| 2 | `IMPLEMENTED_WITH_LIMITS` | Clinic isolation and defense in depth: `test_fa3_clinic_isolation.py`, `test_rbac_scope.py`, `security/test_cross_patient_sentinels.py` |
+| 3 | `IMPLEMENTED_WITH_LIMITS` | Sanitized application/proxy/Voice logging: `tests/security/test_operational_logging*.py`, `test_caddy_*`, `test_voice_storage_and_logs.py` |
+| 4 | `IMPLEMENTED_AND_VERIFIED` | Redaction-before-egress and exact restoration: `test_redaction.py`, `test_ai_pipeline_e2e.py` |
+| 5 | `IMPLEMENTED_WITH_LIMITS` | Clinic bootstrap, settings and CSV import: `test_fb5_onboarding.py`, `test_fb5_clinic_settings.py`, `test_fb5_patient_import.py`, `integration/test_fb5_clinic_onboarding_journey.py` |
+| 6 | `IMPLEMENTED_WITH_LIMITS` | Mixed-language transport/review/provenance plus live contract evidence: `test_feedback_consult_review.py`, `test_deepseek_provider_contract.py`, `test_voice_local_asr_integration.py` |
+| 7 | `NOT_IMPLEMENTED` | Post-consult Voice boundary only: `test_voice_capabilities.py`, `test_voice_capture_api_lifecycle.py`; no streaming alert claim |
+| 8 | `IMPLEMENTED_WITH_LIMITS` | Total Provider deadline, cancellation and fallback: `test_fa5_provider_timeout.py` |
+| 9 | `IMPLEMENTED_AND_VERIFIED` | Useful deterministic Provider fallback: `test_ai_pipeline_fallback.py` |
+| 10 | `IMPLEMENTED_AND_VERIFIED` | Compare-and-swap conflict, versions and revert: `test_concurrent_edits.py`, `test_revision_history.py` |
+| 11 | `IMPLEMENTED_WITH_LIMITS` | Exact-version in-product delivery receipt: `test_b11_instruction_receipts.py`; no external channel claim |
+| 12 | `IMPLEMENTED_WITH_LIMITS` | Draft/publish/correct/withdraw and human authority: `test_b12_instruction_publication.py`, `test_b12_frontend_contract.py` |
+| 13 | `IMPLEMENTED_AND_VERIFIED` | Contradictory allergy sources preserved for review: `test_ai_conflict_authority.py` |
+| 14 | `IMPLEMENTED_WITH_LIMITS` | Explainable deterministic priority semantics: `test_fa2_patient_review_workflow.py`, `test_glance_ordering.py`, `test_longitudinal_scoring.py` |
+| 15 | `IMPLEMENTED_WITH_LIMITS` | Clinic-scoped, bounded, auditable Shadow learning: `test_sl1_*`, `test_sl2_*`, `test_sl3_*`, `test_self_learning_importance.py` |
+| 16 | `IMPLEMENTED_AND_VERIFIED` | Version/hash-bound exact provenance and fail-closed resolution: `test_highlight_provenance.py`, `test_provenance_resolution.py`, `test_archive_roundtrip.py` |
+
+This matrix is a navigation index, not a substitute for the tests. The authoritative status, first break, and remaining production boundary for each scenario are recorded in `docs/real_clinic_readiness_status_2026-08-31.md`.
+
 ## Known limits
 
 - Synthetic-data prototype only; no real PHI or production medical use.
 - Local single-process/single-machine architecture, not distributed deployment.
-- DeepSeek full Patient Check-in journey is not currently verified because the strict live Summary failed and fell back.
+- A current live DeepSeek mixed-language summary/provenance run passed, but a complete live Patient Check-in UI journey and multilingual clinical validity are not claimed.
 - D3 frozen Provider layer is `NOT_RUN`; deterministic fallback results are separate.
 - E4 is default-off per device; real local ASR evidence depends on the ignored model and synthetic audio being present on that reviewer device.
 - Voice has no diarization and no physical-microphone evidence in the final run.
@@ -389,12 +413,11 @@ engineering evidence only, not multilingual clinical validation.
 - Attribution: `ATTRIBUTION.txt`
 - Final evidence: `docs/final_submission_evidence_2026-08-28.md`
 - Current real-clinic readiness ledger: `docs/real_clinic_readiness_status_2026-08-31.md`
-- F1/A real-clinic hardening closeout: `docs/f1_a_closeout_2026-09-02.md` and `Task_Card/F1_Real_Clinic_Feedback_Hardening_Task_Card.md`. A1–A5 are complete with documented limits; D safeguards survived final regression; the final reason-code matrix and 16-scenario ledger are recorded. Formal Glance remains base-only and live Provider evidence remains separate. Synthetic SL2 Shadow training is complete; the SL3 observed-feedback bridge exists, but real-feedback training and serving promotion remain blocked.
+- F1/A real-clinic hardening closeout: `docs/f1_a_closeout_2026-09-02.md`. A1–A5 are complete with documented limits; D safeguards survived final regression; the final reason-code matrix and 16-scenario ledger are recorded. Formal Glance remains base-only and live Provider evidence remains separate. Synthetic SL2 Shadow training is complete; the SL3 observed-feedback bridge exists, but real-feedback training and serving promotion remain blocked.
 - F Final consult review evidence: `docs/final_feedback_consult_review_evidence_2026-09-03.md`.
 - Self-Learning design and release boundary: `docs/self_learning_design_and_release_boundary_2026-09-03.md`.
 - Self-Learning evidence: `docs/sl1_attention_ranking_evidence_2026-09-02.md`, `docs/sl2_shadow_pairwise_evidence_2026-09-03.md`, and `docs/sl3_observed_feedback_training_bridge_evidence_2026-09-03.md`.
 - Frontend pre-visual repair evidence: `docs/frontend_previsual_repair_evidence_2026-08-28.md`
-- Demo runbook: `docs/demo_video_runbook_2026-08-28.md`
 - Submission email draft: `docs/submission_email_draft_2026-08-28.md`
 - Technical Brief: `output/pdf/Nightingale_Technical_Brief.pdf`
 

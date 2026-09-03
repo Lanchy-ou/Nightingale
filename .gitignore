@@ -41,6 +41,12 @@ Thumbs.db
 # Build artifacts
 *.log
 
+# Local planning and recording materials (not submission deliverables)
+/Task_Card/
+/docs/demo_video_runbook_*.md
+/docs/submission_demo_script_*.md
+/demo_materials/
+
 # Local D5 deployment runtime/evidence (never commit keys, databases or cert state)
 .tools/
 backups/
