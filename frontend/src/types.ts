@@ -200,6 +200,28 @@ export interface LearningStatus {
       role_metrics: Record<'staff' | 'clinician', Record<string, any>>;
     };
   };
+  observed_feedback: {
+    interface_version: string;
+    automatic_feature_extraction: true;
+    automatic_training: false;
+    training_requires_explicit_evidence_classification: true;
+    source_classification: 'unverified_application_feedback';
+    real_clinician_validation: 'NOT_RUN';
+    serving_mode: 'base_only';
+    shadow_only: true;
+    roles: Record<'staff' | 'clinician', {
+      manifest_sha256: string;
+      labelled_decision_count: number;
+      reviewer_count: number;
+      pair_group_count: number;
+      excluded_counts: Record<string, number>;
+      mechanism_minimum_met: boolean;
+      blocking_reasons: string[];
+      strict_pair_count: number;
+      tie_pair_count: number;
+      strict_pairs_by_split: Record<'train' | 'validation' | 'test', number>;
+    }>;
+  };
   latest_evaluation: LearningEvaluation | null;
 }
 

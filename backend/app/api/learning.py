@@ -26,6 +26,7 @@ from ..models import (
 from ..role_context import RoleContext
 from ..provenance_binding import resolve_highlight_source
 from ..pairwise_ranking import sl2_artifact_evidence
+from ..observed_feedback import observed_feedback_status
 from ..schemas import (
     LearningEvaluationOut,
     LearningFreezeRequest,
@@ -283,6 +284,9 @@ def learning_status(
             for row in policies
         ],
         "sl2_evidence": sl2_evidence,
+        "observed_feedback": observed_feedback_status(
+            db, clinic_id=ctx.clinic_id
+        ),
         "latest_evaluation": (
             LearningEvaluationOut.model_validate(latest).model_dump(mode="json")
             if latest

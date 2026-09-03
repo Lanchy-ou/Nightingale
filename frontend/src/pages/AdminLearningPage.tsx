@@ -64,6 +64,19 @@ export default function AdminLearningPage() {
               <p>Passing authorizes Shadow evaluation only. The lower staff validation result remains visible and is not a clinical-validity claim.</p>
             </>}
         </section>
+        <section className="learning-metrics">
+          <h3>Observed feedback training bridge</h3>
+          <p>Feature extraction is automatic. Training remains an explicit offline operation and formal Glance stays base-only.</p>
+          <dl>
+            <div><dt>Source classification</dt><dd>{status.observed_feedback.source_classification.replace(/_/g, ' ')}</dd></div>
+            <div><dt>Real clinician validation</dt><dd>{status.observed_feedback.real_clinician_validation}</dd></div>
+            {(['staff', 'clinician'] as const).map((role) => {
+              const evidence = status.observed_feedback.roles[role];
+              return <div key={role}><dt>{role} readiness</dt><dd>{evidence.mechanism_minimum_met ? 'Ready for explicit offline training' : `Blocked · ${evidence.strict_pair_count} strict pairs · ${evidence.reviewer_count} reviewers`}</dd></div>;
+            })}
+          </dl>
+          <p>No page control can train or serve a model. Unverified data is rejected by the local training command.</p>
+        </section>
         {status.latest_evaluation && <section className="learning-metrics"><h3>Latest replay</h3><dl>{Object.entries(status.latest_evaluation.metrics).filter(([, value]) => value === null || ['string', 'number', 'boolean'].includes(typeof value)).map(([key, value]) => <div key={key}><dt>{metricLabel(key)}</dt><dd>{value === null ? 'Not enough labels' : typeof value === 'number' ? Number(value.toFixed?.(3) ?? value) : String(value)}</dd></div>)}</dl></section>}
       </>}
     </section>

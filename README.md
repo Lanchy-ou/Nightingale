@@ -214,6 +214,44 @@ Demo mode exposes a role selector and legacy identity headers. Do not use it as 
 
 Leave `VITE_DEMO_AUTH` and `NANTINGALE_DEMO_AUTH` unset/false. Open the frontend, log in with a seeded synthetic account, and let the server-side session cookie determine the role and patient binding. The canonical seeded password is documented in `backend/seed/fixture.py` for local synthetic demonstration only.
 
+### New clinic onboarding without seed
+
+The deployment owner creates one 24-hour, single-use setup link. This command
+safely creates missing tables and applies the F_B5 migration; it does not run or
+clear the synthetic fixture:
+
+```powershell
+Set-Location backend
+.venv\Scripts\python.exe scripts\create_clinic_bootstrap.py --base-url http://localhost:5173
+```
+
+Open the printed `/setup#token=...` link once, create the Clinic and its first
+Admin, then sign in through the normal login page. Only the token hash is stored.
+The raw link is a temporary deployment secret and must not be copied into logs,
+screenshots, source control, or support tickets.
+
+After login, the Admin can use **Patient import** to preview and commit a UTF-8
+CSV containing exactly `external_patient_id,name` (maximum 1 MB / 1,000 rows).
+Valid rows are imported; invalid, duplicate, and conflicting rows remain in the
+downloadable report and never overwrite an existing Patient. Account invitations
+remain a separate explicit step.
+
+Device Provider credentials and the local Voice model are deployment-owned.
+Clinic Admins choose only their own inherited/overridden AI and Voice policy.
+Deployment management is local and never accepts an API key as a command-line
+argument:
+
+```powershell
+.venv\Scripts\python.exe scripts\manage_device_settings.py show
+.venv\Scripts\python.exe scripts\manage_device_settings.py set-key
+.venv\Scripts\python.exe scripts\manage_device_settings.py set-ai-default local
+.venv\Scripts\python.exe scripts\manage_device_settings.py prepare-voice-model
+.venv\Scripts\python.exe scripts\manage_device_settings.py set-voice-default enabled
+```
+
+`set-key` prompts privately and performs the existing Provider verification. Do
+not run it without authorization to use a real Provider.
+
 ### Synthetic demo scenarios
 
 The deterministic fixture keeps Alice Tan as the primary seven-Event story and
@@ -238,6 +276,7 @@ hand-written and contain no real patient data or external dataset material.
 Set-Location backend
 .venv\Scripts\python.exe scripts\migrate_phase_e_schema.py
 .venv\Scripts\python.exe scripts\migrate_patient_checkin_schema.py
+.venv\Scripts\python.exe scripts\migrate_fb5_schema.py
 ```
 
 Migrations are explicit and idempotent. `create_all` is not presented as an old-schema migration.
@@ -270,7 +309,7 @@ Detailed commands and boundaries are in `docs/d5_deployment_security_decisions.m
 
 ### Optional local Voice preparation
 
-Voice is not required for Patient Multi-turn Check-in and remains default-off. The preferred Windows review flow is Admin → AI & Voice settings → Download local model → enable Voice. The command below remains available for technical/offline preparation.
+Voice is not required for Patient Multi-turn Check-in and remains default-off. The deployment owner prepares the shared model; each Clinic Admin may then enable or disable Voice only for that clinic. The existing technical/offline preparation command remains available.
 
 ```powershell
 Set-Location backend
@@ -327,7 +366,11 @@ journeys. This is synthetic UI/authorization coverage, not clinical validation.
 - D3 frozen Provider layer is `NOT_RUN`; deterministic fallback results are separate.
 - E4 is default-off per device; real local ASR evidence depends on the ignored model and synthetic audio being present on that reviewer device.
 - Voice has no diarization and no physical-microphone evidence in the final run.
-- Self-learning is bounded interaction weighting, not clinical learning.
+- Self-learning now includes deterministic SL1 ranking, two frozen-synthetic
+  SL2 Shadow models, and an SL3 bridge that automatically compiles eligible
+  explicit outcome labels into a content-free offline dataset. No real
+  clinician labels are available; training is never automatic and formal
+  Glance remains `base_only`.
 - Data decay is a shadow payload policy, not demonstrated total storage reduction.
 - Copilot confirmation tokens are short-lived but not persisted as one-time records; a multi-worker deployment needs a shared confirmation secret.
 - No independent clinical usability study, production load test, public application hosting, penetration test, or regulatory assessment was performed.
@@ -339,7 +382,8 @@ journeys. This is synthetic UI/authorization coverage, not clinical validation.
 - Attribution: `ATTRIBUTION.txt`
 - Final evidence: `docs/final_submission_evidence_2026-08-28.md`
 - Current real-clinic readiness ledger: `docs/real_clinic_readiness_status_2026-08-31.md`
-- Active real-clinic hardening phase: `Task_Card/F1_Real_Clinic_Feedback_Hardening_Task_Card.md`. F_A2 deterministic Glance/Patient Review, F_A1 auditable Shadow/Coverage controls, and F_A3 scoped query plus SQLite/SQLCipher ownership enforcement are implemented with documented limits. Formal Glance remains base-only; model training and learning-enabled serving remain blocked. A3 is not PostgreSQL RLS or production multi-tenant certification.
+- F1/A real-clinic hardening closeout: `docs/f1_a_closeout_2026-09-02.md` and `Task_Card/F1_Real_Clinic_Feedback_Hardening_Task_Card.md`. A1–A5 are complete with documented limits; D safeguards survived final regression; the final reason-code matrix and 16-scenario ledger are recorded. Formal Glance remains base-only and live Provider evidence remains separate. Synthetic SL2 Shadow training is complete; the SL3 observed-feedback bridge exists, but real-feedback training and serving promotion remain blocked.
+- Self-Learning evidence: `docs/sl2_shadow_pairwise_evidence_2026-09-03.md` and `docs/sl3_observed_feedback_training_bridge_evidence_2026-09-03.md`.
 - Frontend pre-visual repair evidence: `docs/frontend_previsual_repair_evidence_2026-08-28.md`
 - Demo runbook: `docs/demo_video_runbook_2026-08-28.md`
 - Submission email draft: `docs/submission_email_draft_2026-08-28.md`

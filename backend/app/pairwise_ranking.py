@@ -223,13 +223,12 @@ def evaluate_role_model(
     return output
 
 
-def train_role_model(dataset: SL2Dataset, viewer_role: str) -> dict[str, Any]:
-    if viewer_role not in {"staff", "clinician"}:
-        raise DatasetContractError("unsupported viewer role")
-    pairs = dataset.pairs_for(split="train", viewer_role=viewer_role, strict_only=True)
-    if len(pairs) != 54:
-        raise DatasetContractError("role does not have exactly 54 training pairs")
-    examples = [_pair_example(pair) for pair in pairs]
+def fit_pairwise_weights(pairs: Iterable[SL2Pair]) -> tuple[list[float], float]:
+    """Fit the frozen linear optimizer over caller-validated strict pairs."""
+    rows = list(pairs)
+    if not rows:
+        raise DatasetContractError("training requires at least one strict pair")
+    examples = [_pair_example(pair) for pair in rows]
     weights = [0.0] * len(FEATURE_NAMES)
     for _ in range(ITERATIONS):
         gradient = [0.0] * len(weights)
@@ -247,8 +246,29 @@ def train_role_model(dataset: SL2Dataset, viewer_role: str) -> dict[str, Any]:
     for delta, label in examples:
         probability = _sigmoid(_score_vector(weights, delta))
         probability = max(1e-15, min(1.0 - 1e-15, probability))
-        loss += -(label * math.log(probability) + (1.0 - label) * math.log(1.0 - probability))
+        loss += -(
+            label * math.log(probability)
+            + (1.0 - label) * math.log(1.0 - probability)
+        )
     loss = loss / len(examples) + L2 * sum(value * value for value in weights) / 2.0
+    return weights, round(loss, 12)
+
+
+def strict_pair_accuracy(weights: list[float], pairs: Iterable[SL2Pair]) -> float | None:
+    return _strict_accuracy(weights, list(pairs))
+
+
+def tie_pair_accuracy(weights: list[float], pairs: Iterable[SL2Pair]) -> float | None:
+    return _tie_accuracy(weights, list(pairs))
+
+
+def train_role_model(dataset: SL2Dataset, viewer_role: str) -> dict[str, Any]:
+    if viewer_role not in {"staff", "clinician"}:
+        raise DatasetContractError("unsupported viewer role")
+    pairs = dataset.pairs_for(split="train", viewer_role=viewer_role, strict_only=True)
+    if len(pairs) != 54:
+        raise DatasetContractError("role does not have exactly 54 training pairs")
+    weights, loss = fit_pairwise_weights(pairs)
     metrics = evaluate_role_model(dataset, viewer_role, weights)
     scenarios = [row for row in dataset.scenarios if row.viewer_role == viewer_role]
     artifact: dict[str, Any] = {
@@ -280,7 +300,7 @@ def train_role_model(dataset: SL2Dataset, viewer_role: str) -> dict[str, Any]:
             "exponent_clip": [-30, 30],
         },
         "weights": weights,
-        "training_loss": round(loss, 12),
+        "training_loss": loss,
         "validation_metrics": metrics["validation"],
         "test_metrics": metrics["test"],
         "all_split_metrics": metrics,
@@ -390,7 +410,7 @@ class ShadowRankResult:
     fallback_reason: str | None
 
 
-def _base_result(decisions: list[Any], reason: str) -> ShadowRankResult:
+def base_rank_result(decisions: list[Any], reason: str) -> ShadowRankResult:
     eligible = [row for row in decisions if row.eligible]
     ordered = sorted(
         eligible,
@@ -408,22 +428,16 @@ def _base_result(decisions: list[Any], reason: str) -> ShadowRankResult:
     )
 
 
-def shadow_rank_decisions(
-    decisions: Iterable[Any],
-    *,
-    viewer_role: str,
-    artifact_override: dict[str, Any] | None = None,
+def rank_decisions_with_weights(
+    decisions: Iterable[Any], weights: Iterable[float]
 ) -> ShadowRankResult:
+    """Apply validated linear weights within unchanged deterministic bands."""
     rows = list(decisions)
-    try:
-        artifact = load_model_artifact(viewer_role)
-    except (FileNotFoundError, OSError, json.JSONDecodeError):
-        return _base_result(rows, "model_artifact_missing")
-    if artifact_override is not None:
-        artifact = {**artifact, **artifact_override}
-    failure = validate_model_artifact(artifact, expected_role=viewer_role)
-    if failure is not None:
-        return _base_result(rows, failure)
+    stored_weights = [float(value) for value in weights]
+    if len(stored_weights) != len(FEATURE_NAMES):
+        return base_rank_result(rows, "feature_schema_mismatch")
+    if any(not math.isfinite(value) for value in stored_weights):
+        return base_rank_result(rows, "non_finite_score")
     scores: dict[str, float | int] = {}
     try:
         for row in rows:
@@ -431,18 +445,19 @@ def shadow_rank_decisions(
                 if row.eligible:
                     scores[row.decision_id] = row.base_score
                 continue
-            scores[row.decision_id] = score_snapshot(artifact, row.factor_snapshot or {})
+            vector = transform_snapshot(row.factor_snapshot or {})
+            scores[row.decision_id] = _score_vector(stored_weights, vector)
     except DatasetContractError as exc:
         reason = (
             "feature_schema_mismatch"
             if "schema version" in str(exc)
             else "unknown_feature"
         )
-        return _base_result(rows, reason)
+        return base_rank_result(rows, reason)
     except (KeyError, TypeError):
-        return _base_result(rows, "feature_schema_mismatch")
+        return base_rank_result(rows, "feature_schema_mismatch")
     except ValueError:
-        return _base_result(rows, "non_finite_score")
+        return base_rank_result(rows, "non_finite_score")
 
     ordered_all: list[Any] = []
     for band in sorted({row.priority_band for row in rows if row.eligible}):
@@ -455,8 +470,16 @@ def shadow_rank_decisions(
             ),
         )
         movable = sorted(
-            (row for row in base_band if not (row.factor_snapshot or {}).get("hard_protected")),
-            key=lambda row: (-float(scores[row.decision_id]), row.base_rank or 10**9, row.decision_id),
+            (
+                row
+                for row in base_band
+                if not (row.factor_snapshot or {}).get("hard_protected")
+            ),
+            key=lambda row: (
+                -float(scores[row.decision_id]),
+                row.base_rank or 10**9,
+                row.decision_id,
+            ),
         )
         iterator = iter(movable)
         ordered_all.extend(
@@ -470,3 +493,22 @@ def shadow_rank_decisions(
         priority_bands={row.decision_id: row.priority_band for row in rows},
         fallback_reason=None,
     )
+
+
+def shadow_rank_decisions(
+    decisions: Iterable[Any],
+    *,
+    viewer_role: str,
+    artifact_override: dict[str, Any] | None = None,
+) -> ShadowRankResult:
+    rows = list(decisions)
+    try:
+        artifact = load_model_artifact(viewer_role)
+    except (FileNotFoundError, OSError, json.JSONDecodeError):
+        return base_rank_result(rows, "model_artifact_missing")
+    if artifact_override is not None:
+        artifact = {**artifact, **artifact_override}
+    failure = validate_model_artifact(artifact, expected_role=viewer_role)
+    if failure is not None:
+        return base_rank_result(rows, failure)
+    return rank_decisions_with_weights(rows, artifact["weights"])

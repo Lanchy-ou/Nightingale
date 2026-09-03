@@ -1,7 +1,7 @@
 # Nightingale Real-Clinic Readiness Status
 
-> Snapshot date: 2026-09-01
-> Scope: current repository working tree after the F_A2 deterministic Glance and Patient Review implementation.
+> Snapshot date: 2026-09-03
+> Scope: current repository after F1/A, B5/B11/B12, SL1/SL2 and the SL3 observed-feedback training bridge.
 > Product boundary: synthetic-data prototype; not a production medical system, clinical-safety certification, compliance assessment, or public-host readiness claim.
 
 ## Purpose
@@ -14,6 +14,27 @@ Status meanings:
 - `IMPLEMENTED_WITH_LIMITS` — the mechanism exists, but important real-world evidence or operating capability is missing.
 - `NOT_IMPLEMENTED` — no complete product path exists.
 - `NOT_RUN` — the code or protocol may exist, but the named real-world validation was not executed.
+
+## Final 16-scenario status
+
+| # | Status | First visible break / limit | Current improvement |
+|---:|---|---|---|
+| 1 | `NOT_IMPLEMENTED` | Email/password is still required | Server-session patient identity; no fake phone/WhatsApp path |
+| 2 | `IMPLEMENTED_WITH_LIMITS` | No PostgreSQL RLS/production multi-tenant certification | Scoped loaders, uniform 404 and SQLite/SQLCipher ownership defense |
+| 3 | `IMPLEMENTED_WITH_LIMITS` | Host/crash/Provider retention not established | Allowlisted scrubbed logs and edge/failure-code boundaries |
+| 4 | `IMPLEMENTED_AND_VERIFIED` | No production PHI certification | Raw-first redaction before the single Provider egress |
+| 5 | `IMPLEMENTED_WITH_LIMITS` | Deployment-issued setup and synthetic CSV only; no public organization verification/RLS | 24-hour bootstrap, first Admin, idempotent import and clinic AI/Voice overrides |
+| 6 | `IMPLEMENTED_WITH_LIMITS` | Clinical code-switching evaluation `NOT_RUN` | Unicode transcript and multilingual local adapter boundaries |
+| 7 | `NOT_IMPLEMENTED` | No streaming ASR/in-consult alert | Post-consult processing remains clearly labelled |
+| 8 | `IMPLEMENTED_WITH_LIMITS` | External Provider timeout `NOT_RUN` | Total deadline, async cancellation, raw preservation and distinct fallback |
+| 9 | `IMPLEMENTED_AND_VERIFIED` | Live error rate not measured | Returning errors enter labelled deterministic fallback |
+| 10 | `IMPLEMENTED_AND_VERIFIED` | No distributed writer certification | CAS/409, version/diff/revert and retry UX |
+| 11 | `IMPLEMENTED_WITH_LIMITS` | No Email/SMS/WhatsApp delivery, retry, bounce or escalation | Exact-version Patient portal open/ack receipt; no fake external delivery status |
+| 12 | `IMPLEMENTED_WITH_LIMITS` | No external notification/recall channel or production clinical validation | Exact-version draft/publish/correct/withdraw lifecycle integrated with B11 receipts |
+| 13 | `IMPLEMENTED_AND_VERIFIED` | Bounded English extraction, not clinical NLP validation | Preserve both allergy sources, human review and exact provenance |
+| 14 | `IMPLEMENTED_WITH_LIMITS` | No medical calibration/risk probability | Explainable deterministic ranking and correction workflow |
+| 15 | `IMPLEMENTED_WITH_LIMITS` | No authorized real label volume or served model | Frozen-synthetic SL2 models plus automatic observed-feedback dataset bridge; Shadow only and serving base-only |
+| 16 | `IMPLEMENTED_AND_VERIFIED` | No production archival/DR certification | Version/hash binding, historical resolution and fail-closed mismatch |
 
 ## Implemented and verified
 
@@ -79,9 +100,9 @@ This verifies the current application logic. It is not a claim of database row-l
 
 ### Current regression evidence
 
-- Backend collection: 601 tests.
-- Result: 599 passed; 2 existing real-local-ASR input-dependent tests skipped.
-- Frontend TypeScript/Vite production build: passed, 62 modules transformed.
+- Backend collection: 702 tests.
+- Result: 700 passed; 2 existing real-local-ASR input-dependent tests skipped.
+- Frontend TypeScript/Vite production build: passed, 65 modules transformed.
 - `git diff --check`: passed.
 - Secret scan: `SECRET_SCAN_PASS`.
 
@@ -93,11 +114,21 @@ The two skips mean the ignored local ASR model/audio inputs were unavailable; th
 
 - The schema and application authorization support multiple `Clinic` rows and clinic-scoped users, patients, Events, Tasks, feedback, and audit records.
 - The current fixture exercises two clinics, five patients and eleven users; it is synthetic prototype evidence rather than production-scale coverage.
-- There is no product workflow to create a clinic, bootstrap its first administrator, or import its patients.
+- F_B5 adds a deployment-issued, 24-hour, single-use setup link that atomically
+  creates one Clinic, its first Admin and inherited ClinicSettings, followed by
+  the normal Login/Session path.
+- Clinic Admin patient import provides strict UTF-8 CSV preview/commit,
+  clinic/source external identity, row-level errors/conflicts and idempotent
+  repeated/concurrent commit without name-based merge or overwrite.
 - F_A3 adds one-query scoped resource loaders, uniform-404 fault-injection tests, an AST bypass gate, active SQLite/SQLCipher foreign keys, metadata-only ownership preflight, ownership triggers and validated scope indexes. A no-op `authorize_scope` cannot expose the tested cross-clinic patient-bound resources.
 - This remains application query isolation plus SQLite/SQLCipher ownership enforcement. There is no database Row-Level Security or production multi-tenant certification.
-- AI/Voice settings are device-level rather than clinic-level.
+- Provider credentials and Voice model preparation remain device-owned. Each
+  Clinic independently chooses inherited/local/online AI and inherited/enabled/
+  disabled Voice settings; runtime resolution uses server-authoritative clinic
+  scope.
 - Deployment remains a single-machine SQLite/SQLCipher prototype.
+- This is not public organization verification, real-PHI import certification,
+  per-clinic Provider billing, platform administration or PostgreSQL RLS.
 
 ### Logging and operational privacy (F_A4 implemented, rev 3, 2026-09-02)
 
@@ -109,6 +140,16 @@ The two skips mean the ignored local ASR model/audio inputs were unavailable; th
 - Seed output no longer prints the database URL/path.
 - Failure-first evidence is per-sink/per-field (`PASS`/`PARTIAL`/`NOT_ESTABLISHED`), never an aggregate “log security passed”.
 - Not implemented / not established: clinical `AuditLog` purge (NEEDS_OWNER_POLICY), host-side stderr capture/retention, third-party crash monitoring, and Provider-side retention (external policy; redaction is not a deletion guarantee). Uvicorn access logging is operator-controlled (`--no-access-log`), not code-enforced.
+
+### Explicit model-call total timeout (F_A5 implemented, 2026-09-02)
+
+- All four DeepSeek entries (`verify_connection`, `summarize`, `copilot`, Check-in turn/summary) share a 30-second total wall-clock deadline (MVP interaction policy, not a Provider SLA) with bounded connect/pool 5 s, write 10 s, read 30 s phase timeouts and `max_retries=0`.
+- Provider calls use the SDK-compatible `anthropic.Timeout` and run through an async client under `asyncio.wait_for`, so a timeout CANCELS the underlying network request rather than leaving a blocking sync thread running.
+- A distinct `ProviderTimeoutError` is explicitly caught in all four flows: Consult/Check-in → `fallback_reason="provider_timeout"` + deterministic fallback (raw preserved); Copilot → `unavailable` with no substitute answer; key verification → 503 with no key saved.
+- Timeout is logged as the fixed `provider_timeout` reason (not a Python class name) and carries no clinical content.
+- A real `AsyncAnthropic` request to a local never-responding HTTP server verifies deadline return and socket disconnect. Check-in also displays patient-safe saved-source + timeout + fallback copy.
+- A real server-session patient login opened the independent Check-in page with zero browser warning/error; the timeout-specific state remains API/frontend-contract tested rather than live-Provider browser tested.
+- Remaining limit: no live DeepSeek key or external service was used, so a real external Provider timeout was not observed.
 
 ### Voice and multilingual consultations
 
@@ -124,17 +165,32 @@ The two skips mean the ignored local ASR model/audio inputs were unavailable; th
 - Bounded clinic-scoped feedback from real review actions adjusts future candidates by type.
 - Caps and hard protections limit negative learning.
 - F_A2 now records versioned score factors, role-specific inclusion/exclusion reasons, deterministic priority bands and two-axis clinician review labels.
-- F_A1 now records immutable content-free decisions for surfaced, unsurfaced and excluded candidates. Serving is base-only; Hide/Confirm/Pin do not train. Coverage Review and Admin Shadow controls support explicit role-bounded signals, replay, freeze and rollback without model training or serving promotion.
+- F_A1/SL1 records immutable content-free decisions for surfaced, unsurfaced and excluded candidates. Serving is base-only; Hide/Confirm/Pin do not train. Coverage Review and Admin Shadow controls support explicit role-bounded signals, replay, freeze and rollback without serving promotion.
+- SL2 trains byte-reproducible staff and clinician pairwise linear models from a frozen 30-scenario synthetic dataset. They run only in Shadow and do not change eligibility, priority bands, protection or formal Glance.
+- SL3 automatically compiles eligible explicit outcome labels into a content-free, scope-bound pairwise dataset and exposes an explicit offline training command. It does not infer labels from clicks or missing feedback, does not train on page load and does not serve a model.
 - Selection bias remains: only surfaced candidates receive review feedback.
-- No Learning-to-Rank, Bayesian adaptation or Bandit is trained; F_A1 remains blocked on evidence quality, coverage and separate approval.
+- No real-feedback model has been trained or validated. The current seeded database has zero eligible observed pairs, so SL3 correctly blocks artifact creation. Bayesian adaptation, Bandits, automatic retraining and serving promotion remain unimplemented.
 - There is no unsurfaced-candidate sampling, shadow-ranking gate, fatigue/bulk-dismiss detection, clinical-outcome calibration, or clinician usability study.
+
+### Final reason-code stability matrix
+
+- Four approved priority reason codes were evaluated separately across clear positive, negation, historical-only, resolved, ambiguous, correction, multiple people/pronouns and source/span mismatch.
+- Mock plus the server validator: `32/32` expected outcomes.
+- Deterministic fallback: `28/28` language cases carried no clinician-priority reason code.
+- Exact source mismatch: `4/4` dropped.
+- Live Provider: `NOT_RUN`; no live pass rate is inferred.
+- The first run exposed 19 false-positive mock routes. The final fail-closed validator sends uncertain cases to routine Nurse review while preserving the patient report. This is rule conformance, not medical validity.
 
 ### Patient-facing publication
 
 - Patient View exposes only clinician-authored `patient_instruction` artifacts and patient-safe Tasks.
 - Copilot-generated patient-instruction drafts require clinician editing and confirmation before creation.
-- There is no full draft/approve/publish/withdraw/correct/notify/acknowledge lifecycle.
-- An incorrect instruction can be superseded by a newer instruction, but the old copy is not recalled from screenshots or external channels.
+- Exact-version Patient portal receipts distinguish Not viewed, Viewed and Acknowledged; normal Patient View loading does not mark an instruction opened.
+- Acknowledgement records only that the authenticated patient read the portal instruction; it is not consent or Task completion.
+- Clinician-only publication separates draft, published, superseded and withdrawn states by exact Artifact version and lineage revision.
+- Correction preserves historical wording and acknowledgement while creating a new published, Not viewed receipt target.
+- Withdrawal hides active Patient View content without deleting Artifact, version, receipt or audit history.
+- “Notify” is limited to the in-product new/Not viewed Patient portal state; there is no external notification or recall guarantee.
 
 ## Not implemented
 
@@ -143,22 +199,17 @@ The two skips mean the ignored local ASR model/audio inputs were unavailable; th
 - Registration and login currently require an email identity and password.
 - Phone OTP, WhatsApp authentication, magic-link delivery, clinic-assisted access, and a non-digital patient-delivery path are not implemented.
 
-### Real delivery and receipt tracking
+### External delivery
 
 - The application creates a one-time registration link but sends no real email, SMS, or WhatsApp message.
-- Appointment-link delivery, delivery receipts, retries, bounce/failure handling, patient-open confirmation, and escalation are not implemented.
+- Appointment-link delivery, external delivery receipts, retries, bounce/failure handling, and escalation are not implemented.
+- Patient portal instruction open/acknowledgement is implemented separately and must not be described as external delivery.
 
 ### In-consult real-time clinical alerting
 
 - Consult processing runs after a transcript is submitted or a Voice transcript is reviewed and confirmed.
 - There is no streaming ASR plus incremental allergy/risk detection during the consultation.
 - Exact provenance is implemented, but it does not make post-consult processing real time.
-
-### Explicit model-call total timeout
-
-- Provider errors that return are caught and can trigger deterministic fallback.
-- A model request that remains open without returning can continue waiting because the application does not yet set an explicit server-side total timeout.
-- The user may remain on “processing” even though the raw transcript was already saved.
 
 ## Not run or not established
 
@@ -173,14 +224,11 @@ The two skips mean the ignored local ASR model/audio inputs were unavailable; th
 
 ## Current remediation order
 
-1. Add an explicit Provider timeout and deterministic timeout fallback.
-2. Design phone/WhatsApp/non-email patient identity separately from message delivery.
-3. Add delivery status, retry, and receipt tracking for patient links/instructions.
-4. Add a patient-instruction publication, correction, withdrawal, and notification lifecycle.
-5. Design a small synthetic Malay-English-Hokkien consultation evaluation.
-6. Add clinic onboarding and decide whether AI/Voice settings must be clinic-scoped.
-7. Add unsurfaced-candidate audit and shadow evaluation before expanding Self-Learning.
-8. Design real-time alerting as a separately validated product capability; do not relabel post-consult processing as real time.
+1. Design phone/WhatsApp/non-email patient identity separately from message delivery.
+2. Reconsider external delivery only when a real delivery channel is available; do not build a fake provider abstraction.
+3. Keep Voice/ASR/dialect/noise validation deferred until it becomes a product priority.
+4. Keep real-feedback training and serving promotion blocked while real-clinician evidence is unavailable.
+5. Design real-time alerting as a separately validated product capability; do not relabel post-consult processing as real time.
 
 ## Maintenance rule
 
