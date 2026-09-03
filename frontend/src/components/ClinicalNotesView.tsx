@@ -33,19 +33,24 @@ export default function ClinicalNotesView({
     (async () => {
       setLoading(true);
       try {
-        const [artifactLists, commentLists] = await Promise.all([
-          Promise.all(events.map((event) => api.getArtifacts(event.event_id, controller.signal))),
-          Promise.all(events.map((event) => api.getComments(event.event_id, controller.signal))),
-        ]);
+        const bundles = await api.getClinicalNotesBundles(
+          events.map((event) => event.event_id),
+          controller.signal,
+        );
         if (!active) return;
-        const nextNotes = events.flatMap((event, index) =>
-          artifactLists[index]
+        const eventsById = new Map(events.map((event) => [event.event_id, event]));
+        const nextNotes = bundles.flatMap(({ eventId, artifacts }) => {
+          const event = eventsById.get(eventId);
+          if (!event) return [];
+          return artifacts
             .filter((artifact) => ['clinician_note', 'staff_note'].includes(artifact.artifact_type))
-            .map((artifact) => ({ event, artifact })),
-        );
-        const nextComments = events.flatMap((event, index) =>
-          commentLists[index].map((comment) => ({ event, comment })),
-        );
+            .map((artifact) => ({ event, artifact }));
+        });
+        const nextComments = bundles.flatMap(({ eventId, comments: eventComments }) => {
+          const event = eventsById.get(eventId);
+          if (!event) return [];
+          return eventComments.map((comment) => ({ event, comment }));
+        });
         nextNotes.sort((a, b) => b.artifact.created_at.localeCompare(a.artifact.created_at));
         nextComments.sort((a, b) => b.comment.created_at.localeCompare(a.comment.created_at));
         setNotes(nextNotes);

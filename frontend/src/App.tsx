@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { api, DEMO_AUTH, ROLE_USERS, setRole, setSessionIdentity, setUnauthorizedHandler } from './api';
 import type { CurrentIdentity } from './types';
 import AdminWorkspacePage from './pages/AdminWorkspacePage';
@@ -9,6 +10,15 @@ import RegisterPage from './pages/RegisterPage';
 import SetupPage from './pages/SetupPage';
 
 const PATIENT_ID = 'pat_001'; // staff/admin pre-C2 minimal demo path
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5,
+      retry: 1,
+    },
+  },
+});
 
 function adminTabFromPath(path: string): 'overview' | 'invites' | 'imports' | 'audit' | 'settings' | 'learning' {
   if (path.startsWith('/admin/invites')) return 'invites';
@@ -39,12 +49,14 @@ function pathBelongsToRole(path: string, role: string | null | undefined): boole
 // part of the product shell and is never a security boundary.
 // ---------------------------------------------------------------------------
 function DemoApp() {
+  const queryCache = useQueryClient();
   const [roleIndex, setRoleIndex] = useState(0);
   const selected = ROLE_USERS[roleIndex];
   const roleKey = `${selected.role}:${selected.userId}`;
 
   function changeRole(i: number) {
     const next = ROLE_USERS[i];
+    queryCache.clear();
     setRole(next.userId, next.role);
     const nextPath = next.role === 'clinician' || next.role === 'staff'
       ? '/clinical'
@@ -96,11 +108,20 @@ function DemoApp() {
 // product root so no patient/source/comment/draft state can survive.
 // ---------------------------------------------------------------------------
 export default function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AppContent />
+    </QueryClientProvider>
+  );
+}
+
+function AppContent() {
   if (DEMO_AUTH) return <DemoApp />;
   return <SessionApp />;
 }
 
 function SessionApp() {
+  const queryCache = useQueryClient();
   const [identity, setIdentity] = useState<CurrentIdentity | null>(null);
   const [booting, setBooting] = useState(true);
   const [path, setPath] = useState(() => window.location.pathname);
@@ -120,6 +141,7 @@ function SessionApp() {
   useEffect(() => {
     // 401 anywhere in product mode -> clear sensitive state and return to Login.
     setUnauthorizedHandler(() => {
+      queryCache.clear();
       setIdentity(null);
       setSessionIdentity(null);
       if (window.location.pathname !== '/login') {
@@ -150,7 +172,7 @@ function SessionApp() {
       window.removeEventListener('popstate', onPopState);
       setUnauthorizedHandler(null);
     };
-  }, []);
+  }, [queryCache]);
 
   useEffect(() => {
     if (!identity || pathBelongsToRole(path, identity.role)) return;
@@ -167,11 +189,12 @@ function SessionApp() {
     }
     setIdentity(null);
     setSessionIdentity(null);
+    queryCache.clear();
     setPath('/login');
     if (window.location.pathname !== '/login') {
       window.history.replaceState({}, '', '/login');
     }
-  }, []);
+  }, [queryCache]);
 
   function navigate(next: string) {
     window.history.pushState({}, '', next);

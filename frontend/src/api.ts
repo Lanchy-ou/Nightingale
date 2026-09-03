@@ -147,6 +147,58 @@ function get<T>(path: string, signal?: AbortSignal, options?: RequestOptions): P
   return request<T>(path, { headers: headers(), signal }, options);
 }
 
+export type ClinicalNotesBundle = {
+  eventId: string;
+  artifacts: Artifact[];
+  comments: Comment[];
+};
+
+const CLINICAL_NOTES_REQUEST_CONCURRENCY = 4;
+
+async function getClinicalNotesBundles(
+  eventIds: string[],
+  signal?: AbortSignal,
+): Promise<ClinicalNotesBundle[]> {
+  const bundles: ClinicalNotesBundle[] = eventIds.map((eventId) => ({
+    eventId,
+    artifacts: [],
+    comments: [],
+  }));
+  const jobs: Array<() => Promise<void>> = [];
+
+  bundles.forEach((bundle) => {
+    jobs.push(
+      async () => {
+        bundle.artifacts = await get<Artifact[]>(`/api/events/${bundle.eventId}/artifacts`, signal);
+      },
+      async () => {
+        bundle.comments = await get<Comment[]>(`/api/events/${bundle.eventId}/comments`, signal);
+      },
+    );
+  });
+
+  let nextJob = 0;
+  let stopped = false;
+  async function worker() {
+    while (!stopped) {
+      if (signal?.aborted) throw new DOMException('The operation was aborted.', 'AbortError');
+      const jobIndex = nextJob;
+      nextJob += 1;
+      if (jobIndex >= jobs.length) return;
+      try {
+        await jobs[jobIndex]();
+      } catch (error) {
+        stopped = true;
+        throw error;
+      }
+    }
+  }
+
+  const workerCount = Math.min(CLINICAL_NOTES_REQUEST_CONCURRENCY, jobs.length);
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  return bundles;
+}
+
 function post<T>(path: string, body: unknown, signal?: AbortSignal, options?: RequestOptions): Promise<T> {
   return request<T>(
     path,
@@ -393,6 +445,7 @@ export const api = {
   getTaskProvenance: (taskId: string) => get<TaskProvenance>(`/api/tasks/${taskId}/provenance`),
   getEvents: (id: string, signal?: AbortSignal) => get<Event[]>(`/api/patients/${id}/events`, signal),
   getArtifacts: (eventId: string, signal?: AbortSignal) => get<Artifact[]>(`/api/events/${eventId}/artifacts`, signal),
+  getClinicalNotesBundles,
   getGlance: (patientId: string, signal?: AbortSignal) => get<{ safety_context: Highlight[]; highlights: Highlight[] }>(`/api/patients/${patientId}/glance`, signal),
   getCoverageReview: (patientId: string, viewerRole: 'staff' | 'clinician', signal?: AbortSignal) =>
     get<CoverageReview>(`/api/patients/${patientId}/coverage-review?viewer_role=${viewerRole}`, signal),

@@ -7,11 +7,13 @@ export default function CommentThread({
   artifacts,
   canWrite,
   onChanged,
+  variant = 'default',
 }: {
   eventId: string;
   artifacts: Artifact[];
   canWrite: boolean;
   onChanged?: () => void;
+  variant?: 'default' | 'context';
 }) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [body, setBody] = useState('');
@@ -74,6 +76,7 @@ export default function CommentThread({
   const roots = comments.filter(
     (c) => c.parent_comment_id === null || !commentIds.has(c.parent_comment_id),
   );
+  const contextLayout = variant === 'context';
 
   function anchorLabel(c: Comment): string {
     if (c.anchor_type === 'event') return 'Event';
@@ -108,17 +111,21 @@ export default function CommentThread({
   }
 
   return (
-    <div className="comment-thread">
-      <div className="comment-thread-head"><p className="eyebrow">Event collaboration</p><h4>Comments</h4><span>{comments.length}</span></div>
+    <div className={`comment-thread ${contextLayout ? 'context-comment-thread' : ''}`}>
+      {contextLayout ? (
+        <div className="comment-thread-head"><h3>Comments <span>({comments.length})</span></h3></div>
+      ) : (
+        <div className="comment-thread-head"><p className="eyebrow">Event collaboration</p><h4>Comments</h4><span>{comments.length}</span></div>
+      )}
       {error && <div className="error-inline">{error}</div>}
       <div className="comment-list">
-        {comments.length === 0 && <div className="comment-empty"><strong>No discussion yet</strong><span>Comments remain attached to this Event or a selected clinical document.</span></div>}
+        {comments.length === 0 && <div className="comment-empty">{contextLayout && <span className="comment-empty-icon" aria-hidden="true">…</span>}<strong>No discussion yet</strong><span>Comments remain attached to this Event or a selected clinical document.</span></div>}
         {roots.map((c) => renderComment(c))}
       </div>
       {canWrite && (
-        <div className="comment-composer">
+        <div className={`comment-composer ${contextLayout ? 'context-comment-composer' : ''}`}>
           {replyTo ? (
-            <div className="comment-meta">
+            <div className={contextLayout ? 'comment-replying' : 'comment-meta'}>
               Replying to {replyTo.author_role} on {anchorLabel(replyTo)}
               <button className="link-btn" onClick={() => setReplyTo(null)}>
                 Cancel reply
@@ -126,7 +133,7 @@ export default function CommentThread({
             </div>
           ) : (
             <label className="comment-anchor">
-              Comment on
+              <span>{contextLayout ? 'Commenting on:' : 'Comment on'}</span>
               <select value={anchorKey} onChange={(e) => setAnchorKey(e.target.value)}>
                 <option value={`event:${eventId}`}>Event</option>
                 {artifacts.map((artifact) => (
@@ -144,16 +151,8 @@ export default function CommentThread({
             value={body}
             onChange={(e) => setBody(e.target.value)}
             placeholder="Add comment… use @ to mention"
-            rows={2}
+            rows={contextLayout ? 3 : 2}
           />
-          <div className="inline-actions">
-            <button className="link-btn" onClick={() => setShowMentions((s) => !s)}>
-              @ mention
-            </button>
-            <button onClick={postComment} disabled={!body.trim()}>
-              Post
-            </button>
-          </div>
           {showMentions && (
             <div className="mention-list">
               {MENTIONABLE.map((u) => (
@@ -163,6 +162,14 @@ export default function CommentThread({
               ))}
             </div>
           )}
+          <div className={contextLayout ? 'comment-composer-tools' : 'inline-actions'}>
+            <button className={contextLayout ? 'comment-mention-action' : 'link-btn'} onClick={() => setShowMentions((s) => !s)}>
+              @ mention
+            </button>
+            <button className={contextLayout ? 'comment-post-action' : undefined} onClick={postComment} disabled={!body.trim()}>
+              Post
+            </button>
+          </div>
         </div>
       )}
     </div>

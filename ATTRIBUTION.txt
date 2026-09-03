@@ -48,6 +48,7 @@ Declared in `frontend/package.json`:
 
 | Package | License |
 |---|---|
+| @tanstack/react-query | MIT |
 | react | MIT |
 | react-dom | MIT |
 | vite | MIT |

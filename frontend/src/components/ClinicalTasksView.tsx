@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError } from '../api';
 import { artifactLabel, eventLabel, formatDateTime } from '../clinical';
 import type { Artifact, ClinicalTask, CurrentIdentity, Event, PatientReviewCandidate, PatientReviewContext, ProvenanceResult, Span, TaskProvenance, TaskStatus } from '../types';
@@ -192,6 +192,32 @@ export function TaskCreateForm({
   );
 }
 
+type TaskPrimaryAction = 'review' | 'start' | 'report_done' | 'verify' | 'details';
+
+function taskOwnedByCurrentUser(task: ClinicalTask, identity: CurrentIdentity): boolean {
+  return task.assigned_role === identity.role
+    && (!task.assigned_user_id || task.assigned_user_id === identity.user_id);
+}
+
+function taskPrimaryAction(task: ClinicalTask, identity: CurrentIdentity): { kind: TaskPrimaryAction; label: string } {
+  if (task.task_kind === 'patient_report_review' && identity.role === 'staff' && ['open', 'in_progress'].includes(task.status)) {
+    return { kind: 'review', label: 'Review patient report' };
+  }
+  if (task.task_kind === 'clinician_priority_review' && identity.role === 'clinician' && ['open', 'in_progress'].includes(task.status)) {
+    return { kind: 'review', label: 'Open clinical review' };
+  }
+  if (task.task_kind === 'care_action' && task.status === 'reported_done') {
+    return { kind: 'verify', label: 'Verify completion' };
+  }
+  if (task.task_kind === 'care_action' && task.status === 'open' && taskOwnedByCurrentUser(task, identity)) {
+    return { kind: 'start', label: 'Start task' };
+  }
+  if (task.task_kind === 'care_action' && task.status === 'in_progress' && taskOwnedByCurrentUser(task, identity)) {
+    return { kind: 'report_done', label: 'Report done' };
+  }
+  return { kind: 'details', label: 'View details' };
+}
+
 export default function ClinicalTasksView({
   patientId,
   events,
@@ -220,6 +246,7 @@ export default function ClinicalTasksView({
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [provenance, setProvenance] = useState<TaskProvenance | null>(null);
   const [focusedTaskId, setFocusedTaskId] = useState<string | null>(null);
+  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [reviewContext, setReviewContext] = useState<PatientReviewContext | null>(null);
   const [correctionDrafts, setCorrectionDrafts] = useState<Record<string, string>>({});
@@ -227,6 +254,7 @@ export default function ClinicalTasksView({
   const [followUpOwner, setFollowUpOwner] = useState<'clinician' | 'staff'>('clinician');
   const [followUpDue, setFollowUpDue] = useState('');
   const [followUpSensitivity, setFollowUpSensitivity] = useState<'routine' | 'time_sensitive'>('routine');
+  const focusTimerRef = useRef<number | null>(null);
 
   const load = useCallback(async (signal?: AbortSignal) => {
     try {
@@ -246,10 +274,62 @@ export default function ClinicalTasksView({
     return () => controller.abort();
   }, [load, refreshKey]);
 
+  useEffect(() => () => {
+    if (focusTimerRef.current !== null) window.clearTimeout(focusTimerRef.current);
+  }, []);
+
   const selectedEvent = useMemo(
     () => events.find((event) => event.event_id === selectedEventId) ?? events[events.length - 1] ?? null,
     [events, selectedEventId],
   );
+  const eventsById = useMemo(() => new Map(events.map((event) => [event.event_id, event])), [events]);
+  const groupedTasks = useMemo(() => {
+    const needsAction = tasks
+      .filter((task) => !['reported_done', 'completed', 'cancelled'].includes(task.status))
+      .sort((left, right) => {
+        const leftActionable = taskPrimaryAction(left, identity).kind === 'details' ? 1 : 0;
+        const rightActionable = taskPrimaryAction(right, identity).kind === 'details' ? 1 : 0;
+        if (leftActionable !== rightActionable) return leftActionable - rightActionable;
+        return (left.due_at ?? '9999').localeCompare(right.due_at ?? '9999') || left.created_at.localeCompare(right.created_at);
+      });
+    const waitingForVerification = tasks
+      .filter((task) => task.status === 'reported_done')
+      .sort((left, right) => (left.reported_done_at ?? left.updated_at).localeCompare(right.reported_done_at ?? right.updated_at));
+    const archived = tasks
+      .filter((task) => task.status === 'completed' || task.status === 'cancelled')
+      .sort((left, right) => right.updated_at.localeCompare(left.updated_at));
+    return { needsAction, waitingForVerification, archived };
+  }, [tasks, identity]);
+
+  function focusTaskCard(taskId: string, transient = true) {
+    setFocusedTaskId(taskId);
+    window.requestAnimationFrame(() => {
+      const card = document.getElementById(`task-card-${taskId}`);
+      card?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      card?.querySelector<HTMLButtonElement>('.task-card-main')?.focus({ preventScroll: true });
+    });
+    if (focusTimerRef.current !== null) window.clearTimeout(focusTimerRef.current);
+    if (!transient) {
+      focusTimerRef.current = null;
+      return;
+    }
+    focusTimerRef.current = window.setTimeout(() => {
+      setFocusedTaskId((current) => current === taskId ? null : current);
+      focusTimerRef.current = null;
+    }, 2200);
+  }
+
+  function closeReviewContext() {
+    const taskId = reviewContext?.task.task_id;
+    setReviewContext(null);
+    if (taskId) focusTaskCard(taskId);
+  }
+
+  function closeProvenance() {
+    const taskId = provenance?.task_id;
+    setProvenance(null);
+    if (taskId) focusTaskCard(taskId);
+  }
 
   async function viewSource(task: ClinicalTask) {
     try {
@@ -277,7 +357,7 @@ export default function ClinicalTasksView({
   }
 
   // Glance "Open Task" lands on the SPECIFIC task, not the generic list:
-  // scroll to its card, highlight it and open its provenance.
+  // expand and focus its card, then open the role-appropriate review/source.
   useEffect(() => {
     if (!focusTaskId || tasks.length === 0) return;
     const task = tasks.find((candidate) => candidate.task_id === focusTaskId);
@@ -285,9 +365,8 @@ export default function ClinicalTasksView({
       onFocusHandled?.();
       return;
     }
-    setFocusedTaskId(focusTaskId);
-    const element = document.getElementById(`task-card-${focusTaskId}`);
-    element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setExpandedTaskId(focusTaskId);
+    focusTaskCard(focusTaskId, false);
     if (task.task_kind === 'patient_report_review' || task.task_kind === 'clinician_priority_review') {
       openReview(task);
     } else {
@@ -431,6 +510,94 @@ export default function ClinicalTasksView({
         : 'verified')
     : null;
 
+  function toggleTaskDetails(taskId: string) {
+    setExpandedTaskId((current) => current === taskId ? null : taskId);
+  }
+
+  function runPrimaryAction(task: ClinicalTask) {
+    const action = taskPrimaryAction(task, identity);
+    if (action.kind === 'review') {
+      void openReview(task);
+      return;
+    }
+    if (action.kind === 'start') {
+      void transition(task, 'in_progress');
+      return;
+    }
+    if (action.kind === 'report_done') {
+      void transition(task, 'reported_done');
+      return;
+    }
+    if (action.kind === 'verify') {
+      void transition(task, 'completed');
+      return;
+    }
+    setExpandedTaskId(task.task_id);
+    focusTaskCard(task.task_id);
+  }
+
+  function renderTaskCard(task: ClinicalTask) {
+    const action = taskPrimaryAction(task, identity);
+    const taskEvent = eventsById.get(task.event_id);
+    const expanded = expandedTaskId === task.task_id;
+    const sourceLabel = task.source_artifact_id && task.source_span ? 'Exact source linked' : 'Event-level source';
+    const ownerLabel = task.assigned_role === 'staff' ? 'Nurse' : task.assigned_role[0].toUpperCase() + task.assigned_role.slice(1);
+    return (
+      <li key={task.task_id}>
+        <article id={`task-card-${task.task_id}`} className={`task-card task-${task.status}${focusedTaskId === task.task_id ? ' task-focused' : ''}`}>
+          <button
+            type="button"
+            className="task-card-main"
+            aria-expanded={expanded}
+            aria-controls={`task-details-${task.task_id}`}
+            onClick={() => toggleTaskDetails(task.task_id)}
+          >
+            <span className="task-card-copy">
+              <strong>{task.title}</strong>
+              {task.description && <span>{task.description}</span>}
+              <small><b>{taskEvent ? eventLabel(taskEvent) : 'Clinical Event'}</b><i>{sourceLabel}</i><i>Created {formatDateTime(task.created_at)}</i></small>
+              {task.creation_method === 'system_routed' && <em>Routed from patient Check-in · {task.verification_outcome.replace(/_/g, ' ')}</em>}
+              {task.escalated_at && <em>Nurse review overdue · internally escalated</em>}
+              {task.status === 'reported_done' && <em className="task-verification-warning">Patient reported done · clinic verification required</em>}
+            </span>
+            <span className="task-card-metadata">
+              <span className="task-status">{task.status.replace(/_/g, ' ')}</span>
+              <span><small>Owner</small><strong>{ownerLabel}</strong></span>
+              <span><small>Due</small><strong>{task.due_at ? formatDateTime(task.due_at) : 'No due date'}</strong></span>
+              <i aria-hidden="true">{expanded ? '⌃' : '⌄'}</i>
+            </span>
+          </button>
+          <div className="task-card-actions">
+            <button className={`task-primary-action${action.kind === 'details' ? ' secondary' : ''}`} disabled={pendingId === task.task_id} onClick={() => runPrimaryAction(task)}>{pendingId === task.task_id ? 'Updating…' : action.label}</button>
+            <details className="task-overflow-menu">
+              <summary aria-label={`More actions for ${task.title}`}>···</summary>
+              <div>
+                {task.task_kind === 'care_action' && task.status === 'open' && taskOwnedByCurrentUser(task, identity) && <button disabled={pendingId === task.task_id} onClick={() => transition(task, 'reported_done')}>Report done</button>}
+                {task.task_kind === 'care_action' && ['open', 'in_progress', 'reported_done'].includes(task.status) && <button disabled={pendingId === task.task_id} onClick={() => transition(task, 'cancelled')}>Cancel</button>}
+                {taskEvent && <button onClick={() => onOpenEvent(taskEvent)}>Open Event</button>}
+                <button onClick={() => viewSource(task)}>View source</button>
+              </div>
+            </details>
+          </div>
+          {expanded && <div id={`task-details-${task.task_id}`} className="task-card-details">
+            <div><span>Task details</span><p>{task.description || 'No additional description.'}</p></div>
+            <dl>
+              <div><dt>Source</dt><dd>{taskEvent ? eventLabel(taskEvent) : task.event_id} · {sourceLabel}</dd></div>
+              <div><dt>Visibility</dt><dd>{task.patient_visible ? 'Patient visible' : 'Internal clinic task'}</dd></div>
+              <div><dt>Workflow</dt><dd>{task.task_kind.replace(/_/g, ' ')}</dd></div>
+            </dl>
+            <button className="link-btn" onClick={() => { setExpandedTaskId(null); focusTaskCard(task.task_id); }}>Close details</button>
+          </div>}
+        </article>
+      </li>
+    );
+  }
+
+  function renderTaskList(rows: ClinicalTask[]) {
+    if (rows.length === 0) return <p className="task-group-empty">No tasks in this group.</p>;
+    return <ul className="task-group-list">{rows.map(renderTaskCard)}</ul>;
+  }
+
   return (
     <section className="clinical-view tasks-view" aria-labelledby="tasks-heading">
       <div className="view-title-row"><div><p className="eyebrow">Who must do what next</p><h2 id="tasks-heading">Care Tasks</h2><p className="view-subtitle">Review active work first; create a new task only when needed.</p></div><div className="view-title-actions"><span className="record-count">{tasks.length} tasks</span><button className="primary-button" onClick={() => setShowCreate((current) => !current)}>{showCreate ? 'Close form' : 'New task'}</button></div></div>
@@ -446,7 +613,7 @@ export default function ClinicalTasksView({
       {reviewContext && <section className="patient-review-workbench" aria-label="Patient report review">
         <header className="patient-review-head">
           <div><p className="eyebrow">Source-linked patient report</p><h3>{reviewContext.task.title}</h3><p>{reviewContext.degraded ? 'Deterministic fallback extraction' : `AI extraction · ${reviewContext.generation_method ?? 'provider mode unknown'}`}. Each item remains patient-reported until reviewed.</p></div>
-          <button className="link-btn" onClick={() => setReviewContext(null)}>Close</button>
+          <button className="link-btn" onClick={closeReviewContext}>Close</button>
         </header>
         {reviewContext.candidates.length === 0 && <div className="empty-state"><h3>No extracted candidates</h3><p>The submitted Check-in still requires a session-level Nurse decision.</p></div>}
         <div className="patient-review-items">{reviewContext.candidates.map((candidate) => (
@@ -490,34 +657,21 @@ export default function ClinicalTasksView({
       </section>}
       {loading && <div className="loading-card">Loading care tasks…</div>}
       {!loading && tasks.length === 0 && <div className="empty-state"><h3>No care tasks</h3><p>Create an evidence-linked action from a real Event.</p></div>}
-      {!loading && tasks.length > 0 && <div className="clinical-task-table-wrap"><table className="clinical-task-table">
-        <thead><tr><th>Task</th><th>Status</th><th>Owner</th><th>Due</th><th><span className="sr-only">Actions</span></th></tr></thead>
-        <tbody>{tasks.map((task) => (
-          <tr key={task.task_id} id={`task-card-${task.task_id}`} className={`task-${task.status}${focusedTaskId === task.task_id ? ' task-focused' : ''}`}>
-            <td><strong>{task.title}</strong>{task.description && <span>{task.description}</span>}<small>Source: {eventLabel(events.find((event) => event.event_id === task.event_id) ?? selectedEvent!)}{task.source_artifact_id ? ' · source-linked Check-in' : ' · Event-level source'}</small>{task.creation_method === 'system_routed' && <em>Routed from patient Check-in · {task.verification_outcome.replace(/_/g, ' ')}</em>}{task.escalated_at && <em>Nurse review overdue · internally escalated</em>}{task.status === 'reported_done' && <em>Clinic verification required</em>}</td>
-            <td><span className="task-status">{task.status.replace('_', ' ')}</span></td>
-            <td>{task.assigned_role}<small>{task.patient_visible ? 'Patient visible' : 'Internal'}</small></td>
-            <td>{task.due_at ? formatDateTime(task.due_at) : 'No due date'}</td>
-            <td><details className="task-actions-menu"><summary>Actions</summary><div>
-              {task.task_kind === 'patient_report_review' && identity.role === 'staff' && ['open', 'in_progress'].includes(task.status) && <>
-                <button disabled={pendingId === task.task_id} onClick={() => openReview(task)}>Review candidates</button>
-              </>}
-              {task.task_kind === 'clinician_priority_review' && identity.role === 'clinician' && ['open', 'in_progress'].includes(task.status) && <>
-                <button disabled={pendingId === task.task_id} onClick={() => openReview(task)}>Open clinician review</button>
-              </>}
-              {task.task_kind === 'care_action' && <>
-              {task.status === 'open' && task.assigned_role === identity.role && (!task.assigned_user_id || task.assigned_user_id === identity.user_id) && <button disabled={pendingId === task.task_id} onClick={() => transition(task, 'in_progress')}>Start</button>}
-              {(task.status === 'open' || task.status === 'in_progress') && <button disabled={pendingId === task.task_id} onClick={() => transition(task, 'reported_done')}>Report done</button>}
-              {task.status === 'reported_done' && <button disabled={pendingId === task.task_id} onClick={() => transition(task, 'completed')}>Verify complete</button>}
-              {['open', 'in_progress', 'reported_done'].includes(task.status) && <button disabled={pendingId === task.task_id} onClick={() => transition(task, 'cancelled')}>Cancel</button>}
-              </>}
-              <button onClick={() => onOpenEvent(events.find((event) => event.event_id === task.event_id) ?? selectedEvent!)}>Open Event</button>
-              <button onClick={() => viewSource(task)}>View source</button>
-            </div></details></td>
-          </tr>
-        ))}</tbody>
-      </table></div>}
-      {provenance && <div className="task-provenance"><button className="link-btn" onClick={() => setProvenance(null)}>Close</button><strong>Task source</strong><span>{provenance.event.event_type} · {provenance.event.event_id}</span>{provenance.source_artifact && <span>{provenance.source_artifact.artifact_type} · {provenance.source_artifact.artifact_id}</span>}{provenance.quote ? <blockquote>{provenance.quote}</blockquote> : <span className="muted">Event-level provenance (no exact source selected)</span>}</div>}
+      {!loading && tasks.length > 0 && <div className="task-groups">
+        <section className="task-group" aria-labelledby="needs-action-heading">
+          <header className="task-group-header"><div><p className="eyebrow">Active work</p><h3 id="needs-action-heading">Needs action</h3><span>Tasks your role can act on are shown first; other active work remains visible.</span></div><strong>{groupedTasks.needsAction.length}</strong></header>
+          {renderTaskList(groupedTasks.needsAction)}
+        </section>
+        <section className="task-group waiting" aria-labelledby="waiting-verification-heading">
+          <header className="task-group-header"><div><p className="eyebrow">Clinic confirmation</p><h3 id="waiting-verification-heading">Waiting for verification</h3><span>Patient-reported completion remains unverified until the clinic confirms it.</span></div><strong>{groupedTasks.waitingForVerification.length}</strong></header>
+          {renderTaskList(groupedTasks.waitingForVerification)}
+        </section>
+        <details className="task-group archived">
+          <summary><span><b>Completed and cancelled</b><small>Historical tasks remain available for review.</small></span><strong>{groupedTasks.archived.length}</strong></summary>
+          {renderTaskList(groupedTasks.archived)}
+        </details>
+      </div>}
+      {provenance && <div className="task-provenance"><button className="link-btn" onClick={closeProvenance}>Close</button><strong>Task source</strong><span>{provenance.event.event_type} · {provenance.event.event_id}</span>{provenance.source_artifact && <span>{provenance.source_artifact.artifact_type} · {provenance.source_artifact.artifact_id}</span>}{provenance.quote ? <blockquote>{provenance.quote}</blockquote> : <span className="muted">Event-level provenance (no exact source selected)</span>}</div>}
     </section>
   );
 }

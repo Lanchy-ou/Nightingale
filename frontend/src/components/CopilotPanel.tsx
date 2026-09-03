@@ -1,14 +1,26 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { api } from '../api';
 import type { CopilotCategory, CopilotDraft, CopilotEvidence, CopilotResponse } from '../types';
 
 type DraftType = CopilotDraft['artifact_type'];
+type CopilotRequest = {
+  category: CopilotCategory;
+  draftType?: DraftType;
+  question: string;
+  label: string;
+};
 
-const QUICK: { category: CopilotCategory; label: string }[] = [
+const QUERY_CHIPS: { category: Exclude<CopilotCategory, 'draft_action'>; label: string }[] = [
   { category: 'what_changed', label: 'What changed?' },
   { category: 'what_matters_now', label: 'What matters now?' },
   { category: 'find_evidence', label: 'Find evidence' },
-  { category: 'draft_action', label: 'Draft action' },
+];
+
+const DRAFT_CHIPS: { draftType: DraftType; label: string }[] = [
+  { draftType: 'clinician_note', label: 'Draft clinician note' },
+  { draftType: 'task', label: 'Draft care task' },
+  { draftType: 'patient_instruction', label: 'Draft patient instruction' },
 ];
 
 function draftLabel(type: DraftType): string {
@@ -35,6 +47,9 @@ export default function CopilotPanel({
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorKind, setErrorKind] = useState<'request' | 'confirmation' | null>(null);
+  const [lastRequest, setLastRequest] = useState<CopilotRequest | null>(null);
+  const requestInFlight = useRef(false);
   const evidence = useMemo(() => new Map(response?.evidence.map((item) => [item.evidence_id, item]) ?? []), [response]);
 
   useEffect(() => {
@@ -48,36 +63,66 @@ export default function CopilotPanel({
     setBusy(false);
     setConfirming(false);
     setError(null);
+    setErrorKind(null);
+    setLastRequest(null);
+    requestInFlight.current = false;
   }, [patientId, roleKey]);
 
-  function chooseQuick(next: CopilotCategory) {
-    setCategory(next);
-    setResponse(null);
-    setDraftContent({});
-    setError(null);
-    if (next !== 'draft_action') void ask(next);
-  }
-
-  async function ask(next = category) {
-    setCategory(next);
+  async function runRequest(request: CopilotRequest) {
+    if (requestInFlight.current) return;
+    requestInFlight.current = true;
+    setCategory(request.category);
+    if (request.draftType) setDraftType(request.draftType);
+    setLastRequest(request);
     setBusy(true);
     setError(null);
+    setErrorKind(null);
     setResponse(null);
     setDraftContent({});
     try {
       const result = await api.queryCopilot(
         patientId,
-        next,
-        question.trim(),
-        next === 'draft_action' ? draftType : undefined,
+        request.category,
+        request.question,
+        request.category === 'draft_action' ? request.draftType : undefined,
       );
       setResponse(result);
       setDraftContent(result.draft?.content ?? {});
+      setQuestion('');
     } catch (requestError: any) {
       setError(String(requestError.message ?? requestError));
+      setErrorKind('request');
     } finally {
+      requestInFlight.current = false;
       setBusy(false);
     }
+  }
+
+  function sendChip(next: CopilotCategory, label: string, nextDraftType?: DraftType) {
+    const guidance = question.trim();
+    void runRequest({
+      category: next,
+      draftType: nextDraftType,
+      question: guidance,
+      label: guidance ? `${label}: ${guidance}` : label,
+    });
+  }
+
+  function sendFocusedQuestion() {
+    const focusedQuestion = question.trim();
+    if (!focusedQuestion || busy) return;
+    void runRequest({
+      category,
+      draftType: category === 'draft_action' ? draftType : undefined,
+      question: focusedQuestion,
+      label: focusedQuestion,
+    });
+  }
+
+  function handleQuestionKeyDown(event: ReactKeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
+    event.preventDefault();
+    sendFocusedQuestion();
   }
 
   function editDraft(field: string, value: string) {
@@ -89,6 +134,7 @@ export default function CopilotPanel({
     if (!draft) return;
     setConfirming(true);
     setError(null);
+    setErrorKind(null);
     try {
       if (draft.artifact_type === 'task') {
         const source = evidence.get(draft.evidence_ids[0]);
@@ -116,6 +162,7 @@ export default function CopilotPanel({
       onConfirmed();
     } catch (confirmError: any) {
       setError(String(confirmError.message ?? confirmError));
+      setErrorKind('confirmation');
     } finally {
       setConfirming(false);
     }
@@ -136,9 +183,10 @@ export default function CopilotPanel({
     <section className="copilot-panel" aria-label="Copilot">
       <div className="copilot-authority-strip"><strong>Evidence-bound Copilot</strong><span>Claims stay separated as source facts, inferences or unknowns. Nothing is saved without explicit confirmation.</span></div>
       <div className="copilot-conversation" aria-live="polite">
-        {!response && !busy && !error && <div className="copilot-welcome"><p className="eyebrow">Current review</p><h3>Ask about this patient record</h3><p>Answers separate source facts, comparison inferences and unknowns. Open any citation to inspect its exact source span.</p></div>}
-        {busy && <div className="copilot-thinking">Checking bounded evidence…</div>}
-        {error && <div className="form-error">Copilot request failed: {error}</div>}
+        {!response && !busy && !error && !lastRequest && <div className="copilot-welcome"><p className="eyebrow">Current review</p><h3>Ask about this patient record</h3><p>Answers separate source facts, comparison inferences and unknowns. Open any citation to inspect its exact source span.</p></div>}
+        {lastRequest && <div className="copilot-user-message"><span>You</span><p>{lastRequest.label}</p></div>}
+        {busy && <div className="copilot-thinking">Checking evidence...</div>}
+        {error && <div className="copilot-error-state"><div className="form-error">{errorKind === 'confirmation' ? 'Confirmation failed' : 'Copilot request failed'}: {error}</div>{errorKind === 'request' && <button className="secondary-button" disabled={busy || !lastRequest} onClick={() => lastRequest && void runRequest(lastRequest)}>Retry</button>}</div>}
         {response && <div className="copilot-result">
           <div className="copilot-answer-head"><div><p className="eyebrow">{response.degraded ? 'Copilot · unavailable' : response.generation_method === 'deepseek' ? 'DeepSeek AI · current review' : 'Local deterministic · current review'}</p><h3>Evidence-bound answer</h3></div><span>{response.claims.length} claim{response.claims.length === 1 ? '' : 's'}</span></div>
           {response.status === 'unavailable' && <div className="copilot-unavailable">Unavailable — no clinical answer was generated.</div>}
@@ -150,15 +198,44 @@ export default function CopilotPanel({
       </div>
       <div className="copilot-composer">
         <div className="copilot-composer-head">
-          <strong>{category === 'draft_action' ? 'Draft with evidence' : 'Ask Copilot'}</strong>
-          <span>{category === 'draft_action' ? 'Nothing saves until you confirm' : 'Choose a prompt or add a focused question'}</span>
+          <strong>Ask Copilot</strong>
+          <span>{category === 'draft_action' ? `${draftLabel(draftType)} preview · confirmation required` : 'Evidence-bound question'}</span>
         </div>
-        <div className="copilot-quick-actions" aria-label="Suggested Copilot questions">
-          {QUICK.map((item) => <button key={item.category} className={category === item.category ? 'active' : ''} disabled={busy} onClick={() => chooseQuick(item.category)}>{item.label}</button>)}
+        <div className="copilot-chip-group">
+          <span>Suggested questions</span>
+          <div className="copilot-quick-actions" aria-label="Suggested Copilot questions">
+            {QUERY_CHIPS.map((item) => {
+              const checking = busy && lastRequest?.category === item.category;
+              return <button key={item.category} className={category === item.category ? 'active' : ''} disabled={busy} onClick={() => sendChip(item.category, item.label)}>{checking ? 'Checking evidence...' : item.label}</button>;
+            })}
+          </div>
         </div>
-        {category === 'draft_action' && <label className="copilot-draft-config"><span>Draft type <small>Selected by clinician</small></span><select value={draftType} onChange={(event) => { setDraftType(event.target.value as DraftType); setResponse(null); setDraftContent({}); }}><option value="clinician_note">Clinician note</option><option value="task">Care Task</option><option value="patient_instruction">Patient instruction</option></select></label>}
-        <div className="copilot-input-row"><label className="copilot-question"><span>{category === 'draft_action' ? 'Optional drafting guidance' : 'Focused question (optional)'}</span><textarea value={question} maxLength={300} rows={2} onChange={(event) => setQuestion(event.target.value)} placeholder={category === 'draft_action' ? 'Add emphasis or constraints for the preview' : "Ask about this patient's record"} /></label>
-        <button className="primary-button copilot-ask" disabled={busy} onClick={() => ask()}>{busy ? 'Checking…' : category === 'draft_action' ? `Generate ${draftLabel(draftType)} preview` : 'Ask'}</button></div>
+        <div className="copilot-chip-group">
+          <span>Draft previews</span>
+          <div className="copilot-quick-actions draft-actions" aria-label="Draft preview actions">
+            {DRAFT_CHIPS.map((item) => {
+              const checking = busy && lastRequest?.category === 'draft_action' && lastRequest.draftType === item.draftType;
+              return <button key={item.draftType} className={category === 'draft_action' && draftType === item.draftType ? 'active' : ''} disabled={busy} onClick={() => sendChip('draft_action', item.label, item.draftType)}>{checking ? 'Checking evidence...' : item.label}</button>;
+            })}
+          </div>
+        </div>
+        <div className="copilot-input-shell">
+          <label className="sr-only" htmlFor="copilot-focused-question">Focused Copilot question</label>
+          <textarea
+            id="copilot-focused-question"
+            value={question}
+            maxLength={300}
+            rows={1}
+            disabled={busy}
+            onChange={(event) => setQuestion(event.target.value)}
+            onKeyDown={handleQuestionKeyDown}
+            placeholder={category === 'draft_action' ? `Add guidance for the ${draftLabel(draftType).toLowerCase()} preview` : "Ask about this patient's record"}
+          />
+          <div className="copilot-input-toolbar">
+            <span>Enter to send · Shift+Enter for a new line</span>
+            <button className="copilot-send" type="button" aria-label="Send Copilot request" disabled={busy || !question.trim()} onClick={sendFocusedQuestion}><span aria-hidden="true">↑</span></button>
+          </div>
+        </div>
       </div>
     </section>
   );

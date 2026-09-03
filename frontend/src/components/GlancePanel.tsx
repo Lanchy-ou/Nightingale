@@ -130,11 +130,11 @@ export default function GlancePanel({
     }
   }
 
-  function sourceAction(h: Highlight) {
+  function sourceAction(h: Highlight, primary = false) {
     return h.task_id ? (
-      <button className="source-action" onClick={() => onOpenTasks?.(h.task_id!)}>Open task</button>
+      <button className={`source-action${primary ? ' primary' : ''}`} onClick={() => onOpenTasks?.(h.task_id!)}>{primary ? 'Open linked task' : 'Open task'}</button>
     ) : (
-      <button className="source-action" onClick={() => viewSource(h.highlight_id)}>View Source</button>
+      <button className={`source-action${primary ? ' primary' : ''}`} onClick={() => viewSource(h.highlight_id)}>{primary ? 'View exact source' : 'View source'}</button>
     );
   }
 
@@ -206,40 +206,43 @@ export default function GlancePanel({
             </div>
           </section>
 
-          <article className={`glance-detail-panel ${selectedHighlight.status}`} aria-live="polite">
-            <header className="glance-detail-head">
-              <span className="glance-detail-type"><b>{prioritySymbol(selectedHighlight)}</b>{priorityLabel(selectedHighlight)}</span>
-              <span className={`glance-detail-state ${selectedHighlight.feature_flags.clinician_confirmed ? 'reviewed' : ''}`}>{reviewState(selectedHighlight, reviewRole)}</span>
-            </header>
-            <h3>{selectedHighlight.text}</h3>
-            <p className="glance-detail-reason">{selectedHighlight.risk_reason}</p>
-            {selectedHighlight.task_context && <section className="glance-detail-block"><span>Review workflow</span><p>{selectedHighlight.task_context.creation_method === 'system_routed' ? 'Routed from patient Check-in' : 'Human-created task'} · {selectedHighlight.task_context.verification_outcome.replace(/_/g, ' ')}{selectedHighlight.task_context.verification_overdue ? ' · Nurse verification overdue' : ''}</p></section>}
-
-            <section className="glance-detail-block">
-              <span>Next action</span>
-              <p>{selectedHighlight.task_id ? 'Open the linked Task, then review its state in the patient record.' : 'Open the exact source, verify the supporting span, then record the appropriate review decision.'}</p>
+          <article className={`glance-detail-panel ${selectedHighlight.status}`}>
+            <section className="glance-detail-summary" aria-live="polite">
+              <header className="glance-detail-head">
+                <span className="glance-detail-type"><b>{prioritySymbol(selectedHighlight)}</b>{priorityLabel(selectedHighlight)}</span>
+                <span className={`glance-detail-state ${selectedHighlight.feature_flags.clinician_confirmed ? 'reviewed' : ''}`}>{reviewState(selectedHighlight, reviewRole)}</span>
+              </header>
+              <h3>{selectedHighlight.text}</h3>
+              <p className="glance-detail-reason">{selectedHighlight.risk_reason}</p>
             </section>
 
-            <section className="glance-detail-evidence">
-              <span>Evidence linkage</span>
-              <dl>
-                <div><dt>Event</dt><dd>Linked medical Event</dd></div>
-                <div><dt>Artifact</dt><dd>{selectedHighlight.artifact_id ? 'Derived Artifact linked' : 'No derived Artifact'}</dd></div>
-                <div><dt>Exact span</dt><dd>{selectedHighlight.source_span ? `${selectedHighlight.source_span.kind} source available` : 'No exact span claimed'}</dd></div>
-              </dl>
+            <section className="glance-detail-next-step">
+              <div><span>Next step</span><p>{selectedHighlight.task_id ? 'Open the linked Task and review its current workflow state.' : 'Inspect the exact supporting span before recording a review decision.'}</p></div>
+              <div className="glance-detail-actions">
+                {sourceAction(selectedHighlight, true)}
+                {reviewMenu(selectedHighlight)}
+                {selectedHighlight.review_status === 'needs_review' && <span className="needs-review-tag">Needs review</span>}
+              </div>
             </section>
 
-            <section className="glance-detail-block authority">
-              <span>Authority and state</span>
-              <p>{selectedHighlight.feature_flags.clinician_confirmed ? 'This priority has been clinician-reviewed. Its raw, AI and human-authored Artifacts remain separate.' : 'This is a suggested priority, not clinician confirmation. Opening its source does not change clinical authority.'}</p>
+            {selectedHighlight.task_context && <section className="glance-detail-workflow"><span>Workflow</span><p>{selectedHighlight.task_context.creation_method === 'system_routed' ? 'Routed from patient Check-in' : 'Human-created task'} · {selectedHighlight.task_context.verification_outcome.replace(/_/g, ' ')}{selectedHighlight.task_context.verification_overdue ? ' · Nurse verification overdue' : ''}</p></section>}
+
+            <section className="glance-detail-provenance">
+              <div className="glance-detail-evidence">
+                <span>Source and provenance</span>
+                <dl>
+                  <div><dt>Event</dt><dd>Linked medical Event</dd></div>
+                  <div><dt>Artifact</dt><dd>{selectedHighlight.artifact_id ? 'Derived Artifact linked' : 'No derived Artifact'}</dd></div>
+                  <div><dt>Exact span</dt><dd>{selectedHighlight.source_span ? `${selectedHighlight.source_span.kind} source available` : 'No exact span claimed'}</dd></div>
+                </dl>
+                {selectedHighlight.task_id && <button className="glance-evidence-link" onClick={() => viewSource(selectedHighlight.highlight_id)}>View exact source</button>}
+              </div>
+              <div className="glance-detail-authority"><span>Authority</span><p>{selectedHighlight.feature_flags.clinician_confirmed ? 'Clinician-reviewed. Raw, AI and human-authored Artifacts remain separate.' : 'Suggested for review, not clinician confirmation. Opening the source does not change authority.'}</p></div>
             </section>
 
-            {learnedPriority(selectedHighlight)}
-            {rankingExplanation(selectedHighlight)}
-            <div className="glance-detail-actions">
-              {sourceAction(selectedHighlight)}
-              {reviewMenu(selectedHighlight)}
-              {selectedHighlight.review_status === 'needs_review' && <span className="needs-review-tag">Needs review</span>}
+            <div className="glance-detail-explainability">
+              {rankingExplanation(selectedHighlight)}
+              {learnedPriority(selectedHighlight)}
             </div>
           </article>
         </div>

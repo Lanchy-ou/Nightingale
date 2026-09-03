@@ -38,15 +38,17 @@ def test_glance_review_controls_explain_their_effect():
     assert ">Glance</h2>" in source
 
 
-def test_clinical_sidebars_are_bounded_and_user_resizable():
+def test_clinical_sidebars_are_bounded_and_user_controllable():
     workspace = _read("frontend/src/pages/ClinicianWorkspacePage.tsx")
+    sidebar = _read("frontend/src/components/ClinicianSidebar.tsx")
     styles = _read("frontend/src/index.css")
     assert 'role="separator"' in workspace
-    assert 'label="Resize patient navigation"' in workspace
     assert 'label="Resize clinical context"' in workspace
-    assert "min={196} max={310}" in workspace
     assert "min={280} max={520}" in workspace
-    assert "var(--sidebar-width, 216px)" in styles
+    assert "sidebarCollapsed ? '64px' : '232px'" in workspace
+    assert "SIDEBAR_COLLAPSED_KEY" in workspace
+    assert "'Expand patient navigation' : 'Collapse patient navigation'" in sidebar
+    assert "var(--sidebar-width, 232px)" in styles
     assert "var(--context-width, 320px)" in styles
 
 
@@ -73,9 +75,9 @@ def test_staff_workspace_has_explicit_support_identity_and_no_copilot_default():
 
 def test_staff_task_verification_affordance_is_explicit():
     tasks = _read("frontend/src/components/ClinicalTasksView.tsx")
-    assert "Clinic verification required" in tasks
+    assert "Patient reported done · clinic verification required" in tasks
     assert "task.status === 'reported_done'" in tasks
-    assert ">Verify complete</button>" in tasks
+    assert "label: 'Verify completion'" in tasks
 
 
 def test_event_comments_are_visible_and_last_task_menu_opens_upward():
@@ -86,18 +88,18 @@ def test_event_comments_are_visible_and_last_task_menu_opens_upward():
     assert 'onClick={onOpenComments}>Comments</button>' in event
     assert "setContextTab('comments');" in workspace
     assert "setContextDrawerOpen(true);" in workspace
-    assert ".clinical-task-table tbody tr:last-child .task-actions-menu[open] > div" in styles
-    assert "bottom: calc(100% + 4px)" in styles
+    assert ".task-group-list > li:last-child .task-overflow-menu[open] > div" in styles
+    assert "bottom: calc(100% + 5px)" in styles
 
 
-def test_workspace_tabs_and_copilot_composer_use_stable_equal_width_layouts():
+def test_workspace_tabs_and_copilot_composer_use_stable_responsive_layouts():
     workspace = _read("frontend/src/pages/ClinicianWorkspacePage.tsx")
     copilot = _read("frontend/src/components/CopilotPanel.tsx")
     styles = _read("frontend/src/index.css")
     assert "workspace-tabs ${route.mode === 'event' ? 'with-event-detail' : ''}" in workspace
-    assert "grid-template-columns: repeat(4, minmax(0, 1fr))" in styles
-    assert ".workspace-tabs.with-event-detail { grid-template-columns: repeat(5" in styles
+    assert "min-width: 72px; flex: 1 1 0" in styles
     assert "copilot-composer-head" in copilot
-    assert "copilot-draft-config" in copilot
-    assert ".copilot-quick-actions { display: grid; grid-template-columns: repeat(2" in styles
-    assert ".copilot-input-row { display: grid" in styles
+    assert "copilot-chip-group" in copilot
+    assert "copilot-input-shell" in copilot
+    assert ".copilot-quick-actions { display: flex; flex-wrap: wrap" in styles
+    assert ".copilot-input-toolbar { display: flex" in styles
