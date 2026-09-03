@@ -1,5 +1,7 @@
 # Nightingale 72 Hour Build
 
+[![CI](https://github.com/Lanchy-ou/Nightingale/actions/workflows/ci.yml/badge.svg)](https://github.com/Lanchy-ou/Nightingale/actions/workflows/ci.yml)
+
 Nightingale is a synthetic-data prototype for one shared longitudinal patient record. It connects patient updates, consults, AI-scribed artifacts, clinician and staff work, tasks, collaboration, audit history, and exact provenance without treating AI output as clinical authority.
 
 > Prototype boundary: this is not a production medical system. It does not diagnose, prescribe, adjust medication, replace emergency services, notify a clinic about emergencies, or prove clinical safety, usability, capacity, or regulatory compliance.
@@ -349,6 +351,14 @@ Set-Location ..
 git diff --check
 ```
 
+To reproduce the committed Technical Brief without changing the application
+environment, install the separate document dependencies and run its generator:
+
+```powershell
+python -m pip install -r requirements-docs.txt
+python scripts\generate_technical_brief.py
+```
+
 Current pre-E5 evidence: backend 509 passed / 2 explicit real-local-ASR-input skips; security/integration 22 passed; Patient Check-in 29 passed; D3 corpus/runtime and D4 frozen eval passed; three frontend Node checks and the 59-module production build passed. The dated final manifest records the final-commit rerun and any later changes.
 
 Post-E5 Admin settings and frontend pre-visual repairs are tracked separately in `docs/frontend_previsual_repair_evidence_2026-08-28.md`. That current working-tree verification collected 524 backend tests (522 passed / 2 explicit local-ASR-input skips), passed the 60-module production build, and re-ran four-role product-session browser acceptance. It does not rewrite the historical E5 evidence.
@@ -412,7 +422,8 @@ This matrix is a navigation index, not a substitute for the tests. The authorita
 
 - Candidate requirements: `2026 72 Hour Build_ Nightingale Candidate Brief 2.pdf`
 - Attribution: `ATTRIBUTION.txt`
-- Final evidence: `docs/final_submission_evidence_2026-08-28.md`
+- Current final repository evidence: `docs/final_submission_evidence_2026-09-03.md`
+- Historical E5 evidence: `docs/final_submission_evidence_2026-08-28.md` (retained as a dated record; its `NOT SUBMISSION READY` conclusion predates the current repository closeout).
 - Current real-clinic readiness ledger: `docs/real_clinic_readiness_status_2026-08-31.md`
 - F1/A real-clinic hardening closeout: `docs/f1_a_closeout_2026-09-02.md`. A1–A5 are complete with documented limits; D safeguards survived final regression; the final reason-code matrix and 16-scenario ledger are recorded. Formal Glance remains base-only and live Provider evidence remains separate. Synthetic SL2 Shadow training is complete; the SL3 observed-feedback bridge exists, but real-feedback training and serving promotion remain blocked.
 - F Final consult review evidence: `docs/final_feedback_consult_review_evidence_2026-09-03.md`.
@@ -422,4 +433,7 @@ This matrix is a navigation index, not a substitute for the tests. The authorita
 - Submission email draft: `docs/submission_email_draft_2026-08-28.md`
 - Technical Brief: `output/pdf/Nightingale_Technical_Brief.pdf` (exactly 3 pages). It covers numbered feedback scenarios 1–16 plus the source document's concluding cross-cutting capability checklist as synthesis item 17, including build integration, first failures, unsuccessful/blocked attempts, and assumptions that still stand or no longer stand. Reviewable source: `docs/Nightingale_Technical_Brief.md`; reproducible generator: `scripts/generate_technical_brief.py`.
 
-The final evidence manifest is authoritative for its dated command outcomes and capability boundaries. Current external delivery status is owner-controlled and may be newer than that dated manifest.
+The 2026-09-03 final repository evidence is authoritative for the current
+repository closeout. Older evidence remains authoritative only for its dated
+observations. Demo Video playback, recipient access, and email delivery remain
+owner-controlled external evidence outside the repository.

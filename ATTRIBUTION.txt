@@ -41,6 +41,16 @@ Caddy terminates local Demo TLS, redirects HTTP to HTTPS, serves the built SPA
 and reverse-proxies `/api/*` to the loopback-only FastAPI process. The binary is
 downloaded into an ignored local tools directory and is not bundled in the repo.
 
+## Document generation
+
+Technical Brief generator dependencies are declared in `requirements-docs.txt`
+and are not application runtime dependencies.
+
+| Package | License |
+|---|---|
+| python-docx 1.2.0 | MIT |
+| ReportLab 4.4.9 | BSD |
+
 ## Frontend (Node)
 
 Declared in `frontend/package.json`:
