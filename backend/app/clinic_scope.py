@@ -67,6 +67,7 @@ def load_artifact_with_event(
         .join(Patient, Patient.patient_id == Event.patient_id)
         .where(
             Artifact.artifact_id == artifact_id,
+            Artifact.artifact_type.not_in({"external_test_report", "test_result_review", "test_result_communication"}) if ctx.role == "admin" else True,
             Event.clinic_id == ctx.clinic_id,
             Patient.clinic_id == ctx.clinic_id,
             _patient_clause(ctx, Event.patient_id),

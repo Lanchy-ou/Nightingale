@@ -142,6 +142,14 @@ def create_note(
             version=1,
             provenance_pointer=None,
         )
+    if body.artifact_type == "patient_instruction" and event.event_type == "test_result":
+        from ..result_models import TestOrder
+        from ..test_result_service import require_enabled
+        require_enabled()
+        order = db.scalar(select(TestOrder).where(TestOrder.result_event_id == event_id, TestOrder.clinic_id == ctx.clinic_id))
+        if order is None or order.current_review_id is None or order.cancelled_reason:
+            raise HTTPException(409, "Review the current report before writing result guidance")
+        artifact.generation_metadata = {"test_order_id": order.order_id, "test_review_id": order.current_review_id}
     db.add(artifact)
     db.add(
         ArtifactVersion(

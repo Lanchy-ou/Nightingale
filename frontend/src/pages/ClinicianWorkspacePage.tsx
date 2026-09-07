@@ -1,3 +1,7 @@
+import AppIcon from '../components/AppIcon';
+import TestOrdersPage from './TestOrdersPage';
+import WorkInboxPage from './WorkInboxPage';
+import { confirmLeaveDrafts } from '../useNoteDraft';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -28,10 +32,11 @@ import VoiceCapture from '../components/VoiceCapture';
 import ProvenancePanel from '../components/ProvenancePanel';
 import RevisionPanel from '../components/RevisionPanel';
 
-type PatientTab = 'glance' | 'coverage' | 'timeline' | 'notes' | 'tasks';
+type PatientTab = 'glance' | 'coverage' | 'timeline' | 'notes' | 'tasks' | 'tests';
 type ClinicalRoute =
   | { kind: 'dashboard' }
-  | { kind: 'patient'; patientId: string; mode: PatientTab | 'new' | 'event'; eventId?: string };
+  | { kind: 'inbox' }
+  | { kind: 'patient'; patientId: string; mode: PatientTab | 'new' | 'event'; eventId?: string; taskId?: string };
 
 const SIDEBAR_COLLAPSED_KEY = 'nightingale:clinical-sidebar-collapsed';
 
@@ -45,21 +50,23 @@ function initialSidebarCollapsed(): boolean {
 
 function parseRoute(): ClinicalRoute {
   const parts = window.location.pathname.split('/').filter(Boolean);
+  if (parts[0] === 'clinical' && parts[1] === 'inbox') return { kind: 'inbox' };
   if (parts[0] !== 'clinical' || parts[1] !== 'patients' || !parts[2]) return { kind: 'dashboard' };
   const patientId = parts[2];
   if (parts[3] === 'consults' && parts[4] === 'new') return { kind: 'patient', patientId, mode: 'new' };
   if (parts[3] === 'events' && parts[4]) return { kind: 'patient', patientId, mode: 'event', eventId: parts[4] };
-  if (['glance', 'coverage', 'timeline', 'notes', 'tasks'].includes(parts[3])) {
-    return { kind: 'patient', patientId, mode: parts[3] as PatientTab };
+  if (['glance', 'coverage', 'timeline', 'notes', 'tasks', 'tests'].includes(parts[3])) {
+    return { kind: 'patient', patientId, mode: parts[3] as PatientTab, taskId: new URLSearchParams(window.location.search).get('task') ?? undefined };
   }
   return { kind: 'patient', patientId, mode: 'glance' };
 }
 
 function routePath(route: ClinicalRoute): string {
   if (route.kind === 'dashboard') return '/clinical';
+  if (route.kind === 'inbox') return '/clinical/inbox';
   if (route.mode === 'new') return `/clinical/patients/${route.patientId}/consults/new`;
   if (route.mode === 'event') return `/clinical/patients/${route.patientId}/events/${route.eventId}`;
-  return `/clinical/patients/${route.patientId}/${route.mode}`;
+  return `/clinical/patients/${route.patientId}/${route.mode}${route.taskId ? `?task=${encodeURIComponent(route.taskId)}` : ''}`;
 }
 
 function patientTabLabel(tab: PatientTab): string {
@@ -169,6 +176,9 @@ function PatientWorkspace({
   const isError = patientQuery.isError || timelineQuery.isError;
   const queryError = patientQuery.error ?? timelineQuery.error;
   const serverStateRevision = timelineQuery.dataUpdatedAt;
+  const [timelineFilter, setTimelineFilter] = useState('all');
+  const [timelineNewestFirst, setTimelineNewestFirst] = useState(true);
+  const [returnTab, setReturnTab] = useState<PatientTab>('timeline');
   const [eventRefreshKey, setEventRefreshKey] = useState(0);
   const [provenance, setProvenance] = useState<ProvenanceResult | null>(null);
   const [copilotEvidence, setCopilotEvidence] = useState<CopilotEvidence | null>(null);
@@ -177,12 +187,27 @@ function PatientWorkspace({
   const [initialArtifactId, setInitialArtifactId] = useState<string | null>(null);
   const [completion, setCompletion] = useState<DoctorConsultResult | null>(null);
   const [contextDrawerOpen, setContextDrawerOpen] = useState(false);
+  const contextRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!contextDrawerOpen || (route.mode !== 'glance' && !window.matchMedia('(max-width: 1439px)').matches)) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    contextRef.current?.focus();
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setContextDrawerOpen(false);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => {
+      window.removeEventListener('keydown', closeOnEscape);
+      if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
+    };
+  }, [contextDrawerOpen, route.mode]);
   // Glance "Open Task" target: lands on the SPECIFIC task in the Tasks view.
-  const [taskFocusId, setTaskFocusId] = useState<string | null>(null);
+  const [taskFocusId, setTaskFocusId] = useState<string | null>(route.taskId ?? null);
 
   useEffect(() => {
     // patientId is a remount boundary, and route transitions clear context that
     // does not belong to the newly opened mode.
+    if (['glance', 'coverage', 'timeline', 'notes', 'tasks', 'tests'].includes(route.mode)) setReturnTab(route.mode as PatientTab);
     if (route.mode !== 'event') setEventContext({ artifacts: [], selectedArtifact: null });
     if (route.mode === 'glance' || route.mode === 'coverage' || route.mode === 'timeline' || route.mode === 'notes' || route.mode === 'tasks' || route.mode === 'new') {
       setInitialArtifactId(null);
@@ -192,11 +217,13 @@ function PatientWorkspace({
   useEffect(() => {
     // patient/role/session identity is a strict state boundary. The outer key
     // unmounts on logout; this also handles an in-place identity transition.
+    setTimelineFilter('all');
+    setTimelineNewestFirst(true);
     setProvenance(null);
     setCopilotEvidence(null);
     setEventContext({ artifacts: [], selectedArtifact: null });
     setInitialArtifactId(null);
-    setTaskFocusId(null);
+    setTaskFocusId(route.taskId ?? null);
     setCompletion(null);
     setContextDrawerOpen(false);
     setContextTab(identity.role === 'clinician' ? 'copilot' : 'source');
@@ -314,17 +341,18 @@ function PatientWorkspace({
   const hasVersions = selectedArtifact && ['clinician_note', 'staff_note'].includes(selectedArtifact.artifact_type);
   let contextHeading = selectedArtifact ? artifactLabel(selectedArtifact) : 'Review context';
   if (contextTab === 'copilot') contextHeading = 'Clinical Copilot';
+  if (route.mode === 'glance' && contextTab === 'source') contextHeading = 'Source review';
   if (contextTab === 'comments' && !selectedArtifact) contextHeading = 'Event discussion';
   if (contextTab === 'history') contextHeading = 'Review history';
 
   function openContextRail() {
     if (provenance || copilotEvidence) setContextTab('source');
-    else setContextTab(selectedEvent ? 'comments' : 'source');
+    else setContextTab(selectedEvent ? 'comments' : identity.role === 'clinician' ? 'copilot' : 'source');
     setContextDrawerOpen(true);
   }
 
   return (
-    <div className={`workspace-area ${contextDrawerOpen ? 'context-drawer-open' : ''}`} style={workspaceStyle}>
+    <div className={`workspace-area ${route.mode === 'glance' ? 'glance-workspace' : ''} ${contextDrawerOpen ? 'context-drawer-open' : ''}`} style={workspaceStyle}>
       <main className="workspace-main">
         <header className="workspace-patient-header">
           <div className="patient-identity">
@@ -339,44 +367,47 @@ function PatientWorkspace({
               className="secondary-button context-rail-toggle"
               aria-expanded={contextDrawerOpen}
               aria-controls="clinical-context-rail"
-              onClick={openContextRail}
+              onClick={() => contextDrawerOpen && route.mode === 'glance' ? setContextDrawerOpen(false) : openContextRail()}
             >
-              Context
+              {route.mode === 'glance' ? (identity.role === 'clinician' ? 'Sources & Copilot' : 'Sources') : 'Context'}
             </button>
             {identity.role === 'staff' && <div className="workspace-role-chip"><strong>Nurse workspace</strong><span>Staff Notes · Tasks · collaboration</span></div>}
             {identity.role === 'clinician' && <button
               className="primary-button"
+              data-leave-editor
               onClick={() => onNavigate({ kind: 'patient', patientId, mode: 'new' })}
             >
-              Record doctor consultation
+              <AppIcon name="plus" /> New consultation
             </button>}
             {identity.role === 'staff' && <button
               className="primary-button"
+              data-leave-editor
               onClick={() => onNavigate({ kind: 'patient', patientId, mode: 'new' })}
             >
-              Record nurse consultation
+              <AppIcon name="plus" /> New nurse consultation
             </button>}
           </div>
         </header>
 
-        {route.mode !== 'new' && (
-          <nav className={`workspace-tabs ${route.mode === 'event' ? 'with-event-detail' : ''}`} aria-label="Patient workspace views">
-            {(['glance', 'coverage', 'timeline'] as PatientTab[]).map((tab) => (
+        {route.mode !== 'new' && (<>
+          <nav data-leave-editor className={`workspace-tabs ${route.mode === 'event' ? 'with-event-detail' : ''}`} aria-label="Patient workspace views">
+            {(['glance', 'timeline'] as PatientTab[]).map((tab) => (
               <button
                 key={tab}
                 className={route.mode === tab ? 'active' : ''}
                 aria-selected={route.mode === tab}
                 onClick={() => openTab(tab)}
               >
-                {patientTabLabel(tab)}
+                <AppIcon name={tab === "glance" ? "scan" : tab === "timeline" ? "history" : tab === "notes" ? "note" : tab === "tasks" ? "check" : "flask"} />{patientTabLabel(tab)}
               </button>
             ))}
             {route.mode === 'event' && <button className="active" aria-selected="true">Event Detail</button>}
-            {(['notes', 'tasks'] as PatientTab[]).map((tab) => (
-              <button key={tab} className={route.mode === tab ? 'active' : ''} aria-selected={route.mode === tab} onClick={() => openTab(tab)}>{patientTabLabel(tab)}</button>
+            {(['notes', 'tasks', 'tests'] as PatientTab[]).map((tab) => (
+              <button key={tab} className={route.mode === tab ? 'active' : ''} aria-selected={route.mode === tab} onClick={() => openTab(tab)}><AppIcon name={tab === "glance" ? "scan" : tab === "timeline" ? "history" : tab === "notes" ? "note" : tab === "tasks" ? "check" : "flask"} />{patientTabLabel(tab)}</button>
             ))}
+            <button className={`workspace-secondary-tab ${route.mode === 'coverage' ? 'active' : ''}`} aria-selected={route.mode === 'coverage'} onClick={() => openTab('coverage')}>Coverage Review</button>
           </nav>
-        )}
+        </>)}
 
         {completion && route.mode === 'event' && (
           <div className={`completion-banner ${completion.degraded ? 'fallback' : 'success'}`}>
@@ -387,12 +418,12 @@ function PatientWorkspace({
         )}
 
         {route.mode === 'glance' && (
-          <GlancePanel key={`glance:${serverStateRevision}`} patientId={patientId} onViewSource={handleViewSource} onOpenTasks={handleOpenTask} reviewRole={identity.role ?? undefined} />
+          <GlancePanel key={`glance:${serverStateRevision}`} patientId={patientId} events={events} onViewSource={handleViewSource} onOpenTasks={handleOpenTask} reviewRole={identity.role ?? undefined} />
         )}
         {route.mode === 'coverage' && (
           <CoverageReview patientId={patientId} identity={identity} onViewSource={handleViewSource} />
         )}
-        {route.mode === 'timeline' && <ClinicalTimeline events={events} onOpenEvent={openEvent} />}
+        {route.mode === 'timeline' && <ClinicalTimeline events={events} onOpenEvent={openEvent} eventType={timelineFilter} setEventType={setTimelineFilter} newestFirst={timelineNewestFirst} setNewestFirst={setTimelineNewestFirst} />}
         {route.mode === 'notes' && (
           <ClinicalNotesView
             events={events}
@@ -401,6 +432,7 @@ function PatientWorkspace({
             onOpenEvent={(event) => openEvent(event)}
           />
         )}
+        {route.mode === 'tests' && <TestOrdersPage patientId={patientId} identity={identity} events={events} />}
         {route.mode === 'tasks' && (
           <ClinicalTasksView
             patientId={patientId}
@@ -428,13 +460,13 @@ function PatientWorkspace({
                 patient={patient}
                 consultKind="nurse"
                 encounterOptions={encounterOptions}
-                onCancel={() => openTab('timeline')}
+                onCancel={() => openTab(returnTab)}
                 onCompleted={completed}
               />
             ) : (
               <NewDoctorConsult
                 patient={patient}
-                onCancel={() => openTab('timeline')}
+                onCancel={() => openTab(returnTab)}
                 onCompleted={completed}
               />
             )}
@@ -446,7 +478,8 @@ function PatientWorkspace({
             event={selectedEvent}
             initialArtifactId={initialArtifactId}
             refreshKey={eventRefreshKey}
-            onBack={() => openTab('timeline')}
+            onBack={() => openTab(returnTab)}
+            backLabel={patientTabLabel(returnTab)}
             onChanged={changed}
             onOpenComments={handleOpenComments}
             onContextState={updateContextState}
@@ -460,7 +493,7 @@ function PatientWorkspace({
 
       <button className="context-drawer-backdrop" aria-label="Close clinical context" onClick={() => setContextDrawerOpen(false)} />
       <PanelResizer label="Resize clinical context" value={contextWidth} min={280} max={520} direction={-1} onChange={onContextWidthChange} />
-      <aside id="clinical-context-rail" className="context-panel" aria-label="Clinical context">
+      <aside ref={contextRef} tabIndex={-1} id="clinical-context-rail" className="context-panel" aria-label="Clinical context">
         <div className="context-panel-head context-rail-head">
           <div>
             <h2>{contextHeading}</h2>
@@ -485,6 +518,7 @@ function PatientWorkspace({
           {contextTab === 'source' && provenance && (
             <ProvenancePanel
               provenance={provenance}
+              readingFirst={route.mode === 'glance'}
               onClose={() => { setProvenance(null); setContextDrawerOpen(false); setContextTab(selectedEvent ? 'comments' : identity.role === 'clinician' ? 'copilot' : 'source'); }}
               onFocusEvent={(eventId) => onNavigate({ kind: 'patient', patientId, mode: 'event', eventId })}
             />
@@ -554,10 +588,13 @@ export default function ClinicianWorkspacePage({ roleKey, onLogout }: { roleKey:
   }, [roleKey]);
 
   useEffect(() => {
-    const onPopState = () => setRoute(parseRoute());
-    window.addEventListener('popstate', onPopState);
-    return () => window.removeEventListener('popstate', onPopState);
-  }, []);
+    const onPopState = (event: PopStateEvent) => {
+      if (!confirmLeaveDrafts()) { event.stopImmediatePropagation(); window.history.pushState({}, '', routePath(route)); return; }
+      setRoute(parseRoute());
+    };
+    window.addEventListener('popstate', onPopState, true);
+    return () => window.removeEventListener('popstate', onPopState, true);
+  }, [route]);
 
   useEffect(() => {
     if (!mobileSidebarOpen) return undefined;
@@ -628,6 +665,8 @@ export default function ClinicianWorkspacePage({ roleKey, onLogout }: { roleKey:
         onToggleCollapsed={toggleSidebarCollapsed}
         onCloseMobile={closeMobileSidebar}
         onDashboard={() => navigate({ kind: 'dashboard' })}
+        inboxActive={route.kind === 'inbox'}
+        onInbox={() => navigate({ kind: 'inbox' })}
         onSelectPatient={(patientId) => navigate({ kind: 'patient', patientId, mode: 'glance' })}
         onLogout={onLogout}
       />
@@ -662,6 +701,8 @@ export default function ClinicianWorkspacePage({ roleKey, onLogout }: { roleKey:
             </div>
           </main>
         </div>
+      ) : route.kind === 'inbox' ? (
+        <WorkInboxPage key={roleKey} identity={identity} onOpenTask={(patientId, taskId) => navigate({ kind: 'patient', patientId, mode: 'tasks', taskId })} />
       ) : (
         <PatientWorkspace
           key={`${roleKey}:${route.patientId}`}

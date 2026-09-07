@@ -180,10 +180,15 @@ def update_status(
 
     new_status = body.status
     old_status = hl.status
-    if new_status == old_status:
+    confirms_clinician = (
+        ctx.role == "clinician"
+        and new_status in ("accepted", "pinned")
+        and not hl.feature_flags.get("clinician_confirmed")
+    )
+    if new_status == old_status and not confirms_clinician:
         return hl  # no-op (idempotent)
 
-    if new_status not in status_transitions().get(old_status, set()):
+    if new_status != old_status and new_status not in status_transitions().get(old_status, set()):
         raise HTTPException(
             status_code=422,
             detail=f"Illegal status transition: {old_status} -> {new_status}",
@@ -191,7 +196,8 @@ def update_status(
 
     now = datetime.now()
     history = list(hl.status_history or [])
-    history.append({"from": old_status, "to": new_status, "at": now.isoformat()})
+    if new_status != old_status:
+        history.append({"from": old_status, "to": new_status, "at": now.isoformat()})
 
     values: dict = {
         "status": new_status,
@@ -201,10 +207,9 @@ def update_status(
     # Clinician authority: only a clinician accept/pin marks clinician_confirmed
     # and triggers a base-score recompute. Staff actions never change this flag.
     flags = hl.feature_flags
-    if ctx.role == "clinician" and new_status in ("accepted", "pinned"):
-        if not hl.feature_flags.get("clinician_confirmed"):
-            flags = {**hl.feature_flags, "clinician_confirmed": True}
-            values["feature_flags"] = flags
+    if confirms_clinician:
+        flags = {**hl.feature_flags, "clinician_confirmed": True}
+        values["feature_flags"] = flags
 
     # Import the aggregation service only on this write path. Merely importing
     # or executing GET Glance never imports or queries importance feedback.
@@ -229,14 +234,13 @@ def update_status(
         learning_metadata=rescored.learning_metadata,
     )
 
-    # Deterministic optimistic lock (H3): the current status is the version.
-    # A concurrent writer that already moved the status matches 0 rows and is
-    # rejected with 409 instead of silently overwriting history/score.
+    # Protect both status changes and same-status clinician confirmations.
     result = db.execute(
         update(Highlight)
         .where(
             Highlight.highlight_id == highlight_id,
             Highlight.status == old_status,
+            Highlight.updated_at == hl.updated_at,
         )
         .values(**values)
     )
@@ -282,6 +286,8 @@ def update_status(
         clinic_id=event.clinic_id,
         patient_id=event.patient_id,
         event_id=event.event_id,
+        details={"from_status": old_status, "to_status": new_status,
+                 "clinician_confirmation_added": confirms_clinician},
     )
     db.commit()
     db.refresh(hl)

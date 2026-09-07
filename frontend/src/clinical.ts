@@ -8,9 +8,13 @@ export const EVENT_LABELS: Record<string, string> = {
   patient_followup: 'Patient Follow-up',
   clinician_review: 'Clinician Review',
   historical_review: 'Historical Review',
+  test_result: 'Examination result',
 };
 
 export const ARTIFACT_LABELS: Record<string, string> = {
+  external_test_report: 'External report',
+  test_result_review: 'Doctor result review',
+  test_result_communication: 'Patient communication record',
   raw_conversation: 'Raw conversation',
   transcript: 'Transcript',
   clinician_note: 'Clinician assessment & plan',

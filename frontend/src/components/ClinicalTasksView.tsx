@@ -192,7 +192,7 @@ export function TaskCreateForm({
   );
 }
 
-type TaskPrimaryAction = 'review' | 'start' | 'report_done' | 'verify' | 'details';
+type TaskPrimaryAction = 'examination' | 'review' | 'start' | 'report_done' | 'verify' | 'details';
 
 function taskOwnedByCurrentUser(task: ClinicalTask, identity: CurrentIdentity): boolean {
   return task.assigned_role === identity.role
@@ -200,6 +200,7 @@ function taskOwnedByCurrentUser(task: ClinicalTask, identity: CurrentIdentity): 
 }
 
 function taskPrimaryAction(task: ClinicalTask, identity: CurrentIdentity): { kind: TaskPrimaryAction; label: string } {
+  if (['report_followup', 'result_review', 'result_communication'].includes(task.task_kind)) return { kind: 'examination', label: 'Open examination' };
   if (task.task_kind === 'patient_report_review' && identity.role === 'staff' && ['open', 'in_progress'].includes(task.status)) {
     return { kind: 'review', label: 'Review patient report' };
   }
@@ -520,6 +521,7 @@ export default function ClinicalTasksView({
 
   function runPrimaryAction(task: ClinicalTask) {
     const action = taskPrimaryAction(task, identity);
+    if (action.kind === 'examination') { window.location.assign(`/clinical/patients/${task.patient_id}/tests?order=${task.routing_metadata.test_order_id}`); return; }
     if (action.kind === 'review') {
       void openReview(task);
       return;

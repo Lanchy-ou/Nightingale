@@ -53,7 +53,10 @@ def _patient_projection(task: Task) -> PatientTaskOut:
 def _task_response(task: Task, ctx: RoleContext):
     if ctx.role == "patient":
         return _patient_projection(task).model_dump(mode="json")
-    return ClinicalTaskOut.model_validate(task).model_dump(mode="json")
+    result = ClinicalTaskOut.model_validate(task).model_dump(mode="json")
+    if task.due_at and (task.routing_metadata or {}).get("due_timezone") == "UTC":
+        result["due_at"] = task.due_at.isoformat() + "Z"
+    return result
 
 
 def _patient_can_see(ctx: RoleContext, task: Task) -> bool:
@@ -305,6 +308,9 @@ def transition_task(
     if ctx.role == "patient" and not _patient_can_see(ctx, task):
         raise resource_not_found()
     authorize(ctx, "transition_task", task.clinic_id, task.patient_id)
+    from ..test_result_service import RESULT_TASK_KINDS
+    if task.task_kind in RESULT_TASK_KINDS:
+        raise HTTPException(409, "Continue this task through its examination workflow")
     parsed = _validate(TaskTransition, body)
 
     if parsed.expected_status != task.status:
@@ -346,6 +352,13 @@ def transition_task(
     )
     recompute_task_highlights(db, task.patient_id)
     rebuild_glance_projections(db, task.patient_id)
+    if (task.routing_metadata or {}).get("test_order_id"):
+        from ..result_models import TestOrder
+        from ..workflow_state import refresh_workflow_status
+        from ..test_result_service import now_utc
+        order = db.get(TestOrder, task.routing_metadata["test_order_id"])
+        if order:
+            refresh_workflow_status(db, order.workflow_id, as_of=now_utc())
     db.commit()
     current = load_task(db, ctx, task_id)
     return _task_response(current, ctx)

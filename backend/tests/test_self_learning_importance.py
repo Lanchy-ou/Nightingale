@@ -461,7 +461,10 @@ def test_feedback_and_audit_are_metadata_only(clinician_client, db_session):
         )
     )
     assert audit is not None
-    assert audit.details is None
+    assert audit.details == {
+        "from_status": "suggested", "to_status": "accepted",
+        "clinician_confirmation_added": True,
+    }
 
 
 def test_future_learned_highlight_keeps_exact_provenance(clinician_client, db_session):

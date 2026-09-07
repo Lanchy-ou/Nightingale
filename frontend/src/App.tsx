@@ -1,3 +1,4 @@
+import { confirmLeaveDrafts } from './useNoteDraft';
 import { useCallback, useEffect, useState } from 'react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { api, DEMO_AUTH, ROLE_USERS, setRole, setSessionIdentity, setUnauthorizedHandler } from './api';
@@ -20,7 +21,8 @@ const queryClient = new QueryClient({
   },
 });
 
-function adminTabFromPath(path: string): 'overview' | 'invites' | 'imports' | 'audit' | 'settings' | 'learning' {
+function adminTabFromPath(path: string): 'overview' | 'invites' | 'imports' | 'audit' | 'settings' | 'learning' | 'notifications' {
+  if (path.startsWith('/admin/notifications')) return 'notifications';
   if (path.startsWith('/admin/invites')) return 'invites';
   if (path.startsWith('/admin/audit')) return 'audit';
   if (path.startsWith('/admin/imports')) return 'imports';
@@ -55,6 +57,7 @@ function DemoApp() {
   const roleKey = `${selected.role}:${selected.userId}`;
 
   function changeRole(i: number) {
+    if (!confirmLeaveDrafts()) return;
     const next = ROLE_USERS[i];
     queryCache.clear();
     setRole(next.userId, next.role);

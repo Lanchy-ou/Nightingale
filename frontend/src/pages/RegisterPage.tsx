@@ -1,3 +1,4 @@
+import AppIcon from '../components/AppIcon';
 import { FormEvent, useEffect, useState } from 'react';
 import { api } from '../api';
 import type { InvitePreview, RegisterResult } from '../types';
@@ -81,7 +82,7 @@ export default function RegisterPage() {
     <div className="auth-page">
       <div className="auth-card">
         <div className="auth-brand">
-          <span className="auth-brand-mark" aria-hidden="true">N</span>
+          <span className="auth-brand-mark" aria-hidden="true"><AppIcon name="feather" /></span>
           <div>
             <h1>Nightingale</h1>
             <p className="muted">Accept your clinic invite</p>

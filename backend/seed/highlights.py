@@ -12,11 +12,11 @@ M5 contract (does NOT adjust frozen weights):
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from sqlalchemy.orm import Session
 
-from app.highlights import compute_score, locate_span
+from app.highlights import compute_score, is_recent, locate_span
 from app.importance_learning import score_new_candidate
 from app.models import Artifact, Event, Highlight
 from app.provenance_binding import create_source_binding
@@ -46,12 +46,6 @@ def group_repeated_patient_entity_keys(
         if entity_key:
             events_per_key[(patient_id, entity_key)].add(event_id)
     return {key for key, events in events_per_key.items() if len(events) >= 2}
-
-
-def is_recent(started_at: datetime, as_of: datetime) -> bool:
-    """True only when the Event occurred from 0 through 7 days before as_of."""
-    age = as_of - started_at
-    return timedelta(0) <= age <= timedelta(days=7)
 
 
 def generate_highlights(db: Session) -> list[str]:

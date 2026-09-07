@@ -118,9 +118,15 @@ Patient, role, auth-session, and patient-record changes remount or reset sensiti
 
 Editable notes use full version snapshots. Edits use optimistic compare-and-swap; stale same-section writes return 409. Revert creates a new version and never rewrites history. Comments support Event/Artifact anchors, replies, mentions, and resolve/unresolve. Audit rows are metadata-only.
 
+On a note-edit conflict, the open editor retains the unsaved draft and fetches the latest saved note for comparison. Saving stays disabled until the user reviews that version. On retry, edited fields retain the draft and unchanged fields adopt the latest saved content; another intervening edit is checked again by the server. The note editor also supports explicit Save private draft / Discard private draft. Drafts persist server-side for the current owner, role, Event and note section, and restore when that editor is reopened after navigation or reload. They do not enter the clinical record until Save note / Save new version. Unsaved local changes prompt before leaving. Draft writes have a separate revision check; clearing retains a revision tombstone so a stale tab cannot recreate an old draft. This covers new and existing clinician/staff notes, not raw transcripts or patient instructions.
+
+Staff acknowledgement and clinician confirmation remain distinct even when both use the same accepted/pinned status. The first clinician confirmation records its actor and metadata audit without duplicating the status transition; repeat requests are idempotent. Confirmed allergy context has the same exact-source navigation as dynamic Glance items.
+
 Tasks are first-class, clinic-scoped records with an Event origin and optional exact Artifact/Span source. Patients only Start or Report done. Staff/clinicians verify completion or cancel. A Check-in Task statement remains evidence awaiting human review.
 
 Glance ranking is precomputed and deterministic. E2's bounded "self-learning" uses only controlled same-clinic interaction signals keyed by entity type. It does not learn clinical truth, use raw text/PHI as a feature, train a model, or bypass protections for risk, unresolved Tasks, clinician-confirmed, pinned, or review-needed content.
+
+Time-dependent ranking is reevaluated on projection rebuild and by the existing review-maintenance worker (at startup and every 60 seconds by default, using `NANTINGALE_PATIENT_REVIEW_SWEEP_SECONDS`). The seven-day recency window excludes future timestamps and uses Event time for record-derived Highlights and Task creation time for Task-owned Highlights. Maintenance rebuilds only patients whose recency or Task due boundary changed; unchanged candidates create no new RankingRun. Protected categories and formal `base_only` serving remain intact. An already open Glance receives the updated order on its next data refresh. See [the September 5 repair evidence](docs/current_feature_repairs_2026-09-05.md).
 
 ## E3 data-decay boundary
 
@@ -437,3 +443,23 @@ The 2026-09-03 final repository evidence is authoritative for the current
 repository closeout. Older evidence remains authoritative only for its dated
 observations. Demo Video playback, recipient access, and email delivery remain
 owner-controlled external evidence outside the repository.
+
+### Work inbox and administration refresh (2026-09-05)
+
+Clinical navigation includes **Work inbox** (`/clinical/inbox`), a paginated read-only projection of existing active Tasks across the signed-in clinic. **For my role** includes own/shared role assignments and patient-reported care actions awaiting clinic verification; **All clinic work** also shows work assigned to others. Priority review tasks come first, then patient verification, overdue work and other active work. Opening an item locates the patient task and its existing source; completing a task removes it from this active queue on refresh. This ordering does not change Glance scoring and invokes no LLM. Unsubmitted check-in events remain hidden.
+
+Admin uses the shared visual system, with account search/role filtering and access-audit event filtering. Filters apply to the currently loaded account/audit results, not an unlimited historical search. Clinical note revisions remain in patient Event History.
+
+The additive `note_drafts` table is created on application startup if absent; no reseeding is required to upgrade an existing database. Draft content is stored in the application database with the same configured storage protections, never in browser storage or audit logs. Saved drafts currently resume from their original Event editor; there is no separate drafts dashboard. If another tab advances a draft before a clinical note is published, the newer private draft is preserved and remains available for review/discard.
+
+Acceptance and scope: `docs/inbox_drafts_admin_2026-09-05.md`.
+
+
+### Examination results and in-app reminders (2026-09-05)
+
+The result lifecycle, PDF revision history, clinician review, patient communication,
+and durable in-app outbox are implemented behind separate default-off switches:
+`NANTINGALE_TEST_RESULTS_ENABLED=true` and `NANTINGALE_NOTIFICATIONS_ENABLED=true`.
+Startup applies additive schema changes without seeding or resetting existing data.
+See [implementation and acceptance record](docs/test_results_notifications_2026-09-05.md)
+for configuration, rollback, invariants and outstanding browser upload/download gates.

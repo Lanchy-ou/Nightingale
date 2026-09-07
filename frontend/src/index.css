@@ -487,6 +487,7 @@ body.resizing-clinical-panel { cursor: col-resize; user-select: none; }
 .glance-safety-context { margin: 12px 0; padding: 12px 14px; display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; border: 1px solid #efc3c3; border-radius: 10px; background: #fff7f7; }
 .glance-safety-context strong { color: #9b1c1c; font-size: 12px; letter-spacing: .04em; text-transform: uppercase; }
 .glance-safety-context span { color: #5c2929; font-size: 14px; }
+.glance-safety-item { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .glance-detail-evidence p { margin: 8px 0 0; color: var(--text-secondary); font-size: 13px; line-height: 1.55; }
 .glance-detail-evidence small { display: block; margin-top: 8px; color: var(--text-muted); font-size: 10px; overflow-wrap: anywhere; }
 .glance-evidence-link { margin-top: 10px; padding: 0; border: 0; color: var(--primary); background: transparent; cursor: pointer; font-size: 12px; font-weight: 750; }
@@ -1009,6 +1010,10 @@ button.lifecycle-item.active { background: #eaf5f1; border-radius: 8px; }
 .editor .primary-button { color: #fff; border-color: var(--clinical-brand); background: var(--clinical-brand); }
 .editor .secondary-button { color: #315e50; border-color: #cbdad4; background: #fff; }
 .editor-version { align-self: center; color: #81918b; font-size: 10px; }
+.note-edit-conflict { margin-bottom: 12px; padding: 12px; border: 1px solid #e8c97e; border-radius: 8px; background: #fffaf0; }
+.note-edit-conflict p, .note-edit-conflict dd { font-size: 13px; line-height: 1.5; }
+.note-edit-conflict dt { font-weight: 700; }
+.note-edit-conflict dd { margin: 4px 0 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 .clinical-notes-list { border-top: 1px solid var(--clinical-border); }
 .clinical-note-row { width: 100%; padding: 14px 3px; display: grid; grid-template-columns: 145px minmax(0, 1fr) auto; gap: 16px; align-items: start; border: 0; border-bottom: 1px solid var(--clinical-border); color: inherit; background: transparent; cursor: pointer; text-align: left; }
@@ -1845,7 +1850,7 @@ button.lifecycle-item.active { background: #eaf5f1; border-radius: 8px; }
   .auth-card { margin-top: 18px; padding: 23px 20px; }
 }
 
-@media (max-width: 1279px) and (min-width: 901px) {
+@media (max-width: 1439px) {
   .workspace-area {
     position: relative; grid-template-columns: minmax(0, 1fr); overflow: hidden;
   }

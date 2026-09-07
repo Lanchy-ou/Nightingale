@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api';
-import type { Highlight, ProvenanceResult } from '../types';
+import { eventLabel, formatDate } from '../clinical';
+import type { Event, Highlight, ProvenanceResult } from '../types';
 
 function riskColor(h: Highlight): string {
   if (h.feature_flags.explicit_risk) return '#dc2626';
@@ -14,13 +15,6 @@ function priorityLabel(h: Highlight): string {
   if (h.feature_flags.explicit_risk) return 'Current concern';
   if (h.feature_flags.symptom_change) return 'Recent change';
   return 'Clinical context';
-}
-
-function prioritySymbol(h: Highlight): string {
-  if (h.feature_flags.explicit_risk) return '!';
-  if (h.feature_flags.unresolved_task) return '○';
-  if (h.feature_flags.symptom_change) return '↗';
-  return '◇';
 }
 
 function reviewState(h: Highlight, reviewRole: string): string {
@@ -62,12 +56,6 @@ function nextStepText(h: Highlight, reviewRole: string): string {
   return 'Open the exact source before deciding whether to confirm, keep visible, or hide this item.';
 }
 
-function evidenceText(h: Highlight): string {
-  if (!h.source_span) return 'No exact source span is claimed for this item.';
-  const kind = h.source_span.kind.replace(/_/g, ' ');
-  return `An exact ${kind} is preserved in the source record. Open it to check the original wording, author, and date.`;
-}
-
 function learnedPriority(h: Highlight) {
   if (h.adaptive_adjustment === 0) return null;
   const sign = h.adaptive_adjustment > 0 ? '+' : '';
@@ -101,11 +89,13 @@ function rankingExplanation(h: Highlight) {
 
 export default function GlancePanel({
   patientId,
+  events = [],
   onViewSource,
   onOpenTasks,
   reviewRole = 'clinician',
 }: {
   patientId: string;
+  events?: Event[];
   onViewSource: (p: ProvenanceResult) => void;
   onOpenTasks?: (taskId: string) => void;
   reviewRole?: string;
@@ -114,7 +104,6 @@ export default function GlancePanel({
   const [safetyContext, setSafetyContext] = useState<Highlight[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [selectedHighlightId, setSelectedHighlightId] = useState<string | null>(null);
 
   const refresh = useCallback(async (signal?: AbortSignal) => {
     try {
@@ -122,11 +111,6 @@ export default function GlancePanel({
       const nextHighlights = response.highlights;
       setHighlights(nextHighlights);
       setSafetyContext(response.safety_context);
-      setSelectedHighlightId((current) => (
-        current && nextHighlights.some((highlight) => highlight.highlight_id === current)
-          ? current
-          : nextHighlights[0]?.highlight_id ?? null
-      ));
       setError(null);
     } catch (e: any) {
       if (e?.name !== 'AbortError') setError(String(e));
@@ -180,99 +164,55 @@ export default function GlancePanel({
     );
   }
 
-  const selectedHighlight = highlights.find((highlight) => highlight.highlight_id === selectedHighlightId) ?? highlights[0] ?? null;
-
   return (
     <section className="glance-panel clinical-view" aria-labelledby="glance-heading">
       <div className="view-title-row glance-navigator-heading">
         <div>
-          <p className="eyebrow">Patient summary</p>
           <h2 id="glance-heading">Glance</h2>
-          <p className="view-subtitle">What matters now · select a priority to inspect without losing Glance context.</p>
+          <p className="view-subtitle">What matters now, with the evidence to review it.</p>
         </div>
         <div className="glance-heading-tools">
-          <div className="authority-legend" aria-label="Artifact authority legend">
-            <span className="raw">RAW</span>
-            <span className="ai">AI</span>
-            <span className="clinician">CLINICIAN</span>
-            <span className="staff">STAFF</span>
-          </div>
           <span className="record-count">{highlights.length} current items</span>
         </div>
       </div>
-      <details className="glance-review-help"><summary>How review controls work</summary><p>{reviewRole === 'staff' ? <><strong>Acknowledge</strong> records Staff review, <strong>Keep visible</strong> pins the item, and <strong>Hide</strong> removes only this item from Glance. Staff review never becomes clinician confirmation.</> : <><strong>Confirm</strong> marks this priority as clinician-reviewed, <strong>Keep on top</strong> pins it, and <strong>Hide</strong> removes only this item from Glance.</>} These controls do not teach future ranking. Explicit teaching and quality feedback live in Coverage Review and remain Shadow-only.</p></details>
-      {safetyContext.length > 0 && <section className="glance-safety-context" aria-label="Confirmed safety context"><strong>Confirmed allergy context</strong>{safetyContext.map((item) => <span key={item.highlight_id}>{item.text}</span>)}</section>}
+
+      {safetyContext.length > 0 && <section className="glance-safety-context" aria-label="Confirmed safety context">
+        <strong>Confirmed allergy context</strong>
+        {safetyContext.map((item) => <div className="glance-safety-item" key={item.highlight_id}>
+          <span>{item.text}</span>
+          <button className="source-action" aria-label={`View source for ${item.text}`} onClick={() => viewSource(item.highlight_id)}>View source</button>
+        </div>)}
+      </section>}
       {loading && <div className="loading-card">Loading precomputed priorities…</div>}
       {error && <div className="form-error">{error}</div>}
       {!loading && highlights.length === 0 && <div className="empty-state"><h3>No current highlights</h3><p>Nothing has been prioritized for this patient.</p></div>}
-      {!loading && selectedHighlight && (
-        <div className="glance-navigator">
-          <section className="glance-index-panel" aria-label="Glance priority index">
-            <header>
-              <div><span>Priority index</span><small>Stable Glance index</small></div>
-              <strong>{highlights.length}</strong>
-            </header>
-            <div className="glance-index-list">
-              {highlights.map((highlight, index) => {
-                const selected = highlight.highlight_id === selectedHighlight.highlight_id;
-                return (
-                  <article key={highlight.highlight_id} className={`glance-index-item ${highlight.status} ${selected ? 'selected' : ''}`}>
-                    <span className="glance-index-risk" style={{ background: riskColor(highlight) }} aria-hidden="true" />
-                    <button
-                      type="button"
-                      className="glance-index-select"
-                      aria-current={selected ? 'true' : undefined}
-                      onClick={() => setSelectedHighlightId(highlight.highlight_id)}
-                    >
-                      <span className="glance-index-kicker"><b>{prioritySymbol(highlight)} {priorityLabel(highlight)}</b><em>{String(index + 1).padStart(2, '0')}</em></span>
-                      <strong>{highlight.text}</strong>
-                      <small>{patientReviewState(highlight) ?? reviewState(highlight, reviewRole)}</small>
-                    </button>
-                    <div className="glance-index-actions">{sourceAction(highlight)}{reviewMenu(highlight)}</div>
-                  </article>
-                );
-              })}
-            </div>
-          </section>
-
-          <article className={`glance-detail-panel ${selectedHighlight.status}`}>
-            <section className="glance-detail-summary" aria-live="polite">
-              <header className="glance-detail-head">
-                <span className="glance-detail-type"><b>{prioritySymbol(selectedHighlight)}</b>{priorityLabel(selectedHighlight)}</span>
-                <span className={`glance-detail-state ${selectedHighlight.feature_flags.clinician_confirmed ? 'reviewed' : ''}`}>{reviewState(selectedHighlight, reviewRole)}</span>
-              </header>
-              <h3>{selectedHighlight.text}</h3>
-              <p className="glance-detail-reason">{selectedHighlight.risk_reason}</p>
-            </section>
-
-            <section className="glance-detail-next-step">
-              <div><span>Recommended action</span><p>{nextStepText(selectedHighlight, reviewRole)}</p></div>
-              <div className="glance-detail-actions">
-                {sourceAction(selectedHighlight, true)}
-                {reviewMenu(selectedHighlight)}
-                {selectedHighlight.review_status === 'needs_review' && <span className="needs-review-tag">Needs review</span>}
+      {!loading && highlights.length > 0 && (
+        <div className="priority-list" aria-label="Current patient priorities">
+          {highlights.map((highlight, index) => {
+            const event = events.find((item) => item.event_id === highlight.event_id);
+            return <article key={highlight.highlight_id} className={`priority-row ${highlight.status}`}>
+              <span className="priority-number" style={{ color: riskColor(highlight) }} aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
+              <div className="priority-body">
+                <header className="priority-meta">
+                  <span>{priorityLabel(highlight)}</span>
+                  <span className={highlight.feature_flags.clinician_confirmed ? 'priority-confirmed' : ''}>{patientReviewState(highlight) ?? reviewState(highlight, reviewRole)}</span>
+                  {highlight.status === 'pinned' && <span>Kept on top</span>}
+                </header>
+                <h3>{highlight.text}</h3>
+                <p className="priority-reason">{highlight.risk_reason}</p>
+                {event && <p className="priority-source-date">{eventLabel(event)} · {formatDate(event.started_at)}</p>}
+                <div className="priority-actions">
+                  {sourceAction(highlight, true)}
+                  {highlight.task_id && <button className="source-action" onClick={() => viewSource(highlight.highlight_id)}>View exact source</button>}
+                  {reviewMenu(highlight)}
+                  <details className="priority-guidance"><summary>Details &amp; ranking</summary><p>{nextStepText(highlight, reviewRole)}</p>{rankingExplanation(highlight)}{learnedPriority(highlight)}</details>
+                </div>
               </div>
-            </section>
-
-            {selectedHighlight.task_context && <section className="glance-detail-workflow"><span>Workflow</span><p>{selectedHighlight.task_context.creation_method === 'system_routed' ? 'Routed from patient Check-in' : 'Human-created task'} · {selectedHighlight.task_context.verification_outcome.replace(/_/g, ' ')}{selectedHighlight.task_context.verification_overdue ? ' · Nurse verification overdue' : ''}</p></section>}
-
-            <section className="glance-detail-provenance">
-              <div className="glance-detail-evidence">
-                <span>Evidence</span>
-                <p>{evidenceText(selectedHighlight)}</p>
-                <small>Event {selectedHighlight.event_id} · Source {selectedHighlight.source_artifact_id ?? selectedHighlight.artifact_id ?? 'unavailable'}</small>
-                {selectedHighlight.task_id && <button className="glance-evidence-link" onClick={() => viewSource(selectedHighlight.highlight_id)}>View exact source</button>}
-              </div>
-              <div className="glance-detail-authority"><span>Review status</span><p>{selectedHighlight.feature_flags.clinician_confirmed ? 'Confirmed by a clinician. The original source and generated summary remain separate.' : 'Not clinician-confirmed. Reading the source does not accept or change this item.'}</p></div>
-            </section>
-
-            <div className="glance-detail-explainability">
-              {rankingExplanation(selectedHighlight)}
-              {learnedPriority(selectedHighlight)}
-            </div>
-          </article>
+            </article>;
+          })}
         </div>
       )}
+      <details className="glance-review-help"><summary>How review controls work</summary><p>{reviewRole === 'staff' ? <><strong>Acknowledge</strong> records Staff review, <strong>Keep visible</strong> pins the item, and <strong>Hide</strong> removes only this item from Glance. Staff review never becomes clinician confirmation.</> : <><strong>Confirm</strong> marks this priority as clinician-reviewed, <strong>Keep on top</strong> pins it, and <strong>Hide</strong> removes only this item from Glance.</>} These controls do not teach future ranking. Explicit teaching and quality feedback live in Coverage Review and remain Shadow-only.</p></details>
     </section>
   );
 }

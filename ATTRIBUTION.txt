@@ -101,3 +101,11 @@ Declared in `frontend/package.json`:
   not an external clinical dataset and not real patient data.
 - No Caddy binary, model weights, Provider key, private database/backup, local CA
   private key, or raw recording is included in tracked submission files.
+
+- tzdata 2025.2 (https://github.com/python/tzdata): Apache-2.0 Python distribution; IANA time-zone data. Used for Windows clinic reminder scheduling.
+
+- Inter font (Rasmus Andersson; https://github.com/rsms/inter), SIL Open Font
+  License 1.1. Regular, Medium, SemiBold and Bold supplied by Google Fonts,
+  locally hosted in frontend/public/fonts. Full license: Inter-OFL.txt there.
+- Shared interface line icons in frontend/src/components/AppIcon.tsx are
+  project-authored SVG geometry; no external icon runtime or CDN is required.

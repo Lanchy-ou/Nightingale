@@ -181,11 +181,13 @@ def create_workflow_link(
         if relation_type == "triggered_review" and target_task.task_kind not in {
             "patient_report_review",
             "clinician_priority_review",
+            "result_review",
         }:
             raise WorkflowValidationError("triggered_review requires a review Task")
         if relation_type == "triggered_action" and target_task.task_kind in {
             "patient_report_review",
             "clinician_priority_review",
+            "result_review",
         }:
             raise WorkflowValidationError("triggered_action cannot target a review Task")
     elif from_type == "task":
@@ -478,6 +480,13 @@ def refresh_workflow_status(
     completed = bool(current) and all(
         task.status in TERMINAL_TASK_STATUSES for task in current
     ) and not incomplete_actions
+    from .result_models import TestOrder, TestReview, TestReport
+    from .test_result_service import stage
+    order = db.scalar(select(TestOrder).where(TestOrder.workflow_id == workflow_id))
+    if order is not None:
+        reviews = db.scalars(select(TestReview).join(TestReport).where(TestReport.order_id == order.order_id)).all()
+        followups = [db.get(Task, r.follow_up_task_id) for r in reviews if r.follow_up_task_id]
+        completed = completed and stage(db, order) in {"completed", "cancelled"} and all(t and t.status in TERMINAL_TASK_STATUSES for t in followups)
     desired = "completed" if completed else "active"
     if workflow.status != desired or (not completed and workflow.completed_at is not None):
         workflow.status = desired

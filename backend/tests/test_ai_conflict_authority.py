@@ -105,7 +105,11 @@ def test_matching_value_is_not_a_conflict(db_session):
     assert out.candidates[0].conflict_with_artifact_id is None
 
 
-def test_clinician_accept_sets_confirmed_and_rescores(clinician_client):
+def test_clinician_accept_sets_confirmed_and_rescores(clinician_client, db_session):
+    # This assertion concerns a recent concern; keep its event within the
+    # window instead of depending on the frozen August seed remaining recent.
+    db_session.get(Event, fixture.EVT_NURSE_0821).started_at = datetime.now()
+    db_session.commit()
     r = clinician_client.post("/api/highlights/hl_bp_elevated/status", json={"status": "accepted"})
     assert r.status_code == 200
     body = r.json()
@@ -113,7 +117,9 @@ def test_clinician_accept_sets_confirmed_and_rescores(clinician_client):
     assert body["importance_score"] == 7  # recency 2 + explicit_risk 3 + clinician_confirmed 2
 
 
-def test_staff_accept_does_not_set_confirmed(staff_client):
+def test_staff_accept_does_not_set_confirmed(staff_client, db_session):
+    db_session.get(Event, fixture.EVT_NURSE_0821).started_at = datetime.now()
+    db_session.commit()
     r = staff_client.post("/api/highlights/hl_bp_elevated/status", json={"status": "accepted"})
     assert r.status_code == 200
     body = r.json()

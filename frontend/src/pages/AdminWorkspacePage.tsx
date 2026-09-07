@@ -1,3 +1,5 @@
+import AppIcon from '../components/AppIcon';
+import AdminNotificationsPage from './AdminNotificationsPage';
 import { useCallback, useEffect, useState } from 'react';
 import { ApiError, api } from '../api';
 import type { AdminAccessAudit, AdminUser, CurrentIdentity } from '../types';
@@ -6,7 +8,7 @@ import AdminSettingsPage from './AdminSettingsPage';
 import AdminLearningPage from './AdminLearningPage';
 import AdminPatientImportsPage from './AdminPatientImportsPage';
 
-type AdminTab = 'overview' | 'invites' | 'imports' | 'audit' | 'settings' | 'learning';
+type AdminTab = 'overview' | 'invites' | 'imports' | 'audit' | 'settings' | 'learning' | 'notifications';
 
 function formatDate(value: string | null): string {
   if (!value) return '—';
@@ -43,6 +45,10 @@ export default function AdminWorkspacePage({
   const [audit, setAudit] = useState<AdminAccessAudit[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [accountSearch, setAccountSearch] = useState('');
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [accountRole, setAccountRole] = useState('all');
+  const [auditAction, setAuditAction] = useState('all');
   const [pendingUserId, setPendingUserId] = useState<string | null>(null);
 
   const load = useCallback(async (signal?: AbortSignal) => {
@@ -50,6 +56,7 @@ export default function AdminWorkspacePage({
       api.getAdminUsers(signal),
       api.getAdminAccessAudit(signal),
     ]);
+    if (signal?.aborted) return;
     setUsers(nextUsers);
     setAudit(nextAudit);
     setError(null);
@@ -60,7 +67,7 @@ export default function AdminWorkspacePage({
     setLoading(true);
     load(controller.signal)
       .catch((caught) => caught?.name !== 'AbortError' && setError(errorMessage(caught)))
-      .finally(() => setLoading(false));
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [identity.user_id, load]);
 
@@ -68,6 +75,7 @@ export default function AdminWorkspacePage({
 
   function selectTab(next: AdminTab) {
     setTab(next);
+    setMenuOpen(false);
     setError(null);
     onNavigate?.(next);
   }
@@ -104,14 +112,26 @@ export default function AdminWorkspacePage({
     }
   }
 
+  const visibleUsers = users.filter((user) => (accountRole === 'all' || user.role === accountRole)
+    && `${user.display_name} ${user.email ?? ''}`.toLowerCase().includes(accountSearch.trim().toLowerCase()));
+  const visibleAudit = audit.filter((row) => auditAction === 'all' || row.action === auditAction);
+  const subtitles: Record<AdminTab, string> = {
+    overview: 'Manage the people and sessions in your clinic.',
+    invites: 'Invite team members and patients with the right access.',
+    imports: 'Preview patient records before adding them to your clinic.',
+    audit: 'Review sign-ins, sign-outs and account security changes.',
+    settings: 'Choose how your clinic uses AI and local voice capture.',
+    notifications: 'Manage reminder policy and delivery recovery.',
+    learning: 'Inspect offline ranking evidence and review its limits.',
+  };
   const activeUsers = users.filter((user) => user.account_status === 'active').length;
   const activeSessions = users.reduce((total, user) => total + user.active_session_count, 0);
 
   return (
     <div className="admin-shell">
-      <aside className="admin-sidebar" aria-label="Admin oversight navigation">
+      <aside className={`admin-sidebar${menuOpen ? ' mobile-open' : ''}`} aria-label="Admin oversight navigation">
         <div className="sidebar-brand" aria-label="Nightingale admin workspace">
-          <span className="sidebar-brand-mark" aria-hidden="true">N</span>
+          <span className="sidebar-brand-mark" aria-hidden="true"><AppIcon name="feather" /></span>
           <span><strong>Nightingale</strong><small>Clinic oversight workspace</small></span>
         </div>
         <div className="identity-card">
@@ -121,28 +141,32 @@ export default function AdminWorkspacePage({
             <span>Clinic Administrator</span>
           </div>
         </div>
-        <nav className="admin-nav">
-          <button className={tab === 'overview' ? 'active' : ''} onClick={() => selectTab('overview')}>Overview</button>
-          <button className={tab === 'invites' ? 'active' : ''} onClick={() => selectTab('invites')}>Invites</button>
-          <button className={tab === 'imports' ? 'active' : ''} onClick={() => selectTab('imports')}>Patient import</button>
-          <button className={tab === 'audit' ? 'active' : ''} onClick={() => selectTab('audit')}>Access &amp; security audit</button>
-          <button className={tab === 'settings' ? 'active' : ''} onClick={() => selectTab('settings')}>AI &amp; Voice settings</button>
-          <button className={tab === 'learning' ? 'active' : ''} onClick={() => selectTab('learning')}>Shadow Learning</button>
+        <button className="admin-menu-toggle" aria-expanded={menuOpen} aria-controls="admin-navigation" onClick={() => setMenuOpen((value) => !value)}>Administration menu <span aria-hidden="true">{menuOpen ? '−' : '+'}</span></button>
+        <nav id="admin-navigation" className="admin-nav" aria-label="Clinic administration">
+          <span className="admin-nav-section">Clinic access</span>
+          <button className={tab === 'overview' ? 'active' : ''} onClick={() => selectTab('overview')}><AppIcon name="users" />Overview</button>
+          <button className={tab === 'invites' ? 'active' : ''} onClick={() => selectTab('invites')}><AppIcon name="plus" />Invites</button>
+          <button className={tab === 'imports' ? 'active' : ''} onClick={() => selectTab('imports')}><AppIcon name="upload" />Patient import</button>
+          <button className={tab === 'audit' ? 'active' : ''} onClick={() => selectTab('audit')}><AppIcon name="shield" />Access &amp; security audit</button>
+          <button className={tab === 'notifications' ? 'active' : ''} onClick={() => selectTab('notifications')}><AppIcon name="bell" />Reminders & delivery</button>
+          <span className="admin-nav-section">Services &amp; research</span>
+          <button className={tab === 'settings' ? 'active' : ''} onClick={() => selectTab('settings')}><AppIcon name="settings" />AI &amp; Voice settings</button>
+          <button className={tab === 'learning' ? 'active' : ''} onClick={() => selectTab('learning')}><AppIcon name="flask" />Shadow Learning</button>
         </nav>
         <p className="scope-note">{identity.clinic_name}<br />Clinic-scoped oversight · server enforced</p>
-        <button className="sidebar-logout" onClick={onLogout}>Logout</button>
+        <button className="sidebar-logout" onClick={onLogout}><AppIcon name="logout" />Logout</button>
       </aside>
 
       <main className="admin-main">
         <header className="admin-workspace-head">
           <div>
-            <p className="eyebrow">Identity and access oversight</p>
-            <h1>{tab === 'overview' ? 'Admin Overview' : tab === 'invites' ? 'Clinic Invites' : tab === 'imports' ? 'Patient Import' : tab === 'audit' ? 'Access & Security Audit' : tab === 'learning' ? 'Shadow Learning' : 'AI & Voice Settings'}</h1>
-            <p>{identity.clinic_name} · Administrative controls never grant clinical authoring authority.</p>
+            <p className="eyebrow">{identity.clinic_name} · Administration</p>
+            <h1>{tab === 'notifications' ? 'Reminders & Delivery' : tab === 'overview' ? 'Admin Overview' : tab === 'invites' ? 'Clinic Invites' : tab === 'imports' ? 'Patient Import' : tab === 'audit' ? 'Access & Security Audit' : tab === 'learning' ? 'Shadow Learning' : 'AI & Voice Settings'}</h1>
+            <p>{subtitles[tab]}</p>
           </div>
-          <span className="admin-role-badge">Admin</span>
+          <div className="admin-header-actions"><span className="admin-role-badge">Admin</span>{tab === 'overview' && <button className="primary-button" onClick={() => selectTab('invites')}>Invite member</button>}</div>
         </header>
-        <div className="admin-boundary-note"><strong>Administrative oversight only</strong><span>Account and security controls do not grant access to clinical authoring actions.</span></div>
+        <details className="admin-boundary-note"><summary>Administrative oversight only</summary><p>Account and security controls do not grant access to clinical authoring actions.</p></details>
 
         {loading && <div className="loading-card">Loading clinic oversight…</div>}
         {error && <div className="form-error" role="alert">{error}</div>}
@@ -156,11 +180,12 @@ export default function AdminWorkspacePage({
             </section>
             <section className="admin-surface">
               <div className="admin-section-head"><div><p className="eyebrow">Users and sessions</p><h2>Clinic accounts</h2></div><button className="secondary-button" onClick={() => load().catch((caught) => setError(errorMessage(caught)))}>Refresh</button></div>
-              {users.length === 0 ? <div className="empty-state">No clinic users.</div> : (
+              <div className="admin-list-toolbar"><label><span className="sr-only">Search accounts</span><input type="search" placeholder="Search by name or email" value={accountSearch} onChange={(event) => setAccountSearch(event.target.value)} /></label><label><span className="sr-only">Filter account role</span><select value={accountRole} onChange={(event) => setAccountRole(event.target.value)}><option value="all">All roles</option>{['clinician', 'staff', 'patient', 'admin'].map((role) => <option key={role} value={role}>{role === 'staff' ? 'Nursing / staff' : role[0].toUpperCase() + role.slice(1)}</option>)}</select></label><span>{visibleUsers.length} account{visibleUsers.length === 1 ? '' : 's'}</span></div>
+              {visibleUsers.length === 0 ? <div className="empty-state">No accounts match this view.</div> : (
                 <div className="admin-table-wrap">
                   <table className="admin-table">
                     <thead><tr><th>User</th><th>Role</th><th>Account</th><th>Sessions</th><th>Last seen</th><th>Actions</th></tr></thead>
-                    <tbody>{users.map((user) => (
+                    <tbody>{visibleUsers.map((user) => (
                       <tr key={user.user_id}>
                         <td><strong>{user.display_name}</strong><small>{user.email ?? 'No login credential'}</small></td>
                         <td><span>{user.professional_title ?? roleLabel(user.role)}</span>{user.professional_title && <small>RBAC role · {user.role}</small>}</td>
@@ -193,16 +218,19 @@ export default function AdminWorkspacePage({
         {!loading && tab === 'audit' && (
           <section className="admin-surface">
             <div className="admin-section-head"><div><p className="eyebrow">Metadata only</p><h2>Recent access events</h2></div><button className="secondary-button" onClick={() => load().catch((caught) => setError(errorMessage(caught)))}>Refresh</button></div>
-            {audit.length === 0 ? <div className="empty-state">No access events recorded for this clinic.</div> : (
-              <div className="admin-audit-list">{audit.map((row) => (
+            <div className="admin-list-toolbar"><label>Event type <select value={auditAction} onChange={(event) => setAuditAction(event.target.value)}><option value="all">All access events</option>{[...new Set(audit.map((row) => row.action))].map((action) => <option key={action} value={action}>{action.replace(/_/g, ' ')}</option>)}</select></label><span>{visibleAudit.length} event{visibleAudit.length === 1 ? '' : 's'}</span></div>
+            <p className="panel-help">Clinical note edits and revisions are available in each patient event’s History.</p>
+            {visibleAudit.length === 0 ? <div className="empty-state">No access events match this view.</div> : (
+              <div className="admin-audit-list">{visibleAudit.map((row) => (
                 <article key={row.audit_id}>
                   <span className="audit-dot" aria-hidden="true" />
-                  <div><strong>{row.action.replace(/_/g, ' ')}</strong><span>{row.actor_role ?? 'unknown role'} · {row.actor_id ?? 'unknown actor'}</span><small>{row.target_type} {row.target_id} · {formatDate(row.created_at)}</small></div>
+                  <div><strong>{row.action.replace(/_/g, ' ')}</strong><span>{users.find((user) => user.user_id === row.actor_id)?.display_name ?? row.actor_role ?? 'Unknown actor'} · {row.actor_role ?? 'unknown role'}</span><details className="audit-identifiers"><summary>Record identifiers</summary><small>{row.target_type} · {row.target_id} · Actor {row.actor_id ?? 'unknown'}</small></details></div><time>{formatDate(row.created_at)}</time>
                 </article>
               ))}</div>
             )}
           </section>
         )}
+        {!loading && tab === 'notifications' && <AdminNotificationsPage />}
         {!loading && tab === 'settings' && <AdminSettingsPage />}
         {!loading && tab === 'learning' && <AdminLearningPage />}
       </main>

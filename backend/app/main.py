@@ -16,6 +16,10 @@ from sqlalchemy.orm import Session
 
 from .api import (
     admin,
+    work_inbox,
+    note_drafts,
+    test_orders,
+    notifications,
     audit,
     auth,
     comments,
@@ -63,6 +67,7 @@ suppress_server_duplicate_tracebacks()
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    from .models import NoteDraft
     from .security import production_mode
 
     if production_mode():
@@ -77,11 +82,15 @@ async def lifespan(_: FastAPI):
             raise RuntimeError(
                 "D5 production configuration rejected: " + "; ".join(errors)
             )
+    NoteDraft.__table__.create(engine, checkfirst=True)
+    from .result_schema import migrate_results
+    migrate_results(engine)
     stop = asyncio.Event()
 
     async def patient_review_sweep():
         from .db import SessionLocal
         from .patient_review import materialize_due_escalations
+        from .glance_projection import refresh_time_sensitive_glance
 
         interval = max(
             1, int(os.environ.get("NANTINGALE_PATIENT_REVIEW_SWEEP_SECONDS", "60"))
@@ -89,8 +98,12 @@ async def lifespan(_: FastAPI):
         while not stop.is_set():
             try:
                 with SessionLocal() as db:
-                    if materialize_due_escalations(db):
+                    escalated = materialize_due_escalations(db)
+                    refreshed = refresh_time_sensitive_glance(db)
+                    if escalated or refreshed:
                         db.commit()
+                from .notifications import sweep
+                await asyncio.to_thread(sweep, SessionLocal)
             except Exception as exc:
                 emit_log("sweep_error", error_type=type(exc).__name__, level="error")
             try:
@@ -128,6 +141,10 @@ app.include_router(instruction_receipts.router)
 app.include_router(instruction_publications.router)
 app.include_router(learning.router)
 app.include_router(notes.router)
+app.include_router(work_inbox.router)
+app.include_router(note_drafts.router)
+app.include_router(test_orders.router)
+app.include_router(notifications.router)
 app.include_router(comments.router)
 app.include_router(checkins.router)
 app.include_router(copilot.router)

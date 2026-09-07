@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api';
 import { artifactBadge, artifactLabel, eventLabel, formatDateTime } from '../clinical';
 import type { Artifact, AuditLog, Comment, Event } from '../types';
@@ -44,6 +44,7 @@ export default function ClinicalEventDetail({
   initialArtifactId,
   refreshKey,
   onBack,
+  backLabel = 'Timeline',
   onChanged,
   onOpenComments,
   onContextState,
@@ -53,6 +54,7 @@ export default function ClinicalEventDetail({
   initialArtifactId: string | null;
   refreshKey: number;
   onBack: () => void;
+  backLabel?: string;
   onChanged: () => void;
   onOpenComments: () => void;
   onContextState: (state: EventContextState) => void;
@@ -63,6 +65,10 @@ export default function ClinicalEventDetail({
   const [audit, setAudit] = useState<AuditLog[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(initialArtifactId);
   const [composerMode, setComposerMode] = useState<'note' | 'task' | 'instruction' | null>(null);
+  const composerRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (composerMode) composerRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [composerMode]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -114,7 +120,7 @@ export default function ClinicalEventDetail({
       key: `event:${event.event_id}`,
       at: event.started_at,
       kind: 'event',
-      title: 'Consult started',
+      title: 'Event started',
       detail: eventLabel(event),
     }];
     for (const artifact of artifacts) {
@@ -153,7 +159,7 @@ export default function ClinicalEventDetail({
 
   return (
     <section className="clinical-view event-detail" aria-labelledby="event-detail-heading">
-      <button className="back-button" onClick={onBack}>← Back to Timeline</button>
+      <button data-leave-editor className="back-button" onClick={onBack}>← Back to {backLabel}</button>
       <div className="event-detail-title">
         <div>
           <p className="eyebrow">{event.encounter_id ? 'Clinic Visit event' : 'Clinical event'}</p>
@@ -162,45 +168,23 @@ export default function ClinicalEventDetail({
         </div>
         <div className="event-detail-actions">
           <button className="secondary-button" onClick={onOpenComments}>Comments</button>
-          <button className="secondary-button" onClick={() => setComposerMode((current) => current === 'note' ? null : 'note')}>{role === 'clinician' ? 'Add clinician note' : 'Add staff note'}</button>
-          <button className="secondary-button" onClick={() => setComposerMode((current) => current === 'task' ? null : 'task')}>Create task</button>
-          {role === 'clinician' && <button className="secondary-button" onClick={() => setComposerMode((current) => current === 'instruction' ? null : 'instruction')}>Add patient instruction</button>}
+          <button className="primary-button" data-leave-editor onClick={() => setComposerMode((current) => current === 'note' ? null : 'note')}>{role === 'clinician' ? 'Add clinician note' : 'Add staff note'}</button>
+          <button className="secondary-button" data-leave-editor onClick={() => setComposerMode((current) => current === 'task' ? null : 'task')}>Create task</button>
+          {role === 'clinician' && <button className="secondary-button" data-leave-editor onClick={() => setComposerMode((current) => current === 'instruction' ? null : 'instruction')}>Add patient instruction</button>}
         </div>
       </div>
 
-      <div className="event-detail-boundary" aria-label="Event record structure">
-        <span><b>Event</b>Real-world occurrence · {formatDateTime(event.started_at)}</span>
-        <span><b>Artifacts</b>{event.artifact_count} parallel representation{event.artifact_count === 1 ? '' : 's'}</span>
-        <span><b>Activity</b>Comments, revisions and audit remain inside this Event</span>
-      </div>
+      <nav data-leave-editor className="event-document-tabs" aria-label="Event documents">
+        {artifacts.map((artifact) => <button key={artifact.artifact_id} aria-pressed={artifact.artifact_id === selectedId} className={artifact.artifact_id === selectedId ? 'active' : ''} onClick={() => setSelectedId(artifact.artifact_id)}>
+          <span className={`badge ${artifactBadge(artifact.artifact_type).cls}`}>{artifactBadge(artifact.artifact_type).badge}</span>{artifactLabel(artifact)}
+        </button>)}
+      </nav>
 
-      {loading && <div className="loading-card">Loading Event lifecycle…</div>}
+      {loading && <div className="loading-card">Loading event records…</div>}
       {error && <div className="form-error">Could not load Event Detail: {error}</div>}
 
-      {!loading && !error && (
+      {(!loading || artifacts.length > 0) && !error && (
         <div className="event-detail-columns">
-          <div className="event-material-panel">
-            <h3>Event timeline</h3>
-            <p className="panel-help">Clinical documents are selectable. Event and activity markers are read-only.</p>
-            <div className="lifecycle-list event-lifecycle-list">
-              {lifecycle.map((item) => {
-                const content = <>
-                  <span className="lifecycle-dot" aria-hidden="true" />
-                  <span>
-                    <b className={`lifecycle-kind ${item.kind}`}>{item.kind === 'event' ? 'Event start' : item.kind}</b>
-                    <small>{formatDateTime(item.at)}</small>
-                    <strong>{item.title}</strong>
-                    <em>{item.detail}</em>
-                  </span>
-                </>;
-                return item.artifact ? (
-                  <button key={item.key} className={`lifecycle-item ${item.kind} ${item.artifact.artifact_id === selectedId ? 'active' : ''}`} onClick={() => setSelectedId(item.artifact!.artifact_id)} aria-pressed={item.artifact.artifact_id === selectedId}>{content}</button>
-                ) : (
-                  <div key={item.key} className={`lifecycle-item ${item.kind}`}>{content}</div>
-                );
-              })}
-            </div>
-          </div>
 
           <div className="event-reading-column">
             <div className={`artifact-reader ${selectedBadge ? `artifact-${selectedBadge.cls}` : ''}`}>
@@ -213,13 +197,14 @@ export default function ClinicalEventDetail({
                     </span>
                     <div>
                       <h3>{artifactLabel(selectedArtifact)}</h3>
-                      <small>Artifact · recorded {formatDateTime(selectedArtifact.created_at)} · version {selectedArtifact.version}</small>
+                      <small>Recorded {formatDateTime(selectedArtifact.created_at)} · version {selectedArtifact.version}</small>
                     </div>
                   </div>
                   <div className="artifact-authority">
-                    {selectedArtifact.author_role === 'system' ? systemAuthority(selectedArtifact) : `${selectedArtifact.author_role}-authored`}
+                    {selectedArtifact.artifact_type === 'external_test_report' ? 'External report · uploaded copy' : selectedArtifact.author_role === 'system' ? systemAuthority(selectedArtifact) : `${selectedArtifact.author_role}-authored`}
                   </div>
                 </header>
+                {role === 'clinician' && event.event_type === 'doctor_consult' && <a className="secondary-button" href={`/clinical/patients/${event.patient_id}/tests?event=${event.event_id}`}>Order examination</a>}
                 <div className="reader-scroll" aria-label={`${artifactLabel(selectedArtifact)} content`}>
                   <ArtifactContent artifact={selectedArtifact} />
                 </div>
@@ -235,7 +220,7 @@ export default function ClinicalEventDetail({
                 )}
                 {selectedArtifact.artifact_type === `${role}_note` && (
                   <div className="reader-actions">
-                    <ArtifactEdit artifact={selectedArtifact} onSaved={onChanged} />
+                    <ArtifactEdit key={selectedArtifact.artifact_id} artifact={selectedArtifact} onSaved={onChanged} />
                     <span className="muted">Version {selectedArtifact.version}</span>
                   </div>
                 )}
@@ -247,21 +232,43 @@ export default function ClinicalEventDetail({
                 <div className="empty-state"><h3>No clinical material</h3><p>Add a role-owned note or ingest a source for this Event.</p></div>
               )}
             </div>
-            {composerMode === 'note' && <section className="event-action-panel">
-              <header><div><p className="eyebrow">New role-owned record</p><h3>{role === 'clinician' ? 'Clinician assessment / plan' : 'Staff supplement'}</h3></div><button className="link-btn" onClick={() => setComposerMode(null)}>Close</button></header>
+            {composerMode === 'note' && <section ref={composerRef} className="event-action-panel">
+              <header><div><p className="eyebrow">New role-owned record</p><h3>{role === 'clinician' ? 'Clinician assessment / plan' : 'Staff supplement'}</h3></div><button className="link-btn" data-leave-editor onClick={() => setComposerMode(null)}>Close</button></header>
               <p className="panel-help">Creates a separate role-owned note; it never overwrites AI or raw source.</p>
               <NoteComposer eventId={event.event_id} artifactType={role === 'clinician' ? 'clinician_note' : 'staff_note'} onSaved={() => { onChanged(); setComposerMode(null); }} />
             </section>}
-            {composerMode === 'task' && <section className="event-action-panel">
-              <header><div><p className="eyebrow">New follow-up action</p><h3>Create care task</h3></div><button className="link-btn" onClick={() => setComposerMode(null)}>Close</button></header>
+            {composerMode === 'task' && <section ref={composerRef} className="event-action-panel">
+              <header><div><p className="eyebrow">New follow-up action</p><h3>Create care task</h3></div><button className="link-btn" data-leave-editor onClick={() => setComposerMode(null)}>Close</button></header>
               <p className="panel-help">The current Event is the origin. An exact quote is optional and must be explicitly confirmed.</p>
               <TaskCreateForm event={event} sourceArtifact={selectedArtifact} onCreated={() => { onChanged(); setComposerMode(null); }} />
             </section>}
-            {composerMode === 'instruction' && <section className="event-action-panel">
-              <header><div><p className="eyebrow">Patient communication</p><h3>Create patient instruction</h3></div><button className="link-btn" onClick={() => setComposerMode(null)}>Close</button></header>
+            {composerMode === 'instruction' && <section ref={composerRef} className="event-action-panel">
+              <header><div><p className="eyebrow">Patient communication</p><h3>Create patient instruction</h3></div><button className="link-btn" data-leave-editor onClick={() => setComposerMode(null)}>Close</button></header>
               <PatientInstructionComposer eventId={event.event_id} onSaved={(artifact) => { setSelectedId(artifact.artifact_id); onChanged(); setComposerMode(null); }} />
             </section>}
           </div>
+          <details className="event-material-panel">
+            <summary>Event activity · {lifecycle.length} records</summary>
+            <p className="panel-help">Documents, comments and changes, ordered by when they were recorded.</p>
+            <div className="lifecycle-list event-lifecycle-list">
+              {lifecycle.map((item) => {
+                const content = <>
+                  <span className="lifecycle-dot" aria-hidden="true" />
+                  <span>
+                    <b className={`lifecycle-kind ${item.kind}`}>{item.kind === 'event' ? 'Event start' : item.kind}</b>
+                    <small>{formatDateTime(item.at)}</small>
+                    <strong>{item.title}</strong>
+                    <em>{item.detail}</em>
+                  </span>
+                </>;
+                return item.artifact ? (
+                  <button data-leave-editor key={item.key} className={`lifecycle-item ${item.kind} ${item.artifact.artifact_id === selectedId ? 'active' : ''}`} onClick={() => setSelectedId(item.artifact!.artifact_id)} aria-pressed={item.artifact.artifact_id === selectedId}>{content}</button>
+                ) : (
+                  <div key={item.key} className={`lifecycle-item ${item.kind}`}>{content}</div>
+                );
+              })}
+            </div>
+          </details>
         </div>
       )}
     </section>

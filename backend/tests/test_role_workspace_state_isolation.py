@@ -16,9 +16,9 @@ def test_staff_uses_shared_clinical_shell_with_nurse_specific_actions():
     css = _read("frontend/src/index.css")
 
     assert "<ClinicianWorkspacePage roleKey={productKey} onLogout={logout} />" in app
-    assert "Record nurse consultation" in workspace
+    assert "New nurse consultation" in workspace
     assert 'consultKind="nurse"' in workspace
-    assert "Record doctor consultation" in workspace
+    assert "New consultation" in workspace
     assert "role-${identity.role}" in workspace
     assert "identity.professional_title" in sidebar
     assert ".clinician-shell.role-staff" in css
@@ -77,5 +77,5 @@ def test_admin_routes_to_oversight_workspace_without_clinical_controls():
     assert "createNote" not in admin
     assert "queryCopilot" not in admin
     assert "transitionTask" not in admin
-    assert "Record doctor consultation" not in admin
-    assert "Record nurse consultation" not in admin
+    assert "New consultation" not in admin
+    assert "New nurse consultation" not in admin

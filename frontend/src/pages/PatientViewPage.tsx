@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import AppIcon from '../components/AppIcon';
+import Notifications from '../components/Notifications';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import type { PatientInstructionReceipt, PatientTask, PatientView, PatientViewInstruction, TaskStatus } from '../types';
 import PatientCheckIn from '../components/PatientCheckIn';
@@ -77,6 +79,14 @@ export default function PatientViewPage({
         if (!cancelled) {
           setView(v);
           setError(null);
+          const requested = new URLSearchParams(window.location.search);
+          const artifactId = requested.get('instruction');
+          if (artifactId) {
+            const instruction = v.visit_summaries.summaries.find(item => item.artifact_id === artifactId && String(item.artifact_version) === requested.get('version'));
+            window.history.replaceState({}, '', window.location.pathname);
+            if (instruction) void openInstruction(instruction);
+            else setReceiptError('This instruction was replaced or is no longer available. Review your current instructions below.');
+          }
         }
       } catch (e) {
         if (!cancelled) setError(String(e));
@@ -192,34 +202,34 @@ export default function PatientViewPage({
   ];
 
   const navigation = [
-    ['today', 'Today', '⌂'],
-    ['care', 'Care Plan', '✓'],
-    ['checkin', 'Check-in', '✦'],
-    ['summaries', 'Visit Summaries', '▤'],
+    ['today', 'Today', 'home'],
+    ['care', 'Care Plan', 'check'],
+    ['checkin', 'Check-in', 'message'],
+    ['summaries', 'Visit Summaries', 'note'],
   ] as const;
 
   return (
     <div className="patient-app-shell">
       <header className="patient-topbar">
         <div className="patient-brand" aria-label="Nightingale patient portal">
-          <span className="patient-brand-mark" aria-hidden="true">N</span>
+          <span className="patient-brand-mark" aria-hidden="true"><AppIcon name="feather" /></span>
           <span><strong>Nightingale</strong><small>My care</small></span>
         </div>
         <nav className="patient-navigation" aria-label="Patient experience sections">
           {navigation.map(([key, label, icon]) => (
             <button key={key} className={tab === key ? 'active' : ''} aria-current={tab === key ? 'page' : undefined} onClick={() => navigateTab(key)}>
-              <span aria-hidden="true">{icon}</span>{label}
+              <AppIcon name={icon} />{label}
             </button>
           ))}
         </nav>
         <div className="patient-profile">
           <div className="patient-profile-avatar">{view.display_name.slice(0, 1).toUpperCase()}</div>
           <div><strong>{view.display_name}</strong><small>My profile</small></div>
-          {onLogout && <button className="patient-logout" onClick={onLogout}>Log out</button>}
+          {onLogout && <button className="patient-logout" onClick={onLogout}><AppIcon name="logout" />Log out</button>}
         </div>
       </header>
 
-      <main className={`patient-main patient-main-${tab}`}>
+      <main className={`patient-main patient-main-${tab}`}><Notifications />
         {taskError && <div className="form-error">{taskError}</div>}
         {receiptError && <div className="form-error">Could not update instruction status: {receiptError}</div>}
 
@@ -238,20 +248,6 @@ export default function PatientViewPage({
               />
             )}
 
-            <div className="patient-focus-grid">
-              <section className="patient-current-summary">
-                <div className="patient-section-kicker"><span aria-hidden="true">i</span>What you need to know</div>
-                {view.today.instruction ? (
-                  <><h2>You have a care instruction from your clinic.</h2><p>{RECEIPT_LABELS[view.today.instruction.receipt.status]}</p><button className="patient-instruction-open" disabled={receiptPending} onClick={() => void openInstruction(view.today.instruction!)}>Open instruction</button><small>Updated {fmtLongDate(view.today.instruction.event_time)}</small></>
-                ) : <><h2>There are no new care instructions today.</h2><p>Your clinic will update this page when there is something you need to know.</p></>}
-              </section>
-              <section className="patient-followup-card">
-                <span>Upcoming follow-up</span>
-                {view.today.next_follow_up ? <><h2>Next step</h2><p>{view.today.next_follow_up}</p></> : <><h2>No follow-up listed</h2><p>Your clinic has not added a new follow-up instruction.</p></>}
-                <div className="patient-care-team"><span aria-hidden="true">＋</span><div><strong>Your care team</strong><small>Nightingale Demo Clinic</small></div></div>
-              </section>
-            </div>
-
             <div className="patient-action-grid">
               <section className="patient-surface patient-next-steps">
                 <div className="patient-surface-head"><div><p>Care actions</p><h2>Your next steps</h2></div><span>{view.today.tasks.length} active</span></div>
@@ -260,10 +256,24 @@ export default function PatientViewPage({
                   : view.today.tasks.map((task) => <PatientTaskCard key={task.task_id} task={task} pending={pendingTaskId === task.task_id} onTransition={transition} />)}
               </section>
               <section className="patient-checkin-cta">
-                <div className="patient-checkin-icon" aria-hidden="true">✦</div>
+                <div className="patient-checkin-icon" aria-hidden="true"><AppIcon name="message" /></div>
                 <h2>How are you feeling today?</h2>
                 <p>Share what has changed. Your update will be organised for your care team without changing your clinical plan.</p>
                 <button onClick={() => navigateTab('checkin')}>Start a Check-in <span aria-hidden="true">→</span></button>
+              </section>
+            </div>
+
+            <div className="patient-focus-grid">
+              <section className="patient-current-summary">
+                <div className="patient-section-kicker"><span aria-hidden="true">i</span>What you need to know</div>
+                {view.today.instruction ? (
+                  <><h2>Your latest care instruction</h2><p>{RECEIPT_LABELS[view.today.instruction.receipt.status]}</p><button className="patient-instruction-open" disabled={receiptPending} onClick={() => void openInstruction(view.today.instruction!)}>Open instruction</button><small>From your visit on {fmtLongDate(view.today.instruction.event_time)}</small></>
+                ) : <><h2>There are no new care instructions today.</h2><p>Your clinic will update this page when there is something you need to know.</p></>}
+              </section>
+              <section className="patient-followup-card">
+                <span>Follow-up from your clinic</span>
+                {view.today.next_follow_up ? <><h2>Follow-up plan</h2><p>{view.today.next_follow_up}</p></> : <><h2>No follow-up listed</h2><p>Your clinic has not added a new follow-up instruction.</p></>}
+                <div className="patient-care-team"><span aria-hidden="true">＋</span><div><strong>Your care team</strong><small>Contact your clinic if you need help</small></div></div>
               </section>
             </div>
 
@@ -272,7 +282,7 @@ export default function PatientViewPage({
               {view.visit_summaries.summaries.length === 0 ? <div className="patient-empty-compact">No visit summaries are available yet.</div> : (
                 <div className="patient-instruction-list">
                   {view.visit_summaries.summaries.slice(0, 2).map((summary) => (
-                    <button key={summary.artifact_id} onClick={() => void openInstruction(summary)}><span>{fmtLongDate(summary.event_time)}</span><div><strong>Care instruction</strong><p>{RECEIPT_LABELS[summary.receipt.status]}</p></div><span aria-hidden="true">›</span></button>
+                    <button key={summary.artifact_id} onClick={() => void openInstruction(summary)}><span>{fmtLongDate(summary.event_time)}</span><div><strong>Instructions for your visit</strong><p>{RECEIPT_LABELS[summary.receipt.status]}</p></div><span aria-hidden="true">›</span></button>
                   ))}
                 </div>
               )}
@@ -319,7 +329,7 @@ export default function PatientViewPage({
             )}
             {view.visit_summaries.summaries.length === 0 ? <div className="patient-surface patient-empty-state">No patient-facing visit summaries are available yet.</div> : (
               <div className="patient-summary-list">{view.visit_summaries.summaries.map((summary) => (
-                <article className="patient-surface patient-summary-card" key={summary.artifact_id}><time>{fmtLongDate(summary.event_time)}</time><div><h2>Care instruction</h2><p>{RECEIPT_LABELS[summary.receipt.status]}</p><button className="patient-instruction-open" disabled={receiptPending} onClick={() => void openInstruction(summary)}>Open instruction</button></div></article>
+                <article className="patient-surface patient-summary-card" key={summary.artifact_id}><time>{fmtLongDate(summary.event_time)}</time><div><h2>Instructions for your visit</h2><p>{RECEIPT_LABELS[summary.receipt.status]}</p><button className="patient-instruction-open" disabled={receiptPending} onClick={() => void openInstruction(summary)}>Open instruction</button></div></article>
               ))}</div>
             )}
           </>
@@ -335,8 +345,13 @@ function InstructionReader({ instruction, pending, onClose, onAcknowledge }: {
   onClose: () => void;
   onAcknowledge: (instruction: PatientViewInstruction) => void;
 }) {
+  const readerRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    readerRef.current?.scrollIntoView({ block: 'start' });
+    readerRef.current?.focus({ preventScroll: true });
+  }, [instruction.artifact_id]);
   return (
-    <section className="patient-surface patient-instruction-reader" aria-live="polite">
+    <section ref={readerRef} tabIndex={-1} className="patient-surface patient-instruction-reader" aria-live="polite">
       <header><div><p>Care instruction · {fmtLongDate(instruction.event_time)}</p><h2>From your care team</h2></div><button className="link-btn" onClick={onClose}>Close</button></header>
       <p className="patient-instruction-body">{instruction.instruction}</p>
       {instruction.follow_up && <div className="patient-followup-note"><strong>Follow-up</strong><span>{instruction.follow_up}</span></div>}
@@ -355,13 +370,14 @@ function PatientTaskCard({ task, pending, onTransition }: {
   pending: boolean;
   onTransition: (task: PatientTask, status: TaskStatus) => void;
 }) {
+  const overdue = !!task.due_at && new Date(task.due_at).getTime() < Date.now() && ['open', 'in_progress'].includes(task.status);
   return (
-    <article className={`patient-task patient-task-${task.status}`}>
+    <article className={`patient-task patient-task-${task.status} ${overdue ? 'is-overdue' : ''}`}>
       <div className="patient-task-state" aria-hidden="true">{task.status === 'completed' ? '✓' : task.status === 'reported_done' ? '…' : '○'}</div>
       <div className="patient-task-copy">
         <span className="patient-task-status">{TASK_STATUS_LABELS[task.status]}</span>
         <strong>{task.title}</strong>
-        {task.due_at && <small>Due {fmtLongDate(task.due_at)}</small>}
+        {task.due_at && <small className={overdue ? 'patient-task-overdue' : undefined}>{overdue ? 'Overdue · due ' : 'Due '}{fmtLongDate(task.due_at)}</small>}
       </div>
       <div className="patient-task-actions">
         {task.status === 'open' && <button disabled={pending} onClick={() => onTransition(task, 'in_progress')}>{pending ? 'Updating…' : 'Start'}</button>}

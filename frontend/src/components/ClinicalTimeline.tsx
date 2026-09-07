@@ -41,11 +41,11 @@ function EventButton({ event, onOpen }: { event: Event; onOpen: (event: Event) =
     <button className="timeline-event-button" onClick={() => onOpen(event)}>
       <span className="timeline-node" aria-hidden="true" />
       <span className="timeline-event-copy">
-        <span className="timeline-event-kind">Medical Event</span>
+        <span className="timeline-event-kind">{event.event_type.startsWith('patient_') ? 'Patient update' : 'Clinical record'}</span>
         <strong>{eventLabel(event)}</strong>
         <small>{formatDateTime(event.started_at)}</small>
       </span>
-      <span className="timeline-artifact-count">{event.artifact_count} artifacts</span>
+      <span className="timeline-artifact-count">{event.artifact_count} documents</span>
       <span className="timeline-open-event">Open <span aria-hidden="true">→</span></span>
     </button>
   );
@@ -54,24 +54,35 @@ function EventButton({ event, onOpen }: { event: Event; onOpen: (event: Event) =
 export default function ClinicalTimeline({
   events,
   onOpenEvent,
+  eventType,
+  setEventType,
+  newestFirst,
+  setNewestFirst,
 }: {
   events: Event[];
   onOpenEvent: (event: Event) => void;
+  eventType: string;
+  setEventType: (value: string) => void;
+  newestFirst: boolean;
+  setNewestFirst: (value: boolean) => void;
 }) {
-  const items = buildTimelineItems(events);
+  const eventTypes = [...new Set(events.map((event) => event.event_type))];
+  const filtered = eventType === 'all' ? events : events.filter((event) => event.event_type === eventType);
+  const chronologicalItems = buildTimelineItems(filtered);
+  const items = newestFirst ? [...chronologicalItems].reverse() : chronologicalItems;
   return (
     <section className="clinical-view" aria-labelledby="timeline-heading">
       <div className="view-title-row">
         <div>
           <p className="eyebrow">Longitudinal record</p>
           <h2 id="timeline-heading">Timeline</h2>
-          <p className="view-subtitle">Real-world clinical Events, ordered by when they happened.</p>
+          <p className="view-subtitle">Follow the care journey. Open a visit to read its documents and discussion.</p>
         </div>
         <span className="record-count">{events.length} events</span>
       </div>
-      <div className="timeline-boundary-note">
-        <strong>Event timeline</strong>
-        <span>Artifacts, Comments and Versions stay inside the Event they belong to.</span>
+      <div className="timeline-controls">
+        <label>Event type <select value={eventType} onChange={(event) => setEventType(event.target.value)}><option value="all">All events</option>{eventTypes.map((type) => <option key={type} value={type}>{eventLabel(events.find((event) => event.event_type === type)!)}</option>)}</select></label>
+        <button className="secondary-button" onClick={() => setNewestFirst(!newestFirst)}>{newestFirst ? 'Newest first ↓' : 'Oldest first ↑'}</button>
       </div>
       {items.length === 0 && (
         <div className="empty-state">

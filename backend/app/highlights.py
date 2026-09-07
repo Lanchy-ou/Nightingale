@@ -13,6 +13,7 @@ path does zero computation.
 from __future__ import annotations
 
 from typing import Any
+from datetime import datetime, timedelta
 
 # Transparent, rule-based weights (constants, not a config system).
 WEIGHTS = {
@@ -29,6 +30,11 @@ SCORE_RULE_VERSION = "importance-v1"
 
 # Default number of highlights surfaced in the Glance View.
 GLANCE_LIMIT = 5
+
+
+def is_recent(started_at: datetime, as_of: datetime) -> bool:
+    """The existing seven-day window, excluding future occurrences."""
+    return timedelta(0) <= as_of - started_at <= timedelta(days=7)
 
 
 def compute_score(feature_flags: dict[str, bool]) -> int:
@@ -120,7 +126,8 @@ def _offset(span: dict, text: str) -> tuple[int, int]:
 
 
 def status_transitions() -> dict[str, set[str]]:
-    # Legal status-machine transitions; same-status updates are no-ops.
+    # Same-status requests may add a first clinician confirmation; they never
+    # append a duplicate status transition.
     return {
         "suggested": {"accepted", "rejected", "pinned"},
         "accepted": {"rejected", "pinned"},

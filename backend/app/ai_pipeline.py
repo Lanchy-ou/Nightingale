@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from .conflicts import clinical_assertion_sources, find_conflict
 from .deterministic_pipeline import build_fallback
 from .extraction import validate_candidate
-from .highlights import compute_score, extract_text, locate_span
+from .highlights import compute_score, extract_text, is_recent, locate_span
 from .importance_learning import (
     compose_score,
     requested_adaptive_adjustment,
@@ -181,7 +181,7 @@ def run_pipeline(
             )
         ).all()
         repeated = len(existing) > 0
-        recency = (as_of - event.started_at).days <= 7
+        recency = is_recent(event.started_at, as_of)
         flags = {
             "recency": recency,
             "explicit_risk": bool(c.explicit_risk),

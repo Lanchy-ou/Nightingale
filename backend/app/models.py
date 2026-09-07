@@ -1074,3 +1074,19 @@ class PatientCheckInMessage(Base):
     processing_status: Mapped[str | None] = mapped_column(String(16), nullable=True)
     generation_metadata: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class NoteDraft(Base):
+    """Private working copy; never an Artifact, version, or patient-facing record."""
+    __tablename__ = "note_drafts"
+    draft_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("users.user_id"), nullable=False, index=True)
+    event_id: Mapped[str] = mapped_column(ForeignKey("events.event_id"), nullable=False, index=True)
+    slot: Mapped[str] = mapped_column(String(80), nullable=False)
+    fields: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    base_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+# Register additive result/notification tables in the canonical metadata.
+from .result_models import (TestOrder, TestReport, TestReview, TestCommunication, ResultOperation, NotificationSettings, NotificationJob, InboxNotification)

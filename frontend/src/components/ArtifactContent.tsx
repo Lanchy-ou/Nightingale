@@ -60,6 +60,8 @@ export default function ArtifactContent({
   const content = artifact.content;
   const s = span ?? null;
 
+  if (artifact.artifact_type === 'external_test_report') return <div className="artifact-content"><h3>External report · version {content.report_version}</h3><p>Report source: {content.external_source}</p><p>Original PDF preserved. Open Examinations to download this specific version.</p><p className="panel-help">The uploader is the person who filed this copy, not the report's author. This file has not been interpreted by AI.</p></div>;
+
   if (Array.isArray(content.segments)) {
     return (
       <div className="artifact-content">

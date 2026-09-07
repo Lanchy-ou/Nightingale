@@ -21,7 +21,8 @@ def test_glance_source_preempts_copilot_in_patient_context_rail():
 def test_lifecycle_only_uses_buttons_for_selectable_artifacts():
     source = _read("frontend/src/components/ClinicalEventDetail.tsx")
     assert "disabled={!item.artifact}" not in source
-    assert ">Event timeline</h3>" in source
+    assert "Event activity · {lifecycle.length} records" in source
+    assert 'aria-label="Event documents"' in source
     assert "lifecycle.map((item) =>" in source
     assert "return item.artifact ? (" in source
     assert '<div key={item.key} className={`lifecycle-item ${item.kind}`}>' in source
@@ -37,9 +38,9 @@ def test_glance_review_controls_explain_their_effect():
     assert "remain Shadow-only" in source
     assert ">Glance</h2>" in source
     assert "function nextStepText" in source
-    assert "function evidenceText" in source
-    assert "Recommended action" in source
-    assert "An exact ${kind} is preserved in the source record" in source
+    assert "Details &amp; ranking" in source
+    assert "formatDate(event.started_at)" in source
+    assert 'aria-label="Current patient priorities"' in source
     assert "create a follow-up Task with an owner and due date" in source
     assert "Inspect the exact supporting span before recording a review decision" not in source
 

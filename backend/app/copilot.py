@@ -158,7 +158,7 @@ def _resolved_quotes(db: Session, event: Event, artifact: Artifact) -> list[tupl
 
 def _event_quote_rows(db: Session, event: Event) -> list[tuple[Artifact, dict, str]]:
     artifacts = db.scalars(
-        select(Artifact).where(Artifact.event_id == event.event_id).order_by(Artifact.created_at.desc(), Artifact.artifact_id)
+        select(Artifact).where(Artifact.event_id == event.event_id, Artifact.artifact_type.not_in({"external_test_report", "test_result_review", "test_result_communication"})).order_by(Artifact.created_at.desc(), Artifact.artifact_id)
     ).all()
     rows: list[tuple[Artifact, dict, str]] = []
     seen: set[tuple[str, str]] = set()

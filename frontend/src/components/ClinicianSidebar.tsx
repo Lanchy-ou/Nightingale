@@ -1,3 +1,5 @@
+import AppIcon from './AppIcon';
+import Notifications from './Notifications';
 import { useMemo, useState } from 'react';
 import type { CurrentIdentity, Patient } from '../types';
 
@@ -10,6 +12,8 @@ export default function ClinicianSidebar({
   onToggleCollapsed,
   onCloseMobile,
   onDashboard,
+  onInbox,
+  inboxActive,
   onSelectPatient,
   onLogout,
 }: {
@@ -21,6 +25,8 @@ export default function ClinicianSidebar({
   onToggleCollapsed: () => void;
   onCloseMobile: () => void;
   onDashboard: () => void;
+  onInbox: () => void;
+  inboxActive: boolean;
   onSelectPatient: (patientId: string) => void;
   onLogout?: () => void;
 }) {
@@ -40,7 +46,7 @@ export default function ClinicianSidebar({
     >
       <div className="sidebar-brand-row">
         <div className="sidebar-brand" aria-label={identity.role === 'staff' ? 'Nightingale nurse workspace' : 'Nightingale clinician workspace'} title={collapsed ? 'Nightingale' : undefined}>
-          <span className="sidebar-brand-mark" aria-hidden="true">N</span>
+          <span className="sidebar-brand-mark" aria-hidden="true"><AppIcon name="feather" /></span>
           <span className="sidebar-label">
             <strong>Nightingale</strong>
             <small>{identity.role === 'staff' ? 'Clinical support workspace' : 'Clinical workspace'}</small>
@@ -55,7 +61,7 @@ export default function ClinicianSidebar({
           title={collapsed ? 'Expand patient navigation' : 'Collapse patient navigation'}
           onClick={onToggleCollapsed}
         >
-          <span aria-hidden="true">{collapsed ? '›' : '‹'}</span>
+          <AppIcon name={collapsed ? "right" : "left"} />
         </button>
         <button
           className="sidebar-toggle sidebar-close-mobile"
@@ -65,9 +71,10 @@ export default function ClinicianSidebar({
           aria-label="Close patient navigation"
           onClick={onCloseMobile}
         >
-          <span aria-hidden="true">×</span>
+          <AppIcon name="close" />
         </button>
       </div>
+      {!collapsed && <Notifications />}
       <div className="identity-card">
         <span className="identity-avatar" aria-hidden="true" title={collapsed ? identity.display_name ?? 'Clinician' : undefined}>{(identity.display_name ?? 'Clinician').slice(0, 1).toUpperCase()}</span>
         <div className="identity-copy sidebar-label">
@@ -78,15 +85,17 @@ export default function ClinicianSidebar({
       </div>
 
       <button
-        className={`sidebar-dashboard ${selectedPatientId === null ? 'active' : ''}`}
-        aria-current={selectedPatientId === null ? 'page' : undefined}
+        className={`sidebar-dashboard ${selectedPatientId === null && !inboxActive ? 'active' : ''}`}
+        aria-current={selectedPatientId === null && !inboxActive ? 'page' : undefined}
+        data-leave-editor
         aria-label="Clinic dashboard"
         title={collapsed ? 'Clinic dashboard' : undefined}
         onClick={onDashboard}
       >
-        <span className="sidebar-nav-icon" aria-hidden="true">⌂</span><span className="sidebar-label">Clinic dashboard</span>
+        <span className="sidebar-nav-icon" aria-hidden="true"><AppIcon name="home" /></span><span className="sidebar-label">Clinic dashboard</span>
       </button>
 
+      <button data-leave-editor className={`sidebar-dashboard sidebar-inbox ${inboxActive ? 'active' : ''}`} aria-label="Work inbox" aria-current={inboxActive ? 'page' : undefined} title={collapsed ? 'Work inbox' : undefined} onClick={onInbox}><span className="sidebar-nav-icon" aria-hidden="true"><AppIcon name="inbox" /></span><span className="sidebar-label">Work inbox</span></button>
       <div className="sidebar-section-head sidebar-label">
         <h2>Clinic Patients</h2>
         <span>{patients.length}</span>
@@ -100,7 +109,7 @@ export default function ClinicianSidebar({
           placeholder="Search patients"
         />
       </label>
-      <nav className="clinic-patient-list" aria-label="Clinic Patients">
+      <nav data-leave-editor className="clinic-patient-list" aria-label="Clinic Patients">
         {filtered.length === 0 && <p className="empty-compact">No matching patients.</p>}
         {filtered.map((patient) => (
           <button
@@ -121,8 +130,8 @@ export default function ClinicianSidebar({
       </nav>
       <p className="scope-note sidebar-label">{identity.clinic_name}<br />Clinic-scoped access · server enforced</p>
       {onLogout && (
-        <button className="sidebar-logout" aria-label="Logout" title={collapsed ? 'Logout' : undefined} onClick={onLogout}>
-          <span className="sidebar-nav-icon" aria-hidden="true">↪</span><span className="sidebar-label">Logout</span>
+        <button data-leave-editor className="sidebar-logout" aria-label="Logout" title={collapsed ? 'Logout' : undefined} onClick={onLogout}>
+          <span className="sidebar-nav-icon" aria-hidden="true"><AppIcon name="logout" /></span><span className="sidebar-label">Logout</span>
         </button>
       )}
     </aside>

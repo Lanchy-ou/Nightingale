@@ -50,6 +50,18 @@ def _target(db: Session, ctx: RoleContext, artifact_id: str, action: str):
         or publication.patient_id != event.patient_id
     ):
         raise resource_not_found()
+    if event.event_type == "test_result" and action in {"publish_patient_instruction", "correct_patient_instruction"}:
+        from ..result_models import TestOrder
+        from ..test_result_service import require_enabled
+        require_enabled()
+        binding = artifact.generation_metadata or {}
+        order = db.scalar(select(TestOrder).where(TestOrder.result_event_id == event.event_id, TestOrder.clinic_id == ctx.clinic_id))
+        if not order or order.cancelled_reason or not order.current_review_id or binding.get("test_review_id") != order.current_review_id:
+            raise HTTPException(409, "This guidance belongs to an older result review")
+        locked = db.execute(update(TestOrder).where(TestOrder.order_id == order.order_id,
+            TestOrder.current_review_id == binding["test_review_id"], TestOrder.revision == order.revision).values(updated_at=datetime.now()))
+        if locked.rowcount != 1:
+            raise HTTPException(409, "Result review changed")
     return artifact, event, publication
 
 
@@ -165,6 +177,8 @@ def publish_instruction(
             "lineage_revision": publication.lineage_revision,
         },
     )
+    from ..test_result_service import publication_changed
+    publication_changed(db, ctx, event.event_id)
     db.commit()
     return _out(get_publication(db, artifact.artifact_id, artifact.version))
 
@@ -215,7 +229,7 @@ def correct_instruction(
         version=1,
         provenance_pointer=None,
         ingestion_key=None,
-        generation_metadata=None,
+        generation_metadata=artifact.generation_metadata,
     )
     db.add(new_artifact)
     try:
@@ -319,6 +333,8 @@ def correct_instruction(
             "source_artifact_id": artifact.artifact_id,
         },
     )
+    from ..test_result_service import publication_changed
+    publication_changed(db, ctx, event.event_id)
     db.commit()
     return _out(new_publication)
 
@@ -386,5 +402,7 @@ def withdraw_instruction(
             "reason_code": body.reason_code,
         },
     )
+    from ..test_result_service import publication_changed
+    publication_changed(db, ctx, event.event_id)
     db.commit()
     return _out(get_publication(db, artifact.artifact_id, artifact.version))

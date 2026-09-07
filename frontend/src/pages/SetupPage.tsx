@@ -1,3 +1,4 @@
+import AppIcon from '../components/AppIcon';
 import { FormEvent, useEffect, useState } from 'react';
 import { api } from '../api';
 import type { OnboardingComplete, OnboardingPreview } from '../types';
@@ -64,7 +65,7 @@ export default function SetupPage() {
   }
 
   return <div className="auth-page"><div className="auth-card">
-    <div className="auth-brand"><span className="auth-brand-mark" aria-hidden="true">N</span><div><h1>Nightingale</h1><p className="muted">Set up your clinic</p></div></div>
+    <div className="auth-brand"><span className="auth-brand-mark" aria-hidden="true"><AppIcon name="feather" /></span><div><h1>Nightingale</h1><p className="muted">Set up your clinic</p></div></div>
     <div className="auth-security-note"><strong>Deployment-authorised setup</strong><span>This single-use link creates one clinic and its first administrator.</span></div>
     {state.kind === 'loading' && <p className="muted">Checking setup link…</p>}
     {['invalid', 'used', 'expired'].includes(state.kind) && <div className="invite-terminal"><h2>Setup link {state.kind}</h2><p>This link cannot create a clinic. Ask the deployment owner for a new one.</p><button className="secondary-button" onClick={signIn}>Back to sign in</button></div>}

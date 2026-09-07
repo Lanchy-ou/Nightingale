@@ -30,6 +30,9 @@ def list_artifacts(
     require_checkin_event_visible(db, event_id)
 
     q = select(Artifact).where(Artifact.event_id == event_id)
+    if ctx.role == "admin":
+        from ..test_result_service import RESULT_ARTIFACT_TYPES
+        q = q.where(Artifact.artifact_type.not_in(RESULT_ARTIFACT_TYPES))
     if ctx.role == "patient":
         q = (
             q.join(

@@ -148,6 +148,12 @@ def test_accept_recomputes_score_and_is_immediately_visible(clinician_client, db
 
 
 def test_concurrent_highlight_status_is_deterministic(db_session):
+    from app.glance_projection import rebuild_glance_projections
+
+    # Compare confirmation at one current-time baseline, not the frozen seed's
+    # recency score before the runtime maintenance worker advances time.
+    rebuild_glance_projections(db_session, fixture.PATIENT_ID, as_of=datetime.now())
+    db_session.commit()
     before = db_session.get(Highlight, "hl_bp_elevated")
     before_score = before.importance_score
 

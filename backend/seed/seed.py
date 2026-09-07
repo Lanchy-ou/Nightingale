@@ -15,6 +15,7 @@ from app.db import Base, SessionLocal, engine, install_clinic_isolation_schema
 from app.ids import new_id
 from app.models import (
     Artifact,
+    NoteDraft,
     ArtifactStorageState,
     ArtifactVersion,
     AuditLog,
@@ -118,6 +119,10 @@ def _backfill_instruction_publications(db: Session) -> None:
 def seed(db: Session) -> None:
     # Clear in FK-safe order (children first). D1 identity tables reference
     # users/patients/clinics and are cleared before them.
+    from app.result_models import InboxNotification, NotificationJob, NotificationSettings, ResultOperation, TestCommunication, TestReview, TestReport, TestOrder
+    for model in (InboxNotification, NotificationJob, NotificationSettings, ResultOperation, TestCommunication, TestReview, TestReport, TestOrder):
+        db.execute(delete(model))
+    db.execute(delete(NoteDraft))
     db.execute(delete(VoiceCaptureRecord))
     db.execute(delete(ClinicSettings))
     db.execute(delete(ClinicOnboardingToken))
@@ -186,9 +191,10 @@ def seed(db: Session) -> None:
             link_task_highlight(db, task)
     db.flush()
     from app.glance_projection import rebuild_glance_projections
+    from seed.highlights import SEED_AS_OF
 
     for patient_id in db.scalars(select(Patient.patient_id)).all():
-        rebuild_glance_projections(db, patient_id)
+        rebuild_glance_projections(db, patient_id, as_of=SEED_AS_OF)
     db.commit()
     _backfill_versions(db)
 

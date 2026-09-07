@@ -258,6 +258,12 @@ function putAudio<T>(
 }
 
 export const api = {
+  getWorkInbox: (view: 'mine' | 'clinic', offset = 0, signal?: AbortSignal) => get<import('./types').WorkInboxResult>(`/api/work-inbox?view=${view}&offset=${offset}`, signal),
+  getNoteDraft: (eventId: string, slot: string, signal?: AbortSignal) => get<import('./types').PrivateNoteDraft>(`/api/events/${eventId}/note-drafts/${slot}`, signal),
+  saveNoteDraft: (eventId: string, slot: string, expected_revision: number, base_version: number, fields: Record<string, string> | null) => request<import('./types').PrivateNoteDraft>(`/api/events/${eventId}/note-drafts/${slot}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json', ...headers() },
+    body: JSON.stringify({ expected_revision, base_version, fields }),
+  }),
   // --- D1 auth ------------------------------------------------------------
   login: (email: string, password: string) =>
     post<CurrentIdentity>('/api/auth/login', { email, password }, undefined, { skipUnauthorized: true }),
@@ -613,3 +619,17 @@ export const api = {
     ...(reviewAttestation ?? {}),
   }),
 };
+
+
+export function resultRequest<T>(path: string, body?: unknown, method = 'POST'): Promise<T> {
+  return request<T>(`/api${path}`, body === undefined ? { headers: headers() } : {
+    method, headers: { ...headers(), 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  });
+}
+export async function downloadTestReport(reportId: string): Promise<void> {
+  const response = await fetch(`/api/test-reports/${reportId}/file`, { credentials: 'include', headers: headers() });
+  if (!response.ok) throw new Error('Report access is no longer available');
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement('a'); link.href = url; link.download = 'report.pdf'; link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}

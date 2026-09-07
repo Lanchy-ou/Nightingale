@@ -18,6 +18,7 @@ from .role_context import RoleContext, get_role_context
 # action -> roles allowed. Any action not listed for a role is denied.
 PERMISSIONS: dict[str, dict[str, bool]] = {
     "patient": {
+        "read_notifications": True,
         "read_patient": True,
         "read_events": True,
         "read_artifacts": True,
@@ -38,6 +39,12 @@ PERMISSIONS: dict[str, dict[str, bool]] = {
         "read_voice_audio": True,
     },
     "staff": {
+        "read_notifications": True,
+        "read_test_results": True,
+        "upload_test_report": True,
+        "communicate_test_result": True,
+        "read_work_inbox": True,
+        "manage_note_draft": True,
         "read_patient": True,
         "read_events": True,
         "read_artifacts": True,
@@ -73,6 +80,14 @@ PERMISSIONS: dict[str, dict[str, bool]] = {
         "read_voice_audio": True,
     },
     "clinician": {
+        "read_notifications": True,
+        "read_test_results": True,
+        "upload_test_report": True,
+        "communicate_test_result": True,
+        "manage_test_order": True,
+        "review_test_report": True,
+        "read_work_inbox": True,
+        "manage_note_draft": True,
         "read_patient": True,
         "read_events": True,
         "read_artifacts": True,
@@ -113,6 +128,8 @@ PERMISSIONS: dict[str, dict[str, bool]] = {
         "read_voice_audio": True,
     },
     "admin": {
+        "read_notifications": True,
+        "manage_notifications": True,
         # Read-only oversight, clinic-scoped. No note/comment/highlight writes.
         "read_patient": True,
         "read_events": True,

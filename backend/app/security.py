@@ -229,6 +229,10 @@ class SecurityMiddleware(BaseHTTPMiddleware):
 
         if request.method in UNSAFE_METHODS:
             limit = max_request_bytes()
+            # The authenticated PDF endpoint carries at most 10 MiB as base64 JSON.
+            parts = request.url.path.strip("/").split("/")
+            if request.method == "POST" and len(parts) == 4 and parts[:2] == ["api", "test-orders"] and parts[3] == "reports":
+                limit = 14 * 1024 * 1024
             content_length = request.headers.get("content-length")
             if content_length:
                 try:

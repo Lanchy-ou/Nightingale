@@ -699,7 +699,7 @@ export interface ClinicalTask extends PatientTask {
   source_artifact_id: string | null;
   source_span: Span | null;
   description: string;
-  task_kind: 'care_action' | 'patient_report_review' | 'clinician_priority_review';
+  task_kind: 'care_action' | 'patient_report_review' | 'clinician_priority_review' | 'report_followup' | 'result_review' | 'result_communication';
   workflow_id: string | null;
   attention_class: 'routine' | 'priority_review';
   creation_method: 'human' | 'system_routed';
@@ -817,4 +817,23 @@ export interface PatientView {
   };
   check_in: { sessions: PatientViewSession[] };
   visit_summaries: { summaries: PatientViewInstruction[] };
+}
+
+
+export interface PrivateNoteDraft {
+  revision: number;
+  fields: Record<string, string> | null;
+  base_version: number;
+  base_content: Artifact['content'];
+  updated_at: string | null;
+}
+export interface WorkInboxItem {
+  test_order_id?: string;
+  task_id: string; patient_id: string; patient_name: string; event_id: string;
+  title: string; task_kind: string; status: TaskStatus; assigned_role: string;
+  assigned_user_id: string | null; due_at: string | null; overdue: boolean;
+  actionable: boolean; has_exact_source: boolean;
+}
+export interface WorkInboxResult {
+  items: WorkInboxItem[]; total: number; offset: number; limit: number; as_of: string;
 }

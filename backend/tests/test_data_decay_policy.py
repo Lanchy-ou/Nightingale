@@ -237,7 +237,9 @@ def test_old_low_value_decay_can_move_it_out_of_glance_top_five(
 
     target = highlights["hl_headache_once_weekly"]
     target.status = "suggested"
-    target.feature_flags = {**target.feature_flags, "recency": True}
+    # Old data cannot earn recency. A repeated historical mention can still
+    # outrank a zero-score historical control until its decay applies.
+    target.feature_flags = {**target.feature_flags, "repeated_mentions": True}
     leaders = [
         highlights["hl_headache_worsening"],
         highlights["hl_nausea_persists"],
@@ -251,9 +253,8 @@ def test_old_low_value_decay_can_move_it_out_of_glance_top_five(
             "recency": True,
             "symptom_change": True,
         }
-    control = highlights["hl_followup_scheduled"]
+    control = highlights["hl_headache_frequency_feb"]
     control.status = "suggested"
-    control.feature_flags = {**control.feature_flags, "repeated_mentions": True}
     db_session.commit()
     from app.glance_projection import rebuild_glance_projections
 
