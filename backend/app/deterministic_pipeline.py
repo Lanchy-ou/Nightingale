@@ -12,13 +12,14 @@ from __future__ import annotations
 import re
 
 from .extraction import AISummaryResult, Candidate
+from .semantic_rules import FAMILY, PAST, HYPOTHETICAL, clauses, current_positive
 
 _SYMPTOM_CHANGE = re.compile(
     r"\b(worse|worsening|worsen|improved|improving|better|increased|decreased"
     r"|more frequent|less frequent|almost every day|once a week)\b",
     re.IGNORECASE,
 )
-_RISK = re.compile(r"\b(elevated|high|abnormal|severe|critical)\b", re.IGNORECASE)
+_RISK = re.compile(r"\b(elevated|high|abnormal|severe|critical)\b|严重|升高|异常", re.IGNORECASE)
 _TASK = re.compile(
     r"\b(ordered|scheduled|pending|follow-up|followup|waiting for)\b", re.IGNORECASE
 )
@@ -47,11 +48,11 @@ def extract_text_leaves(content: dict) -> list[str]:
 def _candidate_for(sentence: str) -> Candidate | None:
     if _RISK.search(sentence):
         return Candidate(
-            text="Clinical risk flagged",
+            text="Risk-related statement",
             quote=sentence,
             risk_reason="Risk-related statement detected",
             entity_type="risk",
-            explicit_risk=True,
+            explicit_risk=current_positive(sentence),
         )
     if _SYMPTOM_CHANGE.search(sentence):
         return Candidate(
@@ -83,7 +84,10 @@ def build_fallback(content: dict, flow_type: str = "") -> AISummaryResult:
     summary = " ".join(leaves[:3]) if leaves else "(no content)"
     candidates: list[Candidate] = []
     for leaf in leaves:
-        c = _candidate_for(leaf)
-        if c is not None:
-            candidates.append(c)
+        for sentence in clauses(leaf):
+            c = _candidate_for(sentence)
+            if c is not None:
+                if FAMILY.search(leaf) or PAST.search(leaf) or HYPOTHETICAL.search(leaf):
+                    c.explicit_risk = False
+                candidates.append(c)
     return AISummaryResult(summary=summary, chief_complaint=None, candidates=candidates)

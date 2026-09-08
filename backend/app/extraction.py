@@ -6,7 +6,7 @@ recomputes `entity_key` from `entity_type + normalized token`, and only trusts
 """
 from __future__ import annotations
 
-import re
+import unicodedata
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -27,6 +27,7 @@ class Candidate(BaseModel):
     assertion_value: str | None = None
     explicit_risk: bool = False
     symptom_change: bool = False
+    semantic_context: dict | None = None  # server recomputes against anchored source
 
 
 class AISummaryResult(BaseModel):
@@ -38,12 +39,15 @@ class AISummaryResult(BaseModel):
 
 
 def normalize_token(text: str) -> str:
-    t = re.sub(r"[^a-z0-9]+", " ", text.lower())
+    t = "".join(c if c.isalnum() else " " for c in unicodedata.normalize("NFKC", text).casefold())
     return " ".join(t.split())
 
 
 def normalize_entity_key(entity_type: str, text: str) -> str:
-    return f"{entity_type}:{normalize_token(text)}"
+    token = normalize_token(text)
+    if token in {"", "clinical risk flagged", "risk related statement", "medication mention", "symptom change", "action item"}:
+        return ""
+    return f"{entity_type}:{token}"
 
 
 def validate_candidate(c: Candidate) -> Candidate | None:

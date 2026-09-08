@@ -1,6 +1,8 @@
 """F Final: clinician review attestation and mixed-language transport evidence."""
 from __future__ import annotations
 
+from app import ingestion_service
+
 from copy import deepcopy
 from datetime import datetime
 import json
@@ -149,7 +151,7 @@ def test_mixed_language_round_trip_and_mock_exact_provenance(
         ]
     )
     monkeypatch.setenv("NANTINGALE_LLM_PROVIDER", "mock")
-    monkeypatch.setattr(sources, "build_client", lambda _provider: mock)
+    monkeypatch.setattr(ingestion_service, "build_client", lambda _provider: mock)
 
     response = clinician_client.post(
         f"/api/patients/{fixture.PATIENT_ID}/doctor-consults",
@@ -232,8 +234,8 @@ def test_nonexistent_multilingual_claim_is_dropped_and_fallback_does_not_invent(
     assert output.method == "deterministic_fallback"
     assert output.fallback_reason == "anchor_drop_rate"
     assert output.summary_content["summary"] == statement
-    assert all(candidate.entity_type == "symptom" for candidate in output.candidates)
-    assert all(extract_text(raw.content, candidate.span) == statement for candidate in output.candidates)
+    assert all("invented" not in candidate.text.lower() for candidate in output.candidates)
+    assert all(extract_text(raw.content, candidate.span) and extract_text(raw.content, candidate.span) in statement for candidate in output.candidates)
     serialized = json.dumps(output.summary_content).lower()
     assert "invented" not in serialized
     assert "999 mg" not in serialized

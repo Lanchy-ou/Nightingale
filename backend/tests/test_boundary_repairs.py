@@ -82,10 +82,25 @@ def test_same_event_representations_and_untrusted_update_ids(db_session):
     assert (other.feature_flags, other.importance_score, other.updated_at) == before
 
 
+@pytest.mark.parametrize("text", ["No severe symptoms.", "My mother has severe headaches.",
+    "The headache was severe yesterday but is better now.", "If severe headache occurs, call us."])
+def test_fallback_does_not_promote_negated_family_or_past(text):
+    from app.deterministic_pipeline import build_fallback
+    assert not any(c.explicit_risk for c in build_fallback({"text": text}).candidates)
 
 
+def test_unicode_and_generic_labels():
+    from app.extraction import normalize_entity_key, validate_candidate
+    assert normalize_entity_key("symptom", "头痛") != normalize_entity_key("symptom", "腹痛")
+    c = validate_candidate(Candidate(text="Medication mention", quote="Amitriptyline 10 mg",
+                           risk_reason="Medication", entity_type="medication"))
+    assert not c.entity_key
 
 
+def test_chinese_mixed_assertions_keep_positive_clause():
+    from app.deterministic_pipeline import build_fallback
+    candidates = build_fallback({"text": "没有恶心，但头痛严重。"}).candidates
+    assert any(c.explicit_risk and c.quote == "头痛严重" for c in candidates)
 
 
 def test_concurrent_patient_events_are_rescored_at_commit(db_session, monkeypatch):
