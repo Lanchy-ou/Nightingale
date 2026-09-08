@@ -369,13 +369,8 @@ def persist_derived(
         patient_id=event.patient_id,
         event_id=event.event_id,
     )
-    try:
-        db.flush()
-        from .glance_projection import rebuild_glance_projections
+    db.flush()
+    from .glance_projection import rebuild_glance_projections
 
-        rebuild_glance_projections(db, event.patient_id, as_of=now)
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise
+    rebuild_glance_projections(db, event.patient_id, as_of=now)
     return summary_id, highlight_ids

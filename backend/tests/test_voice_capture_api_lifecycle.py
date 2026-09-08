@@ -8,7 +8,7 @@ from sqlalchemy import select
 from fastapi.testclient import TestClient
 
 from app.api import voice as voice_api
-from app.api import sources as sources_api
+from app import ingestion_service
 from app.highlights import extract_text
 from app.main import app
 from app.models import Artifact, Event, Highlight
@@ -378,7 +378,7 @@ def test_confirmed_transcript_and_event_survive_derived_pipeline_failure(
     def fail_after_raw(*_args, **_kwargs):
         raise RuntimeError("synthetic derived failure")
 
-    monkeypatch.setattr(sources_api, "_ingest_common", fail_after_raw)
+    monkeypatch.setattr(ingestion_service, "ingest_common", fail_after_raw)
     with pytest.raises(RuntimeError, match="synthetic derived failure"):
         clinician_client.post(
             f"/api/voice/captures/{capture_id}/confirm",

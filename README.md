@@ -463,3 +463,39 @@ and durable in-app outbox are implemented behind separate default-off switches:
 Startup applies additive schema changes without seeding or resetting existing data.
 See [implementation and acceptance record](docs/test_results_notifications_2026-09-05.md)
 for configuration, rollback, invariants and outstanding browser upload/download gates.
+
+
+## Boundary repair release (2026-09-08)
+
+Admin is an account/system administrator and no longer has default clinical
+read permissions. Invites use `/api/admin/patient-identities` (ID/name only).
+No existing account is promoted to clinician. See the updated
+[boundary architecture, permissions and operating guide](docs/boundary_repairs.md)
+and [acceptance evidence](docs/boundary_acceptance_2026-09-08.md).
+
+API startup no longer runs escalation, ranking refresh or notification sweeps.
+After applying the additive boundary migration, start **both** processes from
+`backend` with the same database/encryption/provider environment:
+
+```powershell
+.venv/Scripts/python.exe -m scripts.migrate_boundary_schema
+.venv/Scripts/python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+# In a second terminal (or an independently supervised deployment process):
+.venv/Scripts/python.exe -m scripts.run_maintenance
+```
+
+The worker runs every 60 seconds, processes at most 50 maintenance jobs per
+pass, and retains failed jobs for explicit retry. A stopped worker leaves GETs
+readable but due escalations and time-sensitive scores remain at their last
+persisted state. Do not rely on opening a page to perform overdue work.
+
+Before repairing existing data, stop ingestion and maintenance, make a database
+backup, and verify a restore to a separate file. The repair command defaults to
+preview; deployment/backfill is an operator step and was not run on the working
+demo database during this implementation. Full instructions, including guarded
+derived-state restore, are in the operating guide.
+
+Model egress still follows the existing DeepSeek/mock configuration. Four flows
+share field minimization, request-local reference IDs, redaction and a final
+supported-pattern check. This is limited deterministic protection for synthetic
+data, not approval to send real medical records externally.

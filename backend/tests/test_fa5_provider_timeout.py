@@ -8,6 +8,8 @@ once and retry produces no duplicate.
 """
 from __future__ import annotations
 
+from app import ingestion_service
+
 import asyncio
 import socket
 import threading
@@ -276,7 +278,7 @@ def test_doctor_consult_timeout_retry_does_not_duplicate_raw(
 ):
     import app.api.sources as sources
 
-    monkeypatch.setattr(sources, "build_client", lambda *_a, **_k: _TimeoutClient())
+    monkeypatch.setattr(ingestion_service, "build_client", lambda *_a, **_k: _TimeoutClient())
     body = {
         "consult_id": "consult-fa5-timeout-001",
         "ingestion_key": "ingest-fa5-timeout-001",

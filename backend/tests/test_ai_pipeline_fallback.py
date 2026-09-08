@@ -3,7 +3,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from app.ai_pipeline import persist_derived, run_pipeline
+from app.ingestion_service import commit_derived as persist_derived
+from app.ai_pipeline import run_pipeline
 from app.extraction import AISummaryResult, Candidate
 from app.llm_client import (
     InvalidOutputError,

@@ -1,0 +1,26 @@
+{
+  "platform": "Windows-11-10.0.22000-SP0",
+  "python": "3.13.5",
+  "layer": "TestClient + real file SQLite; not network/deployment capacity",
+  "backlog_reviews": 10000,
+  "backlog_patients": 100,
+  "clinics": 2,
+  "glance": {
+    "stopped": {
+      "p95_ms": 5.305,
+      "errors": 0,
+      "samples": 100,
+      "warmups": 10
+    },
+    "running": {
+      "p95_ms": 12.297,
+      "errors": 0,
+      "samples": 100,
+      "warmups": 10
+    }
+  },
+  "request_sql_writes": 0,
+  "completed_jobs": 50,
+  "worker_failed_jobs": 0,
+  "worker_retry_jobs": 0
+}

@@ -1,6 +1,8 @@
 """C1 hard gate: Encounter + strict manual Doctor Consult ingestion."""
 from __future__ import annotations
 
+from app import ingestion_service
+
 from copy import deepcopy
 from datetime import datetime
 
@@ -93,7 +95,7 @@ def test_raw_transcript_is_committed_before_pipeline(
     _force_missing_provider(monkeypatch)
     import app.api.sources as sources
 
-    real_run_pipeline = sources.run_pipeline
+    real_run_pipeline = ingestion_service.run_pipeline
     observed: dict[str, bool] = {}
 
     def asserting_pipeline(db, event, raw, *args, **kwargs):
@@ -108,7 +110,7 @@ def test_raw_transcript_is_committed_before_pipeline(
             )
         return real_run_pipeline(db, event, raw, *args, **kwargs)
 
-    monkeypatch.setattr(sources, "run_pipeline", asserting_pipeline)
+    monkeypatch.setattr(ingestion_service, "run_pipeline", asserting_pipeline)
     response = clinician_client.post(
         f"/api/patients/{fixture.PATIENT_ID}/doctor-consults",
         json=_payload("consult-raw-first", "submit-raw-first"),
@@ -171,7 +173,7 @@ def test_provider_schema_failure_returns_explicit_fallback(
     import app.api.sources as sources
 
     monkeypatch.setenv("NANTINGALE_LLM_PROVIDER", "mock")
-    monkeypatch.setattr(sources, "build_client", lambda provider: _InvalidSchemaClient())
+    monkeypatch.setattr(ingestion_service, "build_client", lambda provider: _InvalidSchemaClient())
     response = clinician_client.post(
         f"/api/patients/{fixture.PATIENT_ID}/doctor-consults",
         json=_payload("consult-invalid-provider", "submit-invalid-provider"),

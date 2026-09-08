@@ -1,6 +1,8 @@
 """D3 canonical confirmation reuses the existing C1/M4 raw-first path."""
 from __future__ import annotations
 
+from app import ingestion_service
+
 from datetime import datetime
 
 import pytest
@@ -127,7 +129,7 @@ def test_derived_failure_keeps_confirmed_event_and_raw_transcript(
     def fail_pipeline(*args, **kwargs):
         raise RuntimeError("synthetic derived failure")
 
-    monkeypatch.setattr(sources, "run_pipeline", fail_pipeline)
+    monkeypatch.setattr(ingestion_service, "run_pipeline", fail_pipeline)
     with pytest.raises(RuntimeError, match="synthetic derived failure"):
         clinician_client.post(
             f"/api/patients/{fixture.PATIENT_ID}/doctor-consults",

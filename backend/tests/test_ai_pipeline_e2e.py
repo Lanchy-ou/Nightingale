@@ -10,7 +10,8 @@ from datetime import datetime
 
 import pytest
 
-from app.ai_pipeline import persist_derived, run_pipeline
+from app.ingestion_service import commit_derived as persist_derived
+from app.ai_pipeline import run_pipeline
 from app.highlights import extract_text
 from app.llm_client import MockLLMClient, ProviderUnavailableError
 from app.models import Artifact, Event

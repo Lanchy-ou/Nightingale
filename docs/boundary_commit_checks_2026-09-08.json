@@ -1,0 +1,37 @@
+[
+  {
+    "task": "R1",
+    "exit_code": 0,
+    "output": "......                                                                   [100%]\n6 passed in 2.89s\n"
+  },
+  {
+    "task": "R2A",
+    "exit_code": 0,
+    "output": "....................                                                     [100%]\n20 passed in 6.52s\n"
+  },
+  {
+    "task": "R3",
+    "exit_code": 0,
+    "output": ".............                                                            [100%]\n13 passed in 6.99s\n"
+  },
+  {
+    "task": "R4",
+    "exit_code": 0,
+    "output": "............                                                             [100%]\n12 passed in 4.24s\n"
+  },
+  {
+    "task": "R5",
+    "exit_code": 0,
+    "output": ".......                                                                  [100%]\n7 passed in 2.42s\n"
+  },
+  {
+    "task": "R2B",
+    "exit_code": 0,
+    "output": "...................                                                      [100%]\n19 passed in 6.51s\n"
+  },
+  {
+    "task": "R6",
+    "exit_code": 0,
+    "output": "..............................................                           [100%]\n46 passed in 14.59s\n"
+  }
+]

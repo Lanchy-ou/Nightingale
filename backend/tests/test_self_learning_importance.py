@@ -10,7 +10,8 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 from sqlalchemy import URL, create_engine, event as sqlalchemy_event, inspect, select, text, update
 
-from app.ai_pipeline import AnchoredCandidate, PipelineOutput, persist_derived
+from app.ingestion_service import commit_derived as persist_derived
+from app.ai_pipeline import AnchoredCandidate, PipelineOutput
 from app.db import SessionLocal, engine, migrate_e2_schema
 from app.highlights import compute_score, locate_span
 from app.importance_learning import (

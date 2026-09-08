@@ -1,6 +1,8 @@
 """E1 hard gate: Nurse-specific preview and Nurse Consult ingestion."""
 from __future__ import annotations
 
+from app import ingestion_service
+
 from copy import deepcopy
 
 import pytest
@@ -133,7 +135,7 @@ def test_nurse_raw_is_committed_before_pipeline(staff_client, monkeypatch):
     _force_missing_provider(monkeypatch)
     import app.api.sources as sources
 
-    real_run_pipeline = sources.run_pipeline
+    real_run_pipeline = ingestion_service.run_pipeline
     observed: dict[str, bool] = {}
 
     def asserting_pipeline(db, event, raw, *args, **kwargs):
@@ -141,7 +143,7 @@ def test_nurse_raw_is_committed_before_pipeline(staff_client, monkeypatch):
             observed["committed"] = independent.get(Artifact, raw.artifact_id) is not None
         return real_run_pipeline(db, event, raw, *args, **kwargs)
 
-    monkeypatch.setattr(sources, "run_pipeline", asserting_pipeline)
+    monkeypatch.setattr(ingestion_service, "run_pipeline", asserting_pipeline)
     response = staff_client.post(
         f"/api/patients/{fixture.PATIENT_ID}/nurse-consults",
         json=_payload("nurse-raw-first", "nurse-raw-first-key"),

@@ -4,7 +4,7 @@ from datetime import datetime
 import pytest
 from sqlalchemy import select
 
-from app.ai_pipeline import persist_derived
+from app.ingestion_service import commit_derived as persist_derived
 from app.ai_pipeline import run_pipeline
 from app.extraction import Candidate
 from app.llm_client import MockLLMClient
@@ -148,3 +148,15 @@ def test_repair_is_repeatable_and_restore_refuses_later_edit(db_session):
     db_session.commit()
     with pytest.raises(ValueError, match='changed after repair'):
         restore_patient(db_session, next_id)
+
+
+def test_semantic_repair_removes_unsupported_old_risk_flag(db_session):
+    from app.boundary_repair import apply_patient
+    patient = db_session.scalars(select(Patient)).first()
+    hid = ingest(db_session, patient, 'negative-risk', quote='I have no headaches.')
+    h = db_session.get(Highlight, hid)
+    h.feature_flags = {**h.feature_flags, 'explicit_risk': True}
+    db_session.commit()
+    assert apply_patient(db_session, patient)
+    db_session.commit()
+    assert not h.feature_flags['explicit_risk']

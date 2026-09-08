@@ -1,6 +1,8 @@
 """D3 preview API must be strict, non-persistent, and LLM-free."""
 from __future__ import annotations
 
+from app import ingestion_service
+
 from sqlalchemy import func, select
 
 from app.models import Artifact, AuditLog, Event
@@ -26,8 +28,8 @@ def test_normalize_preview_exact_shape_no_persistence_and_no_provider(
     def forbidden(*args, **kwargs):  # pragma: no cover - failure path
         raise AssertionError("normalization must not call provider or pipeline")
 
-    monkeypatch.setattr(sources, "build_client", forbidden)
-    monkeypatch.setattr(sources, "run_pipeline", forbidden)
+    monkeypatch.setattr(ingestion_service, "build_client", forbidden)
+    monkeypatch.setattr(ingestion_service, "run_pipeline", forbidden)
     before = _counts(db_session)
 
     response = clinician_client.post("/api/transcripts/normalize", json={"raw_text": RAW})
