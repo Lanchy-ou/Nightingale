@@ -17,8 +17,6 @@ from .deterministic_pipeline import build_fallback
 from .extraction import validate_candidate
 from .highlights import compute_score, extract_text, is_recent, locate_span
 from .importance_learning import (
-    compose_score,
-    requested_adaptive_adjustment,
     score_new_candidate,
 )
 from .llm_client import (
@@ -175,12 +173,15 @@ def run_pipeline(
     recompute_existing: list[str] = []
     for c, span in anchored:
         existing = db.scalars(
-            select(Highlight).where(
-                Highlight.entity_key == c.entity_key,
+            select(Highlight).join(Event, Event.event_id == Highlight.event_id).where(
+                Highlight.patient_id == event.patient_id,
+                Event.patient_id == event.patient_id,
+                Event.clinic_id == event.clinic_id,
                 Highlight.event_id != event.event_id,
             )
         ).all()
-        repeated = len(existing) > 0
+        existing = [h for h in existing if c.entity_key and h.entity_key == c.entity_key]
+        repeated = bool(existing)
         recency = is_recent(event.started_at, as_of)
         flags = {
             "recency": recency,
@@ -268,6 +269,8 @@ def persist_derived(
     from .audit import add_audit
     from .ids import stable_id
 
+    if source_artifact.event_id != event.event_id:
+        raise ValueError("Source does not belong to the Event")
     now = datetime.now()
     summary_id = f"art_{stable_id(source_artifact.artifact_id, summary_type)}"
     db.add(
@@ -341,28 +344,9 @@ def persist_derived(
         )
         highlight_ids.append(hid)
 
-    for hid in output.recompute_existing:
-        h = db.get(Highlight, hid)
-        if h is not None and not h.feature_flags.get("repeated_mentions"):
-            flags = {**h.feature_flags, "repeated_mentions": True}
-            rescored = compose_score(
-                base_importance_score=compute_score(flags),
-                adaptive_adjustment=requested_adaptive_adjustment(
-                    h.adaptive_adjustment, h.learning_metadata
-                ),
-                decay_adjustment=h.decay_adjustment,
-                feature_flags=flags,
-                status=h.status,
-                review_status=h.review_status,
-                learning_metadata=h.learning_metadata,
-            )
-            h.feature_flags = flags
-            h.base_importance_score = rescored.base_importance_score
-            h.adaptive_adjustment = rescored.adaptive_adjustment
-            h.decay_adjustment = rescored.decay_adjustment
-            h.importance_score = rescored.importance_score
-            h.learning_metadata = rescored.learning_metadata
-            h.updated_at = now
+    from .repeated_mentions import recompute_repeated
+
+    recompute_repeated(db, event.patient_id, event.clinic_id, as_of=now)
 
     add_audit(
         db,
@@ -382,9 +366,6 @@ def persist_derived(
         rebuild_glance_projections(db, event.patient_id, as_of=now)
         db.commit()
     except Exception:
-        # Raw ingestion was committed by the caller before this derived
-        # transaction. Roll back every pending AI artifact/highlight/audit row
-        # while preserving that raw source for a later retry.
         db.rollback()
         raise
     return summary_id, highlight_ids

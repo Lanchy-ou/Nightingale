@@ -191,6 +191,8 @@ def compile_observed_feedback_dataset(
             RankingRun.viewer_role == viewer_role,
         )
     ).all()
+    from .boundary_repair import exclude_pre_repair_runs
+    runs = exclude_pre_repair_runs(db, runs)
     runs_by_id = {run.run_id: run for run in runs}
     decisions = db.scalars(
         select(RankingDecision).where(

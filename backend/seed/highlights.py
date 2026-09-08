@@ -37,15 +37,7 @@ def group_repeated_entity_keys(anchored: list[tuple[str, str]]) -> set[str]:
     return {key for key, events in events_per_key.items() if len(events) >= 2}
 
 
-def group_repeated_patient_entity_keys(
-    anchored: list[tuple[str, str, str]],
-) -> set[tuple[str, str]]:
-    """Scope repeated mentions to one patient; never learn across records."""
-    events_per_key: dict[tuple[str, str], set[str]] = defaultdict(set)
-    for patient_id, entity_key, event_id in anchored:
-        if entity_key:
-            events_per_key[(patient_id, entity_key)].add(event_id)
-    return {key for key, events in events_per_key.items() if len(events) >= 2}
+from app.repeated_mentions import group_repeated_patient_entity_keys
 
 
 def generate_highlights(db: Session) -> list[str]:
@@ -67,7 +59,7 @@ def generate_highlights(db: Session) -> list[str]:
     # 2. repeated_mentions across distinct events (anchored only).
     repeated_keys = group_repeated_patient_entity_keys(
         [
-            (c.get("patient_id", fixture.PATIENT_ID), c["entity_key"], e.event_id)
+            (c.get("patient_id", fixture.PATIENT_ID), c.get("entity_key"), e.event_id)
             for c, _s, e in anchored
         ]
     )
@@ -79,7 +71,8 @@ def generate_highlights(db: Session) -> list[str]:
         source_version, quote_hash = create_source_binding(source, span)
         entity_key = cand.get("entity_key")
         patient_id = cand.get("patient_id", fixture.PATIENT_ID)
-        repeated = bool(entity_key and (patient_id, entity_key) in repeated_keys)
+        key = entity_key
+        repeated = bool(key and (patient_id, key) in repeated_keys)
         recency = is_recent(event.started_at, SEED_AS_OF)
         flags = {
             "recency": recency,

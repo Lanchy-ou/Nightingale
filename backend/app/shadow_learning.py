@@ -398,6 +398,8 @@ def evaluate_runs(
     if run_ids:
         query = query.where(RankingRun.run_id.in_(run_ids))
     runs = db.scalars(query.order_by(RankingRun.evaluated_at, RankingRun.run_id)).all()
+    from .boundary_repair import exclude_pre_repair_runs
+    runs = exclude_pre_repair_runs(db, runs)
     selected_ids = [run.run_id for run in runs]
     decisions = db.scalars(
         select(RankingDecision).where(RankingDecision.run_id.in_(selected_ids or ["__none__"]))

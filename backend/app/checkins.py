@@ -990,11 +990,14 @@ def _summary_output(
         )
         entity_key = normalize_entity_key(candidate.entity_type, candidate.text)
         existing = db.scalars(
-            select(Highlight).where(
-                Highlight.entity_key == entity_key,
+            select(Highlight).join(Event, Event.event_id == Highlight.event_id).where(
+                Highlight.patient_id == patient.patient_id,
+                Event.patient_id == patient.patient_id,
+                Event.clinic_id == patient.clinic_id,
                 Highlight.event_id != session.event_id,
             )
         ).all()
+        existing = [h for h in existing if entity_key and h.entity_key == entity_key]
         flags = {
             "recency": True,
             "explicit_risk": candidate.entity_type == "risk",
