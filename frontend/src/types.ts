@@ -86,6 +86,7 @@ export interface Highlight {
   updated_at: string;
   entity_type: string | null;
   entity_key: string | null;
+  semantic_context?: { recognition_status: string; assertion: string; subject: string; temporality: string } | null;
   assertion_value: string | null;
   conflict_with_artifact_id: string | null;
   review_status: string | null;

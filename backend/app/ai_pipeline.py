@@ -46,6 +46,7 @@ class AnchoredCandidate:
     review_status: str | None
     conflict_with_artifact_id: str | None
     priority_review_reason_codes: list[str] = field(default_factory=list)
+    semantic_context: dict | None = None
 
 
 @dataclass
@@ -176,6 +177,8 @@ def run_pipeline(
     candidates: list[AnchoredCandidate] = []
     recompute_existing: list[str] = []
     for c, span in anchored:
+        from .semantic_rules import interpret_span, repetition_key
+        semantics = interpret_span(raw, span, c.entity_type, c.text)
         existing = db.scalars(
             select(Highlight).join(Event, Event.event_id == Highlight.event_id).where(
                 Highlight.patient_id == event.patient_id,
@@ -184,12 +187,13 @@ def run_pipeline(
                 Highlight.event_id != event.event_id,
             )
         ).all()
-        existing = [h for h in existing if c.entity_key and h.entity_key == c.entity_key]
+        key = repetition_key(semantics)
+        existing = [h for h in existing if key and repetition_key(h.semantic_context) == key]
         repeated = bool(existing)
         recency = is_recent(event.started_at, as_of)
         flags = {
             "recency": recency,
-            "explicit_risk": bool(c.explicit_risk),
+            "explicit_risk": bool(c.explicit_risk) and bool(repetition_key(semantics)),
             "unresolved_task": False,
             "clinician_confirmed": False,
             "symptom_change": bool(c.symptom_change),
@@ -227,6 +231,7 @@ def run_pipeline(
                 score=compute_score(flags),
                 review_status=review_status,
                 conflict_with_artifact_id=conflict_with,
+                semantic_context=semantics,
             )
         )
         recompute_existing.extend(e.highlight_id for e in existing)
@@ -341,6 +346,7 @@ def persist_derived(
                 updated_at=now,
                 entity_type=ac.entity_type,
                 entity_key=ac.entity_key,
+                semantic_context=ac.semantic_context,
                 assertion_value=ac.assertion_value,
                 conflict_with_artifact_id=ac.conflict_with_artifact_id,
                 review_status=ac.review_status,

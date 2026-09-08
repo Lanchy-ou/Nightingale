@@ -993,6 +993,8 @@ def _summary_output(
             candidate.quote,
             candidate.priority_review_reason_codes,
         )
+        from .semantic_rules import interpret_span, repetition_key
+        semantics = interpret_span(raw.content, span, candidate.entity_type, candidate.text)
         entity_key = normalize_entity_key(candidate.entity_type, candidate.text)
         existing = db.scalars(
             select(Highlight).join(Event, Event.event_id == Highlight.event_id).where(
@@ -1002,10 +1004,11 @@ def _summary_output(
                 Highlight.event_id != session.event_id,
             )
         ).all()
-        existing = [h for h in existing if entity_key and h.entity_key == entity_key]
+        semantic_key = repetition_key(semantics)
+        existing = [h for h in existing if semantic_key and repetition_key(h.semantic_context) == semantic_key]
         flags = {
             "recency": True,
-            "explicit_risk": candidate.entity_type == "risk",
+            "explicit_risk": candidate.entity_type == "risk" and bool(repetition_key(semantics)),
             "unresolved_task": False,
             "clinician_confirmed": False,
             "symptom_change": candidate.symptom_change,
@@ -1043,6 +1046,7 @@ def _summary_output(
                 review_status=review_status,
                 conflict_with_artifact_id=conflict_with,
                 priority_review_reason_codes=priority_codes,
+                semantic_context=semantics,
             )
         )
         source_facts.append(

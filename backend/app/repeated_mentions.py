@@ -5,6 +5,7 @@ from datetime import datetime
 from sqlalchemy import select
 
 from .models import Event, Highlight
+from .semantic_rules import repetition_key
 
 RULE_VERSION = "repetition-semantic-v2"
 
@@ -25,7 +26,7 @@ def scoped_highlights(db, patient_id, clinic_id):
 
 def repetition_changes(db, patient_id, clinic_id, *, legacy=False):
     rows = scoped_highlights(db, patient_id, clinic_id)
-    keys = {h.highlight_id: h.entity_key for h in rows}
+    keys = {h.highlight_id: (h.entity_key if legacy else repetition_key(h.semantic_context)) for h in rows}
     repeated = group_repeated_patient_entity_keys(
         (h.patient_id, keys[h.highlight_id], h.event_id) for h in rows)
     return [(h, bool(keys[h.highlight_id] and (patient_id, keys[h.highlight_id]) in repeated))

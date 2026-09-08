@@ -22,7 +22,7 @@ repairs = Table("boundary_repairs", Base.metadata,
     Column("created_at", DateTime, nullable=False),
     Column("restored_at", DateTime))
 
-FIELDS = ("feature_flags", "base_importance_score", "adaptive_adjustment",
+FIELDS = ("semantic_context", "feature_flags", "base_importance_score", "adaptive_adjustment",
           "decay_adjustment", "importance_score", "score_factors", "score_rule_version",
           "learning_metadata", "status", "status_history", "review_status")
 
@@ -52,20 +52,47 @@ def full_state(db, rows, patient_id):
             "sources": sources}
 
 
+def semantic_updates(db, rows, *, include_unchanged=False):
+    from .provenance_binding import resolve_highlight_source
+    from .semantic_rules import interpret_span
+    changes = {}
+    for h in rows:
+        resolution = resolve_highlight_source(db, h)
+        if resolution.status != "current" or not resolution.quote:
+            continue
+        context = interpret_span(resolution.content, h.source_span, h.entity_type, h.text)
+        if include_unchanged or context != h.semantic_context:
+            changes[h.highlight_id] = context
+    return changes
+
+
+def unsupported_risk_ids(rows, contexts):
+    from .semantic_rules import repetition_key
+    return {h.highlight_id for h in rows if h.task_id is None
+            and h.feature_flags.get("explicit_risk") and h.highlight_id in contexts
+            and not repetition_key(contexts[h.highlight_id])}
+
+
 def apply_patient(db, patient, *, as_of=None, mode="semantics"):
     # Obtain the SQLite writer lock before reading the state to be repaired.
     db.execute(Highlight.__table__.update().where(
         Highlight.patient_id == patient.patient_id).values(updated_at=Highlight.updated_at))
     rows = scoped_highlights(db, patient.patient_id, patient.clinic_id)
-    legacy = True
-    semantics = {}
-    if not semantics and not repetition_changes(db, patient.patient_id, patient.clinic_id, legacy=legacy):
+    legacy = mode == "repetition"
+    contexts = {} if legacy else semantic_updates(db, rows, include_unchanged=True)
+    semantics = {h.highlight_id: contexts[h.highlight_id] for h in rows
+                 if h.highlight_id in contexts and h.semantic_context != contexts[h.highlight_id]}
+    unsafe_risks = unsupported_risk_ids(rows, contexts)
+    if not semantics and not unsafe_risks and not repetition_changes(db, patient.patient_id, patient.clinic_id, legacy=legacy):
         return None
     now = as_of or datetime.now()
     before = full_state(db, rows, patient.patient_id)
     for h in rows:
         if h.highlight_id in semantics:
             h.semantic_context = semantics[h.highlight_id]
+            h.updated_at = now
+        if h.highlight_id in unsafe_risks:
+            h.feature_flags = {**h.feature_flags, "explicit_risk": False}
             h.updated_at = now
     count = recompute_repeated(db, patient.patient_id, patient.clinic_id, as_of=now, legacy=legacy)
     rebuild_glance_projections(db, patient.patient_id, as_of=now)
@@ -76,7 +103,8 @@ def apply_patient(db, patient, *, as_of=None, mode="semantics"):
     add_audit(db, actor_id=None, actor_role="system", action="boundary_repair",
         target_type="patient", target_id=patient.patient_id, clinic_id=patient.clinic_id,
         patient_id=patient.patient_id, details={"repair_id": repair_id,
-        "rule_version": "repetition-patient-v1" if legacy else RULE_VERSION, "changed_count": count, "semantic_count": len(semantics)})
+        "rule_version": "repetition-patient-v1" if legacy else RULE_VERSION, "changed_count": count,
+        "semantic_count": len(semantics), "risk_flag_count": len(unsafe_risks)})
     return repair_id
 
 

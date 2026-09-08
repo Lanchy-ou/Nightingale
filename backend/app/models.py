@@ -516,6 +516,7 @@ class Highlight(Base):
     # M4: deterministic ranking / conflict / provenance fields.
     entity_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
     entity_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    semantic_context: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     assertion_value: Mapped[str | None] = mapped_column(String(255), nullable=True)
     conflict_with_artifact_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     review_status: Mapped[str | None] = mapped_column(String(16), nullable=True)

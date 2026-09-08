@@ -199,6 +199,7 @@ export default function GlancePanel({
                   {highlight.status === 'pinned' && <span>Kept on top</span>}
                 </header>
                 <h3>{highlight.text}</h3>
+                {highlight.semantic_context && (highlight.semantic_context.recognition_status === 'unknown' || highlight.semantic_context.temporality === 'unknown') && <span className="muted">Meaning not verified — check source</span>}
                 <p className="priority-reason">{highlight.risk_reason}</p>
                 {event && <p className="priority-source-date">{eventLabel(event)} · {formatDate(event.started_at)}</p>}
                 <div className="priority-actions">

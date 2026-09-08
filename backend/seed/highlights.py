@@ -38,6 +38,7 @@ def group_repeated_entity_keys(anchored: list[tuple[str, str]]) -> set[str]:
 
 
 from app.repeated_mentions import group_repeated_patient_entity_keys
+from app.semantic_rules import interpret, repetition_key
 
 
 def generate_highlights(db: Session) -> list[str]:
@@ -59,7 +60,7 @@ def generate_highlights(db: Session) -> list[str]:
     # 2. repeated_mentions across distinct events (anchored only).
     repeated_keys = group_repeated_patient_entity_keys(
         [
-            (c.get("patient_id", fixture.PATIENT_ID), c.get("entity_key"), e.event_id)
+            (c.get("patient_id", fixture.PATIENT_ID), repetition_key(interpret(c["quote"], c.get("entity_type"), c["text"])), e.event_id)
             for c, _s, e in anchored
         ]
     )
@@ -71,7 +72,8 @@ def generate_highlights(db: Session) -> list[str]:
         source_version, quote_hash = create_source_binding(source, span)
         entity_key = cand.get("entity_key")
         patient_id = cand.get("patient_id", fixture.PATIENT_ID)
-        key = entity_key
+        semantics = interpret(cand["quote"], cand.get("entity_type"), cand["text"])
+        key = repetition_key(semantics)
         repeated = bool(key and (patient_id, key) in repeated_keys)
         recency = is_recent(event.started_at, SEED_AS_OF)
         flags = {
@@ -118,6 +120,7 @@ def generate_highlights(db: Session) -> list[str]:
                 updated_at=_GENERATED_AT,
                 entity_type=cand.get("entity_type"),
                 entity_key=entity_key,
+                semantic_context=semantics,
                 assertion_value=cand.get("assertion_value"),
                 conflict_with_artifact_id=None,
                 review_status=None,

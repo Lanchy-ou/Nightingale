@@ -5,7 +5,7 @@ import json
 from sqlalchemy import select
 from app.db import SessionLocal, engine
 from app.models import Patient
-from app.boundary_repair import apply_patient, repairs, restore_patient
+from app.boundary_repair import apply_patient, repairs, restore_patient, semantic_updates, unsupported_risk_ids
 from app.repeated_mentions import repetition_changes, scoped_highlights
 
 
@@ -15,7 +15,7 @@ def main():
     parser.add_argument("--patient-id")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--restore")
-    parser.add_argument("--mode", choices=["repetition"], default="repetition")
+    parser.add_argument("--mode", choices=["repetition", "semantics"], default="semantics")
     args = parser.parse_args()
     if args.restore and not args.apply:
         parser.error("--restore requires --apply")
@@ -36,12 +36,15 @@ def main():
     for patient_id, clinic_id in ids:
         with SessionLocal() as db:
             count = len(repetition_changes(db, patient_id, clinic_id, legacy=args.mode == "repetition"))
-            semantic_count = 0
+            semantic_count = len(semantic_updates(db, scoped_highlights(db, patient_id, clinic_id))) if args.mode == "semantics" else 0
+            rows = scoped_highlights(db, patient_id, clinic_id)
+            risk_count = len(unsupported_risk_ids(rows, semantic_updates(db, rows, include_unchanged=True))) if args.mode == "semantics" else 0
             repair_id = apply_patient(db, db.get(Patient, patient_id), mode=args.mode) if args.apply else None
             if args.apply:
                 db.commit()
             print(json.dumps({"patient_id": patient_id, "clinic_id": clinic_id,
                               "current_repetition_change_count": count, "semantic_update_count": semantic_count,
+                              "risk_flag_update_count": risk_count,
                               "repair_id": repair_id}))
 
 

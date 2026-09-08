@@ -1140,3 +1140,13 @@ def get_db():
         yield db
     finally:
         db.close()
+
+def migrate_boundary_schema(target_engine=engine):
+    from .maintenance import jobs
+    from .boundary_repair import repairs
+    with target_engine.begin() as connection:
+        columns = {c["name"] for c in inspect(connection).get_columns("highlights")}
+        if "semantic_context" not in columns:
+            connection.execute(text("ALTER TABLE highlights ADD COLUMN semantic_context JSON"))
+        jobs.create(connection, checkfirst=True)
+        repairs.create(connection, checkfirst=True)

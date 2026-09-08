@@ -78,6 +78,7 @@ class HighlightOut(BaseModel):
     updated_at: datetime
     entity_type: str | None = None
     entity_key: str | None = None
+    semantic_context: dict | None = None
     assertion_value: str | None = None
     conflict_with_artifact_id: str | None = None
     review_status: str | None = None
