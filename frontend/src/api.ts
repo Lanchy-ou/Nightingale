@@ -336,6 +336,7 @@ export const api = {
     get<VoiceModelStatus>('/api/admin/system-settings/voice-model/status', signal),
 
   getCurrentIdentity: (signal?: AbortSignal) => get<CurrentIdentity>(`/api/auth/session`, signal),
+  getAdminPatientIdentities: () => request<{ patient_id: string; name: string }[]>('/api/admin/patient-identities'),
   getClinicPatients: (signal?: AbortSignal) => get<Patient[]>(`/api/patients`, signal),
   getPatient: (id: string, signal?: AbortSignal) => get<Patient>(`/api/patients/${id}`, signal),
   getPatientView: (id: string, signal?: AbortSignal) => get<PatientView>(`/api/patients/${id}/patient-view`, signal),

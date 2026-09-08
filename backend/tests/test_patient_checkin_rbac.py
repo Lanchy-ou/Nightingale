@@ -45,8 +45,8 @@ def test_clinical_roles_cannot_author_patient_messages_and_hidden_draft_is_404(
             f"/api/check-ins/{session_id}/messages",
             json={"message_id": "clinical-author-message", "intent": "answer", "text": "probe"},
         ).status_code == 404
-        assert client.get(f"/api/events/{event_id}/audit").status_code == 404
-        assert client.get(f"/api/events/{event_id}/comments").status_code == 404
+        assert client.get(f"/api/events/{event_id}/audit").status_code == (403 if client is admin_client else 404)
+        assert client.get(f"/api/events/{event_id}/comments").status_code == (403 if client is admin_client else 404)
 
     assert clinician_client.post(
         f"/api/events/{event_id}/notes",

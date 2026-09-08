@@ -112,8 +112,7 @@ def test_portal_closure_and_old_guidance_withdrawal(clinician_client, patient_cl
     order = upload(c, reopened, 'corrected', b'%PDF-1.4\nSynthetic correction\n%%EOF')
     assert artifact_id not in str(patient_client.get('/api/patients/pat_001/patient-view').json())
     assert c.get(f'/api/patient-instructions/{artifact_id}/publication').json()['state'] == 'withdrawn'
-    assert admin_client.get(f"/api/events/{order['result_event_id']}/artifacts").json() == [
-        row for row in admin_client.get(f"/api/events/{order['result_event_id']}/artifacts").json() if row['artifact_type'] == 'patient_instruction']
+    assert admin_client.get(f"/api/events/{order['result_event_id']}/artifacts").status_code == 403
 
 
 def test_two_doctors_cannot_both_review_stale_version(clinician_client):

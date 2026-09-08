@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { api } from '../api';
-import type { InviteCreated, InviteInfo, Patient } from '../types';
+import type { InviteCreated, InviteInfo } from '../types';
 
 const ROLES = ['clinician', 'staff', 'patient', 'admin'] as const;
 const ROLE_LABELS: Record<string, string> = {
@@ -28,7 +28,7 @@ export default function AdminInvitesPage({
   embedded?: boolean;
 }) {
   const [invites, setInvites] = useState<InviteInfo[]>([]);
-  const [patients, setPatients] = useState<Patient[]>([]);
+  const [patients, setPatients] = useState<{ patient_id: string; name: string }[]>([]);
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<string>('clinician');
   const [patientId, setPatientId] = useState<string>('');
@@ -41,7 +41,7 @@ export default function AdminInvitesPage({
     try {
       const [inviteList, patientList] = await Promise.all([
         api.listInvites(),
-        api.getClinicPatients(),
+        api.getAdminPatientIdentities(),
       ]);
       setInvites(inviteList);
       setPatients(patientList);

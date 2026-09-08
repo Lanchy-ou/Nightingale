@@ -11,7 +11,7 @@ from ..audit import add_audit
 from ..authz import authorize, require_auth, resource_not_found
 from ..db import get_db
 from ..clinic_scope import load_clinic_user
-from ..models import AuditLog, AuthSession, User, UserCredential
+from ..models import AuditLog, AuthSession, User, UserCredential, Patient
 from ..role_context import RoleContext
 from ..schemas import (
     AdminAccessAuditOut,
@@ -23,6 +23,14 @@ from ..schemas import (
 
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
+
+
+@router.get("/patient-identities")
+def patient_identities(db: Session = Depends(get_db), ctx: RoleContext = Depends(require_auth)):
+    authorize(ctx, "admin_patient_identities", ctx.clinic_id, None)
+    return [{"patient_id": p.patient_id, "name": p.name} for p in db.scalars(
+        select(Patient).where(Patient.clinic_id == ctx.clinic_id)
+        .order_by(Patient.name, Patient.patient_id))]
 
 ACCESS_AUDIT_ACTIONS = {
     "invite_created",

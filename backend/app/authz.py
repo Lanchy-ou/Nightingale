@@ -128,18 +128,9 @@ PERMISSIONS: dict[str, dict[str, bool]] = {
         "read_voice_audio": True,
     },
     "admin": {
-        "read_notifications": True,
         "manage_notifications": True,
-        # Read-only oversight, clinic-scoped. No note/comment/highlight writes.
-        "read_patient": True,
-        "read_events": True,
-        "read_artifacts": True,
-        "read_glance": True,
-        "read_provenance": True,
-        "read_comments": True,
-        "read_versions": True,
-        "read_audit": True,
-        "list_clinic_patients": True,
+        # Account/system administration; no clinical record access.
+        "admin_patient_identities": True,
         # D1: clinic-scoped invite administration (no cross-clinic invites).
         "create_invite": True,
         "list_invites": True,
@@ -152,9 +143,6 @@ PERMISSIONS: dict[str, dict[str, bool]] = {
         "admin_import_patients": True,
         "admin_read_clinic_settings": True,
         "admin_update_clinic_settings": True,
-        "read_tasks": True,
-        "read_task_provenance": True,
-        "read_patient_checkin": True,
     },
 }
 
