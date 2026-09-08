@@ -74,6 +74,9 @@ def test_seed_unresolved_task_is_structural_not_fixed_false(db_session):
 def test_terminal_transition_removes_unresolved_weight_deterministically(
     clinician_client, patient_client, db_session
 ):
+    from app.glance_projection import rebuild_glance_projections
+    rebuild_glance_projections(db_session, fixture.PATIENT_ID)
+    db_session.commit()
     before = db_session.get(Highlight, "hl_blood_test_pending")
     before_score = before.importance_score
     patient_client.post(

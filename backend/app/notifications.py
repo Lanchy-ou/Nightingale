@@ -95,6 +95,8 @@ def reconcile_notifications(db, *, now=None):
 
 @event.listens_for(Session, "before_commit")
 def business_outbox(db):
+    if db.info.get("authentication_metadata_only"):
+        return
     # Keep the examination's parent workflow live while independently assigned care actions remain.
     changed = [t for t in db.dirty if isinstance(t, Task) and (t.routing_metadata or {}).get("test_order_id")]
     if changed:

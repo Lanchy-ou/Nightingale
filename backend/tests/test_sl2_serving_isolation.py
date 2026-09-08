@@ -22,7 +22,10 @@ def test_formal_glance_never_queries_or_loads_sl2_training_state(clinician_clien
     assert not any("learning_evaluations" in statement for statement in statements)
 
 
-def test_sl2_policy_activation_remains_shadow_only(admin_client, clinician_client):
+def test_sl2_policy_activation_remains_shadow_only(admin_client, clinician_client, db_session):
+    from app.glance_projection import rebuild_glance_projections
+    rebuild_glance_projections(db_session, fixture.PATIENT_ID)
+    db_session.commit()
     before = clinician_client.get(f"/api/patients/{fixture.PATIENT_ID}/glance").json()
     activated = admin_client.post(
         "/api/admin/learning/policies/sl2-pairwise-linear-v1/activate", json={}

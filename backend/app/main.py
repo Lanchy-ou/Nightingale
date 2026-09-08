@@ -7,7 +7,6 @@ tests can assert header parsing.
 from __future__ import annotations
 
 import os
-import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, Request
@@ -85,38 +84,8 @@ async def lifespan(_: FastAPI):
     NoteDraft.__table__.create(engine, checkfirst=True)
     from .result_schema import migrate_results
     migrate_results(engine)
-    stop = asyncio.Event()
+    yield
 
-    async def patient_review_sweep():
-        from .db import SessionLocal
-        from .patient_review import materialize_due_escalations
-        from .glance_projection import refresh_time_sensitive_glance
-
-        interval = max(
-            1, int(os.environ.get("NANTINGALE_PATIENT_REVIEW_SWEEP_SECONDS", "60"))
-        )
-        while not stop.is_set():
-            try:
-                with SessionLocal() as db:
-                    escalated = materialize_due_escalations(db)
-                    refreshed = refresh_time_sensitive_glance(db)
-                    if escalated or refreshed:
-                        db.commit()
-                from .notifications import sweep
-                await asyncio.to_thread(sweep, SessionLocal)
-            except Exception as exc:
-                emit_log("sweep_error", error_type=type(exc).__name__, level="error")
-            try:
-                await asyncio.wait_for(stop.wait(), timeout=interval)
-            except TimeoutError:
-                pass
-
-    worker = asyncio.create_task(patient_review_sweep())
-    try:
-        yield
-    finally:
-        stop.set()
-        await worker
 
 app = FastAPI(
     title="Nightingale API",

@@ -100,7 +100,11 @@ def _session_user(request: Request, db: Session) -> User | None:
     if (now - row.last_seen_at).total_seconds() > refresh:
         row.last_seen_at = now
         db.add(row)
-        db.commit()
+        db.info["authentication_metadata_only"] = True
+        try:
+            db.commit()
+        finally:
+            db.info.pop("authentication_metadata_only", None)
     return user
 
 

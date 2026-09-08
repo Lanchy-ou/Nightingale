@@ -128,6 +128,9 @@ def test_needs_review_surfaces_ahead_of_normal_suggestions(clinician_client, db_
 
 
 def test_accept_recomputes_score_and_is_immediately_visible(clinician_client, db_session):
+    from app.glance_projection import rebuild_glance_projections
+    rebuild_glance_projections(db_session, fixture.PATIENT_ID)
+    db_session.commit()
     before = db_session.get(Highlight, "hl_bp_elevated")
     before_score = before.importance_score
 

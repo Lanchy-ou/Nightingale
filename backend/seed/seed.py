@@ -59,6 +59,7 @@ EDITABLE_NOTE_TYPES = {"staff_note", "clinician_note"}
 
 
 def create_schema(target_engine=engine) -> None:
+    from app.maintenance import jobs
     from app.boundary_repair import repairs
     Base.metadata.drop_all(target_engine)
     Base.metadata.create_all(target_engine)
@@ -118,7 +119,9 @@ def _backfill_instruction_publications(db: Session) -> None:
 
 
 def seed(db: Session) -> None:
+    from app.maintenance import jobs
     from app.boundary_repair import repairs
+    db.execute(delete(jobs))
     db.execute(delete(repairs))
     # Clear in FK-safe order (children first). D1 identity tables reference
     # users/patients/clinics and are cleared before them.

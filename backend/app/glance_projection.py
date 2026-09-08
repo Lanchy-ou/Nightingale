@@ -106,7 +106,7 @@ def rebuild_glance_projections(
     capture_ranking_runs(db, patient_id, evaluated_at=evaluated_at)
 
 
-def refresh_time_sensitive_glance(db: Session, *, as_of: datetime | None = None) -> int:
+def due_glance_patients(db: Session, *, as_of: datetime | None = None) -> set[str]:
     """Refresh only crossed recency/due boundaries in the maintenance worker.
 
     Reads metadata only; unchanged projections produce no new ranking runs.
@@ -135,6 +135,12 @@ def refresh_time_sensitive_glance(db: Session, *, as_of: datetime | None = None)
             ),
         ).distinct()
     ).all())
+    return changed
+
+
+def refresh_time_sensitive_glance(db: Session, *, as_of: datetime | None = None) -> int:
+    now = as_of or datetime.now()
+    changed = due_glance_patients(db, as_of=now)
     for patient_id in sorted(changed):
         rebuild_glance_projections(db, patient_id, as_of=now)
     return len(changed)

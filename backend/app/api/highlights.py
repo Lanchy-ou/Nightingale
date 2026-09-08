@@ -15,7 +15,6 @@ from ..clinic_scope import load_highlight_with_event, load_patient
 from ..highlights import GLANCE_LIMIT, compute_score, status_transitions
 from ..models import Artifact, Event, GlanceProjection, Highlight, Patient, Task
 from ..glance_projection import rebuild_glance_projections
-from ..patient_review import materialize_due_escalations
 from ..provenance_binding import resolve_highlight_source
 from ..role_context import RoleContext
 from ..schemas import (
@@ -41,8 +40,6 @@ def get_glance(
         raise resource_not_found()
     authorize(ctx, "read_glance", patient.clinic_id, patient.patient_id)
 
-    if materialize_due_escalations(db):
-        db.commit()
     rows = db.execute(
         select(GlanceProjection, Highlight)
         .join(Highlight, Highlight.highlight_id == GlanceProjection.highlight_id)

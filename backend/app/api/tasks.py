@@ -19,7 +19,7 @@ from ..ids import new_id
 from ..models import Artifact, Event, Patient, PatientReviewItem, Task, User
 from ..models import Highlight
 from ..glance_projection import rebuild_glance_projections
-from ..patient_review import ensure_clinician_review_task, materialize_due_escalations
+from ..patient_review import ensure_clinician_review_task
 from ..role_context import RoleContext
 from ..schemas import (
     ArtifactOut,
@@ -204,9 +204,6 @@ def list_tasks(
     if patient is None:
         raise resource_not_found()
     authorize(ctx, "read_tasks", patient.clinic_id, patient.patient_id)
-    if ctx.role in {"staff", "clinician"}:
-        if materialize_due_escalations(db):
-            db.commit()
     query = select(Task).where(
         Task.patient_id == patient_id,
         Task.clinic_id == ctx.clinic_id,

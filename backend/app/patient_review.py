@@ -301,11 +301,13 @@ def materialize_due_escalations(
     db: Session,
     *,
     as_of: datetime | None = None,
+    task_id: str | None = None,
 ) -> int:
     """Idempotently escalate overdue Nurse reviews into clinician work."""
     now = as_of or datetime.now()
     tasks = db.scalars(
         select(Task).where(
+            Task.task_id == task_id if task_id else True,
             Task.task_kind == "patient_report_review",
             Task.status.in_(("open", "in_progress")),
             Task.escalate_at.is_not(None),
@@ -327,8 +329,8 @@ def materialize_due_escalations(
         ensure_clinician_review_task(db, staff_task=task, now=now)
         add_audit(
             db,
-            actor_id=task.created_by,
-            actor_role="patient",
+            actor_id=None,
+            actor_role="system",
             action="patient_review_escalate",
             target_type="task",
             target_id=task.task_id,
