@@ -30,6 +30,7 @@ from .highlights import extract_text, locate_span
 from .llm_client import ProviderTimeoutError
 from .models import Artifact, Event, Highlight, Patient, Task, User
 from .provenance_binding import resolve_highlight_source
+from .egress import call_provider, EgressRejected
 from .redaction import redact_content
 
 MAX_PROVIDER_EVIDENCE = 12
@@ -431,9 +432,14 @@ def answer_query(
         "Copilot sends only a bounded set of exact, de-identified evidence spans to the provider and never uses external sources."
     ]
     try:
-        result = client.copilot(_bounded_payload(query, evidence_list, patient, db), query.category)
+        result = call_provider(client, "copilot", _bounded_payload(query, evidence_list, patient, db), query.category)
         claims = _validated_claims(result, evidence, query.category)
         draft = _draft_preview(query=query, evidence=evidence_list, patient=patient, actor_id=actor_id)
+    except EgressRejected:
+        from .operational_logging import emit_log
+        emit_log("provider_error", error_code="egress_rejected", level="warning")
+        status, claims, draft = "unavailable", [], None
+        limitations.append("The external request did not pass the data boundary check.")
     except ProviderTimeoutError:
         status = "unavailable"
         claims = []

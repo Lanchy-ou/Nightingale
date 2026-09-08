@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from .conflicts import clinical_assertion_sources, find_conflict
 from .deterministic_pipeline import build_fallback
+from .egress import call_provider, EgressRejected
 from .extraction import validate_candidate
 from .highlights import compute_score, extract_text, is_recent, locate_span
 from .importance_learning import (
@@ -135,7 +136,10 @@ def run_pipeline(
 
     # 1. primary attempt
     try:
-        result = client.summarize(redacted, flow_type)
+        result = call_provider(client, "summarize", redacted, flow_type)
+    except EgressRejected:
+        fallback_reason = "egress_rejected"
+        emit_log("provider_error", error_code="egress_rejected", level="warning")
     except ProviderUnavailableError:
         fallback_reason = "provider_missing"
     except ProviderTimeoutError:

@@ -39,6 +39,7 @@ from .models import (
     User,
 )
 from .priority_routing import validated_priority_reason_codes
+from .egress import call_provider, EgressRejected
 from .redaction import redact_content, restore_placeholders, unresolved_placeholders
 from .schemas import (
     CheckInMessageOut,
@@ -495,7 +496,7 @@ def _bounded_turn(
         fallback_reason = "bounded_medical_request"
     else:
         try:
-            result = client.checkin_turn(redaction.redacted, session.clarification_count)
+            result = call_provider(client, "checkin_turn", redaction.redacted, session.clarification_count)
             patient_ids = {row.message_id for row in rows if row.role == "patient"}
             if not set(result.referenced_patient_message_ids).issubset(patient_ids):
                 raise InvalidOutputError("provider referenced a non-patient message")
@@ -522,6 +523,8 @@ def _bounded_turn(
                 result.acknowledgement + " " + (result.next_question or "")
             ):
                 raise InvalidOutputError("provider returned medical advice language")
+        except EgressRejected:
+            fallback_reason = "egress_rejected"
         except ProviderUnavailableError:
             fallback_reason = "provider_missing"
         except ProviderTimeoutError:
@@ -916,7 +919,7 @@ def _summary_output(
     )
     fallback_reason = None
     try:
-        result = client.checkin_summary(redaction.redacted)
+        result = call_provider(client, "checkin_summary", redaction.redacted)
         patient_ids = {message.message_id for message in patient_messages}
         if set(result.referenced_patient_message_ids) != patient_ids:
             raise InvalidOutputError("summary must reference every patient message and no AI message")
@@ -941,6 +944,8 @@ def _summary_output(
                 candidate.assertion_value = restore_placeholders(
                     candidate.assertion_value, redaction.placeholder_mapping
                 )
+    except EgressRejected:
+        fallback_reason = "egress_rejected"
     except ProviderUnavailableError:
         fallback_reason = "provider_missing"
     except ProviderTimeoutError:

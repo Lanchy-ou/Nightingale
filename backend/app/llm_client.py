@@ -15,6 +15,7 @@ import os
 import re
 from typing import Protocol
 
+from .egress import guarded
 from .extraction import AISummaryResult, Candidate
 from .priority_routing import validated_priority_reason_codes
 from .schemas import CheckInSummaryCandidate, CheckInSummaryResult, CheckInTurnResult
@@ -472,6 +473,7 @@ class DeepSeekAdapter:
         except Exception as e:
             raise ProviderProtocolError(f"DeepSeek connection check failed: {type(e).__name__}")
 
+    @guarded
     def summarize(self, redacted: RedactedContent, flow_type: str) -> AISummaryResult:
         try:
             resp = self._run_chat_create(
@@ -503,6 +505,7 @@ class DeepSeekAdapter:
         except Exception as e:
             raise InvalidOutputError(f"DeepSeek output failed schema: {e}")
 
+    @guarded
     def copilot(self, redacted: RedactedContent, category: str) -> CopilotProviderResult:
         try:
             resp = self._run_chat_create(
@@ -542,6 +545,7 @@ class DeepSeekAdapter:
         except Exception as e:
             raise InvalidOutputError(f"DeepSeek output failed JSON parsing: {type(e).__name__}")
 
+    @guarded
     def checkin_turn(
         self, redacted: RedactedContent, clarification_count: int
     ) -> CheckInTurnResult:
@@ -555,6 +559,7 @@ class DeepSeekAdapter:
         except Exception as e:
             raise InvalidOutputError(f"DeepSeek Check-in turn schema invalid: {type(e).__name__}")
 
+    @guarded
     def checkin_summary(self, redacted: RedactedContent) -> CheckInSummaryResult:
         data = self._bounded_json(
             redacted,

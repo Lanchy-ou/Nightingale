@@ -19,17 +19,26 @@ _PHONE_RE = re.compile(r"\b(?:\+?60|0060|0)?1\d[-\s]?\d{3,4}[-\s]?\d{4}\b")
 # Single-pass classifier: IC/ID and phone are mutually exclusive alternatives.
 _TOKEN_RE = re.compile(r"(?P<ic>" + _IC_RE.pattern + r")|(?P<phone>" + _PHONE_RE.pattern + r")")
 
+EXTRA_PATTERNS = [
+    (re.compile(r"(?P<phi>[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+)"), "EMAIL"),
+    (re.compile(r"(?i)(?:my name is|named|called)\s+(?P<phi>[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})(?=[,.;!?]|$)"), "NAME"),
+    (re.compile(r"(?:我叫|姓名[：:]?|名字是)(?P<phi>[\u4e00-\u9fff]{2,4})(?=[，。；、\s]|$)"), "NAME"),
+    (re.compile(r"(?i)(?P<phi>\b\d{1,5}\s+(?:[A-Za-z]+\s+){1,4}(?:Road|Street|Avenue|Lane|Drive|Rd|St)\b(?:\s*#?[0-9-]+)?)"), "ADDRESS"),
+    (re.compile(r"(?:住址|地址)[：:]\s*(?P<phi>(?!\[)[^，。；\n]+)"), "ADDRESS"),
+]
+
 _PLACEHOLDER_RE = re.compile(
-    r"(?<![A-Za-z0-9_])\[(NAME|ID|PHONE)_\d+\](?![A-Za-z0-9_])"
+    r"(?<![A-Za-z0-9_])\[(NAME|ID|PHONE|EMAIL|ADDRESS)_\d+\](?![A-Za-z0-9_])"
 )
 _ANY_PLACEHOLDER_RE = re.compile(r"\[[A-Za-z][A-Za-z0-9_]*[_\d][A-Za-z0-9_]*\]")
-_PHI_PLACEHOLDER_START_RE = re.compile(r"\[(?:NAME|ID|PHONE)")
+_PHI_PLACEHOLDER_START_RE = re.compile(r"\[(?:NAME|ID|PHONE|EMAIL|ADDRESS)")
 
 
 @dataclass
 class RedactedContent:
     content: dict
     redaction_counts: dict
+    placeholder_tokens: frozenset[str] = frozenset()
 
 
 @dataclass
@@ -41,7 +50,7 @@ class RedactionResult:
 class _Assigner:
     def __init__(self) -> None:
         self.mapping: dict[str, str] = {}
-        self.counts: dict[str, int] = {"name": 0, "id": 0, "phone": 0}
+        self.counts: dict[str, int] = {"name": 0, "id": 0, "phone": 0, "email": 0, "address": 0}
 
     def placeholder(self, prefix: str, value: str) -> str:
         for ph, v in self.mapping.items():
@@ -91,8 +100,10 @@ def redact_content(content: dict, known_names: list[str]) -> RedactionResult:
 
     def redact_string(s: str) -> str:
         out = s
+        for pattern, prefix in EXTRA_PATTERNS:
+            out = pattern.sub(lambda m: m.group(0).replace(m.group("phi"), assigner.apply(prefix, m.group("phi"))), out)
         for name in names:
-            pat = re.compile(r"\b" + re.escape(name) + r"\b", re.IGNORECASE)
+            pat = re.compile(r"(?<![A-Za-z0-9])" + re.escape(name) + r"(?![A-Za-z0-9])", re.IGNORECASE)
             out = pat.sub(lambda m: assigner.apply("NAME", m.group(0)), out)
 
         def classify(m):
@@ -120,7 +131,8 @@ def redact_content(content: dict, known_names: list[str]) -> RedactionResult:
 
     redacted = _walk(content, redact_string, normalize_speaker)
     return RedactionResult(
-        redacted=RedactedContent(content=redacted, redaction_counts=dict(assigner.counts)),
+        redacted=RedactedContent(content=redacted, redaction_counts=dict(assigner.counts),
+                                 placeholder_tokens=frozenset(assigner.mapping)),
         placeholder_mapping=assigner.mapping,
     )
 

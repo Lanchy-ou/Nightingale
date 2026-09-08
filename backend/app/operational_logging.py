@@ -61,7 +61,7 @@ FIELD_ALLOWLIST = frozenset(
 )
 
 _HTTP_METHODS = frozenset({"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"})
-_ERROR_CODE_ALLOWLIST = frozenset({"internal_error", "provider_timeout"})
+_ERROR_CODE_ALLOWLIST = frozenset({"internal_error", "provider_timeout", "egress_rejected"})
 _MODEL_ALLOWLIST = frozenset({"deepseek-v4-flash"})
 # Exception type names only: a Python class-name shape ending in Error/Exception.
 # This rejects free text (spaces, separators) and identifier-shaped non-exception
