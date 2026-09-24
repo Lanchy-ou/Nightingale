@@ -1,0 +1,18 @@
+{
+  "verified_on": "2026-09-22",
+  "domain_tests": {"passed": 17, "failed": 0, "command": "npm test"},
+  "browser_checks": {"passed": 17, "failed": 0, "command": "npm run test:browser", "browser": "installed Microsoft Edge"},
+  "production_build": "PASS",
+  "npm_advisories": {"total": 0, "patched_vite": "6.4.3", "checked_on": "2026-09-22"},
+  "desktop_viewport": "1440x1000",
+  "mobile_viewport": "390x844",
+  "pdf_brief": {"pages": 4, "rendered_visual_review": "PASS"},
+  "pdf_inputs": ["selectable-report.pdf", "scanned-report.pdf", "partial-report.pdf"],
+  "video": {"delivery": "separate from GitHub repository", "local_file": "output/Noteguard_Demo.webm", "seconds": 70.28, "browser_playback": "PASS", "decoded_frames_reviewed": [12, 40, 65], "audio": "none; explanatory on-screen captions"},
+  "pwa": {"chromium_installability_errors": [], "context": "persistent browser context", "clinical_offline_cache": false},
+  "external_clinical_requests_observed": 0,
+  "browser_persistence_observed": {"localStorage": 0, "sessionStorage": 0, "indexedDB": 0, "cacheStorage": 0},
+  "production_server_authentication": "NOT_IMPLEMENTED - explicit browser-memory demonstrator exception",
+  "clinical_validation": "NOT_ESTABLISHED",
+  "email_or_remote_delivery": "NOT_PERFORMED"
+}

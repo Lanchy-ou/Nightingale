@@ -1,0 +1,99 @@
+NIGHTINGALE NOTEGUARD - ATTRIBUTION
+Synthetic clinical data and demonstration scripts were authored for this project.
+No external clinical dataset, trained model, model weights, remote AI, font service or image service is used.
+Research articles inform design only; citations are in docs/research.md. No paper content is bundled as clinical data.
+JavaScript dependency versions/licenses below are from the committed package lock, including optional platform dependencies.
+Upstream license notices remain in installed packages. Do not treat this file as a replacement for their full terms.
+
+@esbuild/aix-ppc64 | 0.25.12 | MIT | optional platform dependency
+@esbuild/android-arm | 0.25.12 | MIT | optional platform dependency
+@esbuild/android-arm64 | 0.25.12 | MIT | optional platform dependency
+@esbuild/android-x64 | 0.25.12 | MIT | optional platform dependency
+@esbuild/darwin-arm64 | 0.25.12 | MIT | optional platform dependency
+@esbuild/darwin-x64 | 0.25.12 | MIT | optional platform dependency
+@esbuild/freebsd-arm64 | 0.25.12 | MIT | optional platform dependency
+@esbuild/freebsd-x64 | 0.25.12 | MIT | optional platform dependency
+@esbuild/linux-arm | 0.25.12 | MIT | optional platform dependency
+@esbuild/linux-arm64 | 0.25.12 | MIT | optional platform dependency
+@esbuild/linux-ia32 | 0.25.12 | MIT | optional platform dependency
+@esbuild/linux-loong64 | 0.25.12 | MIT | optional platform dependency
+@esbuild/linux-mips64el | 0.25.12 | MIT | optional platform dependency
+@esbuild/linux-ppc64 | 0.25.12 | MIT | optional platform dependency
+@esbuild/linux-riscv64 | 0.25.12 | MIT | optional platform dependency
+@esbuild/linux-s390x | 0.25.12 | MIT | optional platform dependency
+@esbuild/linux-x64 | 0.25.12 | MIT | optional platform dependency
+@esbuild/netbsd-arm64 | 0.25.12 | MIT | optional platform dependency
+@esbuild/netbsd-x64 | 0.25.12 | MIT | optional platform dependency
+@esbuild/openbsd-arm64 | 0.25.12 | MIT | optional platform dependency
+@esbuild/openbsd-x64 | 0.25.12 | MIT | optional platform dependency
+@esbuild/openharmony-arm64 | 0.25.12 | MIT | optional platform dependency
+@esbuild/sunos-x64 | 0.25.12 | MIT | optional platform dependency
+@esbuild/win32-arm64 | 0.25.12 | MIT | optional platform dependency
+@esbuild/win32-ia32 | 0.25.12 | MIT | optional platform dependency
+@esbuild/win32-x64 | 0.25.12 | MIT | optional platform dependency
+@napi-rs/canvas | 0.1.100 | MIT | optional platform dependency
+@napi-rs/canvas-android-arm64 | 0.1.100 | MIT | optional platform dependency
+@napi-rs/canvas-darwin-arm64 | 0.1.100 | MIT | optional platform dependency
+@napi-rs/canvas-darwin-x64 | 0.1.100 | MIT | optional platform dependency
+@napi-rs/canvas-linux-arm-gnueabihf | 0.1.100 | MIT | optional platform dependency
+@napi-rs/canvas-linux-arm64-gnu | 0.1.100 | MIT | optional platform dependency
+@napi-rs/canvas-linux-arm64-musl | 0.1.100 | MIT | optional platform dependency
+@napi-rs/canvas-linux-riscv64-gnu | 0.1.100 | MIT | optional platform dependency
+@napi-rs/canvas-linux-x64-gnu | 0.1.100 | MIT | optional platform dependency
+@napi-rs/canvas-linux-x64-musl | 0.1.100 | MIT | optional platform dependency
+@napi-rs/canvas-win32-arm64-msvc | 0.1.100 | MIT | optional platform dependency
+@napi-rs/canvas-win32-x64-msvc | 0.1.100 | MIT | optional platform dependency
+@napi-rs/lzma-linux-x64-gnu | 1.5.1 | MIT | optional platform dependency
+@rollup/rollup-android-arm-eabi | 4.63.4 | MIT | optional platform dependency
+@rollup/rollup-android-arm64 | 4.63.4 | MIT | optional platform dependency
+@rollup/rollup-darwin-arm64 | 4.63.4 | MIT | optional platform dependency
+@rollup/rollup-darwin-x64 | 4.63.4 | MIT | optional platform dependency
+@rollup/rollup-freebsd-arm64 | 4.63.4 | MIT | optional platform dependency
+@rollup/rollup-freebsd-x64 | 4.63.4 | MIT | optional platform dependency
+@rollup/rollup-linux-arm-gnueabihf | 4.63.4 | MIT | optional platform dependency
+@rollup/rollup-linux-arm-musleabihf | 4.63.4 | MIT | optional platform dependency
+@rollup/rollup-linux-arm64-gnu | 4.63.4 | MIT | optional platform dependency
+@rollup/rollup-linux-arm64-musl | 4.63.4 | MIT | optional platform dependency
+@rollup/rollup-linux-loong64-gnu | 4.63.4 | MIT | optional platform dependency
+@rollup/rollup-linux-loong64-musl | 4.63.4 | MIT | optional platform dependency
+@rollup/rollup-linux-ppc64-gnu | 4.63.4 | MIT | optional platform dependency
+@rollup/rollup-linux-ppc64-musl | 4.63.4 | MIT | optional platform dependency
+@rollup/rollup-linux-riscv64-gnu | 4.63.4 | MIT | optional platform dependency
+@rollup/rollup-linux-riscv64-musl | 4.63.4 | MIT | optional platform dependency
+@rollup/rollup-linux-s390x-gnu | 4.63.4 | MIT | optional platform dependency
+@rollup/rollup-linux-x64-gnu | 4.63.4 | MIT | optional platform dependency
+@rollup/rollup-linux-x64-musl | 4.63.4 | MIT | optional platform dependency
+@rollup/rollup-openbsd-x64 | 4.63.4 | MIT | optional platform dependency
+@rollup/rollup-openharmony-arm64 | 4.63.4 | MIT | optional platform dependency
+@rollup/rollup-win32-arm64-msvc | 4.63.4 | MIT | optional platform dependency
+@rollup/rollup-win32-ia32-msvc | 4.63.4 | MIT | optional platform dependency
+@rollup/rollup-win32-x64-gnu | 4.63.4 | MIT | optional platform dependency
+@rollup/rollup-win32-x64-msvc | 4.63.4 | MIT | optional platform dependency
+@types/estree | 1.0.9 | MIT
+esbuild | 0.25.12 | MIT
+fdir | 6.5.0 | MIT
+fsevents | 2.3.2 | MIT | optional platform dependency
+nanoid | 3.3.19 | MIT
+pdfjs-dist | 5.4.149 | Apache-2.0
+picocolors | 1.1.1 | ISC
+picomatch | 4.0.7 | MIT
+playwright | 1.58.2 | Apache-2.0
+playwright-core | 1.58.2 | Apache-2.0
+postcss | 8.5.28 | MIT
+rollup | 4.63.4 | MIT
+source-map-js | 1.2.1 | BSD-3-Clause
+tinyglobby | 0.2.17 | MIT
+vite | 6.4.3 | MIT
+vite/node_modules/fsevents | 2.3.3 | MIT | optional platform dependency
+
+Document-generation / validation tooling (not shipped in the browser bundle):
+ReportLab | BSD-3-Clause | PDF document generation
+Pillow | HPND | synthetic scanned-page raster generation
+pypdf | BSD-3-Clause | PDF page/text verification
+pypdfium2 | Apache-2.0/BSD-3-Clause wrapper; PDFium BSD-style third-party notices | PDF rendering QA
+Playwright bundled FFmpeg | LGPL-2.1-or-later build and upstream notices | demonstration video encoding
+Node.js | MIT and bundled third-party notices | runtime/build/test tooling
+Microsoft Edge / Chromium | vendor terms and Chromium third-party notices | local browser verification only
+
+Models: none. Public clinical datasets: none. External UI assets: none.
+System fonts: Segoe UI / Arial / Georgia supplied by the host OS; font files are not redistributed.
